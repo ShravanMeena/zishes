@@ -13,7 +13,7 @@ const COUNTRIES = [
   'India', 'United States', 'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Singapore', 'Canada', 'Australia', 'Japan', 'South Korea', 'China', 'Philippines', 'United Arab Emirates'
 ];
 
-export default function CountrySelectScreen({ navigation }) {
+export default function CountrySelectScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
@@ -37,9 +37,16 @@ export default function CountrySelectScreen({ navigation }) {
 
   const onContinue = async () => {
     if (!selected) return;
+    // If opened in picker mode, update EditProfile params and go back
+    if (route?.params?.mode === 'pick') {
+      // Merge params into existing EditProfile if present in stack
+      navigation.navigate({ name: 'EditProfile', params: { selectedCountry: selected }, merge: true });
+      navigation.goBack();
+      return;
+    }
+    // Default onboarding flow
     await dispatch(setCountry(selected));
     await dispatch(completeVerification());
-    // RootNavigator will switch to AppTabs after this
   };
 
   const renderItem = ({ item }) => (

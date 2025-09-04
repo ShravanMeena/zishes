@@ -4,14 +4,12 @@ import { colors } from '../../../theme/colors';
 import { launchImageLibrary } from 'react-native-image-picker';
 import useGalleryPermission from '../../../hooks/useGalleryPermission';
 import { X, Trash2 } from 'lucide-react-native';
+import { useDispatch, useSelector } from 'react-redux';
+import { addPhotos as addPhotosAction, removePhotoAt, setCoverIndex } from '../../../store/listingDraft/listingDraftSlice';
 
 export default function PhotosStep() {
-  const [images, setImages] = useState([
-    // Previews so the layout matches the screenshot; users can replace
-    { uri: 'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=400' },
-    { uri: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400' },
-    { uri: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400' },
-  ]);
+  const dispatch = useDispatch();
+  const images = useSelector((s) => s.listingDraft.photos);
 
   const ensurePermission = useGalleryPermission();
   const [previewIdx, setPreviewIdx] = useState(null);
@@ -22,35 +20,44 @@ export default function PhotosStep() {
     const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0, quality: 0.9 });
     if (res?.assets?.length) {
       const next = res.assets.map((a) => ({ uri: a.uri }));
-      setImages((prev) => [...prev, ...next]);
+      dispatch(addPhotosAction(next));
     }
   };
 
-  const removeAt = (idx) => setImages((prev) => prev.filter((_, i) => i !== idx));
-  const setCover = (idx) => setImages((prev) => [prev[idx], ...prev.filter((_, i) => i !== idx)]);
+  const removeAt = (idx) => dispatch(removePhotoAt(idx));
+  const setCover = (idx) => dispatch(setCoverIndex(idx));
   const openPreview = (idx) => setPreviewIdx(idx);
   const closePreview = () => setPreviewIdx(null);
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Image grid */}
-      <View style={styles.grid}>
-        {images.map((img, idx) => (
-          <View key={`${img.uri}-${idx}`} style={styles.imgWrap}>
-            {idx === 0 ? (
-              <View style={styles.coverBadge}><Text style={styles.coverTxt}>Cover</Text></View>
-            ) : null}
-            <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.9} onPress={() => openPreview(idx)}>
-              <Image source={{ uri: img.uri }} style={styles.image} />
+      <View style={[styles.grid, images.length === 0 && styles.gridEmpty]}>
+        {images.length > 0 ? (
+          <>
+            {images.map((img, idx) => (
+              <View key={`${img.uri}-${idx}`} style={styles.imgWrap}>
+                {idx === 0 ? (
+                  <View style={styles.coverBadge}><Text style={styles.coverTxt}>Cover</Text></View>
+                ) : null}
+                <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.9} onPress={() => openPreview(idx)}>
+                  <Image source={{ uri: img.uri }} style={styles.image} />
+                </TouchableOpacity>
+                <Pressable onPress={() => removeAt(idx)} style={styles.removeBtn} hitSlop={10}>
+                  <X size={14} color={colors.white} />
+                </Pressable>
+              </View>
+            ))}
+            <TouchableOpacity style={[styles.imgWrap, styles.addWrap]} onPress={addPhotos}>
+              <Text style={styles.addPlus}>+</Text>
+              <Text style={styles.addTxt}>Add Image</Text>
             </TouchableOpacity>
-            <Pressable onPress={() => removeAt(idx)} style={styles.removeBtn} hitSlop={10}>
-              <X size={14} color={colors.white} />
-            </Pressable>
-          </View>
-        ))}
-        <TouchableOpacity style={[styles.imgWrap, styles.addWrap]} onPress={addPhotos}>
-          <Text style={styles.addPlus}>+</Text>
-          <Text style={styles.addTxt}>Add Image</Text>
-        </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity style={[styles.addWrapLarge]} onPress={addPhotos}>
+            <Text style={styles.addPlus}>+</Text>
+            <Text style={styles.addTxt}>Add Image</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <Text style={styles.hint}>Add clear photos; include front, back, and accessories. Good lighting helps!</Text>
@@ -88,12 +95,14 @@ export default function PhotosStep() {
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 120 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  imgWrap: { width: '47%', aspectRatio: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: '#2B2F39', position: 'relative' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  gridEmpty: { justifyContent: 'center' },
+  imgWrap: { width: '48%', aspectRatio: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: '#2B2F39', position: 'relative', marginBottom: 14 },
   image: { width: '100%', height: '100%' },
   coverBadge: { position: 'absolute', zIndex: 1, top: 10, left: 10, backgroundColor: '#8B5CF6', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12 },
   coverTxt: { color: colors.white, fontWeight: '800', fontSize: 12 },
   addWrap: { borderWidth: 2, borderColor: '#636B7A', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  addWrapLarge: { width: 220, height: 220, borderRadius: 18, borderWidth: 2, borderColor: '#636B7A', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2B2F39' },
   addPlus: { color: colors.white, fontSize: 32, fontWeight: '700', marginBottom: 6 },
   addTxt: { color: colors.textSecondary, fontWeight: '600' },
   hint: { color: colors.textSecondary, textAlign: 'center', marginTop: 16 },

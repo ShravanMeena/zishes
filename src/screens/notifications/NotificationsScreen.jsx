@@ -37,13 +37,12 @@ export default function NotificationsScreen({ navigation }) {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft color={colors.white} size={20} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={[styles.iconBtn, { marginRight: 6 }]}><Settings color={colors.white} size={18} /></TouchableOpacity>
-          <View>
-            <TouchableOpacity style={styles.iconBtn}><Bell color={colors.white} size={18} /></TouchableOpacity>
-            <View style={styles.badge}><Text style={styles.badgeText}>3</Text></View>
-          </View>
-        </View>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => navigation.getParent()?.navigate('Profile', { screen: 'Settings' })}
+        >
+          <Settings color={colors.white} size={18} />
+        </TouchableOpacity>
       </View>
       <FlatList
         data={data}
@@ -71,8 +70,7 @@ const styles = StyleSheet.create({
   header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#22252C' },
   headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
-  badge: { position: 'absolute', right: -2, top: -2, backgroundColor: '#5E6AD2', width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  // removed local bell+badge in Notifications header
   card: { backgroundColor: '#2B2F39', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 14, flexDirection: 'row' },
   title: { color: colors.white, fontWeight: '800', fontSize: 16 },
   body: { color: colors.textSecondary, marginTop: 6, maxWidth: 260 },

@@ -1,10 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { Bell } from 'lucide-react-native';
 import ProgressBar from '../../components/common/ProgressBar';
 import Button from '../../components/ui/Button';
+import BottomSheet from '../../components/common/BottomSheet';
+import CongratsModal from '../../components/modals/CongratsModal';
+import { CheckCircle2 } from 'lucide-react-native';
+import { useDispatch, useSelector } from 'react-redux';
+import { loadDraft, saveDraftFromStore } from '../../store/listingDraft/listingDraftSlice';
+import { BackHandler, Alert } from 'react-native';
 
 import PhotosStep from './steps/PhotosStep';
 import DetailsStep from './steps/DetailsStep';
@@ -15,6 +21,10 @@ import ReviewStep from './steps/ReviewStep';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 
 export default function SellScreen({ navigation }) {
+  const dispatch = useDispatch();
+  const loaded = useSelector((s) => s.listingDraft.loaded);
+  const isDirty = useSelector((s) => s.listingDraft.isDirty);
+
   const steps = useMemo(
     () => [
       { key: 'photos', title: 'Photos' },
@@ -29,6 +39,8 @@ export default function SellScreen({ navigation }) {
 
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [congratsOpen, setCongratsOpen] = useState(false);
   const routes = steps;
   const progress = (index + 1) / steps.length;
 
@@ -44,12 +56,38 @@ export default function SellScreen({ navigation }) {
 
   const onPrimary = () => {
     if (isReview) {
-      // TODO: trigger publish action
-      console.log('Publish Listing');
+      // Show congratulations when publishing
+      setCongratsOpen(true);
     } else {
       goNext();
     }
   };
+
+  // Load persisted draft once
+  useEffect(() => {
+    if (!loaded) dispatch(loadDraft());
+  }, [dispatch, loaded]);
+
+  // Intercept Android back to prompt save if there are unsaved changes
+  useEffect(() => {
+    const onBack = () => {
+      if (isDirty) {
+        Alert.alert(
+          'Save your changes?',
+          'You have unsaved changes in your listing. Do you want to save them as a draft before leaving?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Discard', style: 'destructive', onPress: () => navigation.goBack() },
+            { text: 'Save', onPress: async () => { await dispatch(saveDraftFromStore()); Alert.alert('Saved', 'Your draft has been saved.'); navigation.goBack(); } },
+          ]
+        );
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+  }, [isDirty, dispatch, navigation]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -96,9 +134,39 @@ export default function SellScreen({ navigation }) {
 
       {/* Bottom actions mimic screenshot */}
       <View style={styles.bottomBar}>
-        <Button title="Save Draft" variant="outline" onPress={() => {}} style={{ marginRight: 10 }} />
-        <Button title={isReview ? "Let's Zish It !!" : 'Next'} onPress={onPrimary} />
+        <Button
+          title="Save Draft"
+          variant="outline"
+          onPress={async () => { await dispatch(saveDraftFromStore()); setDraftOpen(true); }}
+          style={{ flex: 1, marginRight: 10 }}
+        />
+        <Button title={isReview ? "Let's Zish It !!" : 'Next'} onPress={onPrimary} style={{ flex: 1 }} />
       </View>
+
+      {/* Save Draft sheet (themed, not default alert) */}
+      <BottomSheet visible={draftOpen} onClose={() => setDraftOpen(false)} full={false}>
+        <View style={{ alignItems: 'center', padding: 8 }}>
+          <CheckCircle2 size={36} color={colors.accent} />
+          <Text style={{ color: colors.white, fontWeight: '800', fontSize: 18, marginTop: 8 }}>Saved as Draft</Text>
+          <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
+            Your listing has been saved. You can return and finish anytime.
+          </Text>
+          <View style={{ flexDirection: 'row', marginTop: 14 }}>
+            <Button title="Keep Editing" variant="outline" onPress={() => setDraftOpen(false)} style={{ flex: 1, marginRight: 8 }} />
+            <Button title="Go to Profile" onPress={() => { setDraftOpen(false); navigation.navigate('Profile', { screen: 'MyListings' }); }} style={{ flex: 1 }} />
+          </View>
+        </View>
+      </BottomSheet>
+
+      {/* Publish success */}
+      <CongratsModal
+        visible={congratsOpen}
+        title="Listing Submitted"
+        message="Your listing is live. Good luck and happy zishing!"
+        primaryText="Awesome!"
+        onPrimary={() => { setCongratsOpen(false); navigation.navigate('Profile', { screen: 'MyListings' }); }}
+        onRequestClose={() => setCongratsOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -116,5 +184,3 @@ const styles = StyleSheet.create({
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   placeholderTxt: { color: colors.textSecondary },
 });
-
-

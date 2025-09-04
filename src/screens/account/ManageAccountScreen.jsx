@@ -1,10 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, AlertTriangle, PauseCircle } from 'lucide-react-native';
+import AppModal from '../../components/common/AppModal';
+import CongratsModal from '../../components/modals/CongratsModal';
+import { useDispatch } from 'react-redux';
+import { logout } from '../../store/auth/authSlice';
 
 export default function ManageAccountScreen({ navigation }) {
+  const dispatch = useDispatch();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [action, setAction] = useState(null); // 'delete' | 'deactivate'
+
+  const startDelete = () => { setAction('delete'); setConfirmOpen(true); };
+  const startDeactivate = () => { setAction('deactivate'); setConfirmOpen(true); };
+  const confirmAction = () => {
+    setConfirmOpen(false);
+    setSuccessOpen(true);
+  };
+  const finish = () => {
+    setSuccessOpen(false);
+    dispatch(logout());
+  };
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -32,10 +51,30 @@ export default function ManageAccountScreen({ navigation }) {
           <Text style={styles.desc}>If you wish to take a break, you can temporarily deactivate your account. Your profile will be hidden from others, and you can reactivate it anytime.</Text>
         </View>
 
-        <TouchableOpacity style={[styles.btn, styles.delete]}><Text style={styles.btnTxt}>Delete My Account</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, styles.primary]}><Text style={styles.btnTxt}>Deactivate Account</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.btn, styles.delete]} onPress={startDelete}><Text style={styles.btnTxt}>Delete My Account</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.btn, styles.primary]} onPress={startDeactivate}><Text style={styles.btnTxt}>Deactivate Account</Text></TouchableOpacity>
         <TouchableOpacity style={[styles.btn, styles.cancel]} onPress={() => navigation.goBack()}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
       </ScrollView>
+
+      <AppModal
+        visible={confirmOpen}
+        title={action === 'delete' ? 'Confirm Permanent Deletion' : 'Confirm Deactivation'}
+        message={action === 'delete'
+          ? 'This action will permanently delete your account and data. Are you absolutely sure?'
+          : 'Your profile will be hidden and you can come back anytime. Proceed to deactivate?'}
+        confirmText={action === 'delete' ? 'Delete Account' : 'Deactivate'}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={confirmAction}
+      />
+
+      <CongratsModal
+        visible={successOpen}
+        title={action === 'delete' ? 'Account Deleted' : 'Account Deactivated'}
+        message={action === 'delete' ? 'Your account has been permanently removed. You can still create a new one anytime.' : 'Your account is now deactivated. We hope to see you again soon.'}
+        primaryText="OK, Log me out"
+        onPrimary={finish}
+        onRequestClose={finish}
+      />
     </SafeAreaView>
   );
 }
@@ -57,4 +96,3 @@ const styles = StyleSheet.create({
   cancel: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
   btnTxt: { color: colors.white, fontWeight: '800' },
 });
-

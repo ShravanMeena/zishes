@@ -14,6 +14,8 @@ import ManageAccountScreen from '../screens/account/ManageAccountScreen';
 import MembershipTierScreen from '../screens/account/MembershipTierScreen';
 import TournamentsOrganizedScreen from '../screens/profile/TournamentsOrganizedScreen';
 import UploadProofScreen from '../screens/profile/UploadProofScreen';
+import PolicyViewerScreen from '../screens/misc/PolicyViewerScreen';
+import CountrySelectScreen from '../screens/auth/CountrySelectScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +36,8 @@ export default function ProfileStack() {
       <Stack.Screen name="MembershipTier" component={MembershipTierScreen} />
       <Stack.Screen name="TournamentsOrganized" component={TournamentsOrganizedScreen} />
       <Stack.Screen name="UploadProof" component={UploadProofScreen} />
+      <Stack.Screen name="PolicyViewer" component={PolicyViewerScreen} />
+      <Stack.Screen name="CountrySelect" component={CountrySelectScreen} />
     </Stack.Navigator>
   );
 }

@@ -3,18 +3,13 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal } from 'reac
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../../theme/colors';
 import { ChevronDown } from 'lucide-react-native';
+import { useDispatch, useSelector } from 'react-redux';
+import { updateDetails } from '../../../store/listingDraft/listingDraftSlice';
 
 export default function DetailsStep() {
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    category: '',
-    condition: '',
-    qty: '',
-    productId: '7654738920xxx',
-  });
-
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const dispatch = useDispatch();
+  const form = useSelector((s) => s.listingDraft.details);
+  const set = (k, v) => dispatch(updateDetails({ [k]: v }));
 
   const categories = useMemo(() => ['Electronics', 'Gaming', 'Fashion', 'Home & Kitchen', 'Sports', 'Collectibles'], []);
   const conditions = useMemo(() => ['New', 'Like New', 'Good', 'Fair'], []);

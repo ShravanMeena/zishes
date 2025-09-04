@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -7,14 +7,32 @@ import { ChevronLeft } from 'lucide-react-native';
 import AppModal from '../../components/common/AppModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../store/auth/authSlice';
+import useGalleryPermission from '../../hooks/useGalleryPermission';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { setCountry as setCountryGlobal } from '../../store/app/appSlice';
 
-export default function EditProfileScreen({ navigation }) {
+export default function EditProfileScreen({ navigation, route }) {
   const { user } = useSelector((s) => s.auth);
   const dispatch = useDispatch();
   const [name, setName] = useState('John Doe');
   const [email, setEmail] = useState(user?.email || 'john.doe@example.com');
   const [country, setCountry] = useState('India');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [avatarUri, setAvatarUri] = useState('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=80&auto=format&fit=crop');
+  const ensureGallery = useGalleryPermission();
+
+  useEffect(() => {
+    const sub = navigation.addListener('focus', () => {
+      const selected = route?.params?.selectedCountry;
+      if (selected) {
+        setCountry(selected);
+        dispatch(setCountryGlobal(selected));
+        // clear param to avoid reapplying
+        navigation.setParams({ selectedCountry: undefined });
+      }
+    });
+    return sub;
+  }, [navigation, route?.params?.selectedCountry, dispatch]);
 
   const save = () => {
     // TODO: integrate profile update API later
@@ -25,6 +43,17 @@ export default function EditProfileScreen({ navigation }) {
   const confirmDelete = async () => {
     setConfirmOpen(false);
     await dispatch(logout());
+  };
+
+  const pickPhoto = async () => {
+    const ok = await ensureGallery();
+    if (!ok) return;
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, quality: 0.9 });
+    if (res && res.assets && res.assets.length > 0) {
+      const uri = res.assets[0].uri;
+      if (uri) setAvatarUri(uri);
+      // TODO: upload to API and persist
+    }
   };
 
   return (
@@ -44,10 +73,10 @@ export default function EditProfileScreen({ navigation }) {
       >
           {/* Avatar Card */}
           <View style={styles.cardCenter}>
-            <Image source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=80&auto=format&fit=crop' }} style={styles.avatar} />
+            <Image source={{ uri: avatarUri }} style={styles.avatar} />
             <Text style={styles.name}>{name}</Text>
             <Text style={styles.email}>{email}</Text>
-            <TouchableOpacity style={styles.changeBtn}><Text style={styles.changeTxt}>Change Photo</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.changeBtn} onPress={pickPhoto}><Text style={styles.changeTxt}>Change Photo</Text></TouchableOpacity>
           </View>
 
           {/* Form Card */}
@@ -59,7 +88,13 @@ export default function EditProfileScreen({ navigation }) {
             <Input value={email} onChangeText={setEmail} placeholder="john.doe@example.com" keyboardType="email-address" autoCapitalize="none" />
 
             <Label>Country of Play</Label>
-            <Input value={country} onChangeText={setCountry} placeholder="India" />
+            <TouchableOpacity
+              onPress={() => navigation.navigate('CountrySelect', { mode: 'pick' })}
+              activeOpacity={0.85}
+              style={[styles.input, { justifyContent: 'center' }]}
+            >
+              <Text style={{ color: colors.white, fontWeight: '700' }}>{country || 'Select country'}</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Actions */}

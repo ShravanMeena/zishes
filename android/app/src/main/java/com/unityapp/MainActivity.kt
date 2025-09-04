@@ -16,6 +16,7 @@ class MainActivity : ReactActivity() {
   override fun getMainComponentName(): String = "unityapp"
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    setTheme(R.style.AppTheme)
     super.onCreate(null)
   }
   /**

@@ -6,16 +6,13 @@ import LinearGradient from 'react-native-linear-gradient';
 import { ChevronDown } from 'lucide-react-native';
 import ProgressBar from '../../../components/common/ProgressBar';
 import DatePickerModal, { formatDateYYYYMMDD } from '../../../components/ui/DatePickerModal';
+import { useDispatch, useSelector } from 'react-redux';
+import { updatePlay } from '../../../store/listingDraft/listingDraftSlice';
 
 export default function PlayToWinStep() {
-  const [form, setForm] = useState({
-    expectedPrice: '',
-    pricePerPlay: '',
-    playsCount: '',
-    endDate: '',
-    game: '',
-  });
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const dispatch = useDispatch();
+  const form = useSelector((s) => s.listingDraft.play);
+  const set = (k, v) => dispatch(updatePlay({ [k]: v }));
 
   const gameOptions = useMemo(() => [
     'Word Map',

@@ -1,12 +1,15 @@
 import React, { useRef, useEffect, useState } from "react";
-import { View, Alert, BackHandler } from "react-native";
+import { View, BackHandler } from "react-native";
 import UnityView from "@azesmway/react-native-unity";
+import GameResultModal from "../../components/GameResultModal";
 
 export default function UnityScreen({ navigation, route }) {
   const unityRef = useRef(null);
   const { scene } = route.params;
   const [unityReady, setUnityReady] = useState(false);
   const [sent, setSent] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [result, setResult] = useState(null);
 
   useEffect(() => {
     if ( scene && unityRef.current && !sent) {
@@ -32,6 +35,31 @@ export default function UnityScreen({ navigation, route }) {
     navigation.goBack();
   };
 
+  const openResult = (payload) => {
+    setResult(payload || {});
+    setShowResult(true);
+  };
+
+  const dismissResult = (thenClose = false) => {
+    setShowResult(false);
+    if (thenClose) {
+      // small delay to let the modal play its exit animation
+      setTimeout(() => closeUnity(), 240);
+    }
+  };
+
+  const score = typeof result?.score === "number" ? result.score : Number(result?.score) || 0;
+  const title =
+    score >= 90
+      ? "Legendary!"
+      : score >= 70
+      ? "Amazing!"
+      : score >= 50
+      ? "Great Job!"
+      : score > 0
+      ? "Nice Try!"
+      : "All Done!";
+
   return (
     <View style={{ flex:1, backgroundColor:"#000" }}>
       <UnityView
@@ -47,13 +75,33 @@ export default function UnityScreen({ navigation, route }) {
               setUnityReady(true);
             }
             if (msg.action === "Data" && msg.scene === scene) {
-              Alert.alert("Game Finished", JSON.stringify(msg));
-              closeUnity();
+              // Show animated result modal with details
+              openResult(msg);
             }
             if (msg.action === "closeUnity") {
               closeUnity();
             }
           } catch {}
+        }}
+      />
+
+      <GameResultModal
+        visible={showResult}
+        result={result}
+        scene={scene}
+        onRequestClose={() => dismissResult(true)}
+        onBack={() => dismissResult(true)}
+        onPlayAgain={() => {
+          dismissResult(false);
+          setTimeout(() => {
+            try {
+              unityRef.current?.postMessage(
+                "UnityMessageManager",
+                "MessageFromRN",
+                JSON.stringify({ action: "openGame", scene })
+              );
+            } catch {}
+          }, 220);
         }}
       />
     </View>

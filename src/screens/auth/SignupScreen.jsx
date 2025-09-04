@@ -70,7 +70,7 @@ export default function SignupScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Referral Code (Optional)</Text>
+        <Text style={[styles.label,{marginTop:10}]}>Referral Code (Optional)</Text>
         <TextInput
           value={referral}
           onChangeText={setReferral}

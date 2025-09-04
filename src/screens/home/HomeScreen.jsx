@@ -37,13 +37,15 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.brandIcon}><Text style={{color: colors.white, fontWeight: '900'}}>Z</Text></View>
           <Text style={styles.brandText}>Lets Zish it</Text>
         </View>
-        <TouchableOpacity style={styles.pill} onPress={() => navigation.getParent()?.navigate('Wallet')}>
-          <View style={styles.coinCircle}><Text style={{color: colors.white, fontWeight:'700'}}>Z</Text></View>
-          <Text style={styles.pillText}>2,500</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
-          <Bell size={22} color={colors.white} />
-        </TouchableOpacity>
+        <View style={styles.rightActions}>
+          <TouchableOpacity style={styles.pill} onPress={() => navigation.getParent()?.navigate('Wallet')}>
+            <View style={styles.coinCircle}><Text style={{color: colors.white, fontWeight:'700'}}>Z</Text></View>
+            <Text style={styles.pillText}>2,500</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
+            <Bell size={22} color={colors.white} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
@@ -108,9 +110,11 @@ const styles = StyleSheet.create({
   brandWrap: { flexDirection: 'row', alignItems: 'center' },
   brandIcon: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', marginRight: 8, borderWidth: 1, borderColor: '#3A4051' },
   brandText: { color: colors.white, fontWeight: '700', fontSize: 18 },
+  rightActions: { flexDirection: 'row', alignItems: 'center' },
   pill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2B2F39', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#3A4051' },
   coinCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 6 },
   pillText: { color: colors.white, fontWeight: '700' },
+  bellBtn: { marginLeft: 10 },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#2B2F39', borderRadius: 18, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: '#343B49' },
   searchIcon: { marginRight: 8 },

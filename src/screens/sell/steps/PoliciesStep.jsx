@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { colors } from '../../../theme/colors';
 import { Clock } from 'lucide-react-native';
+import { useDispatch, useSelector } from 'react-redux';
+import { updatePolicies } from '../../../store/listingDraft/listingDraftSlice';
 
 export default function PoliciesStep() {
-  const [policies, setPolicies] = useState({ listing: false, dispute: false, antifraud: false });
-  const [agreeAll, setAgreeAll] = useState(false);
-
-  const toggle = (key) => setPolicies((p) => ({ ...p, [key]: !p[key] }));
+  const dispatch = useDispatch();
+  const { policies, agreeAll } = useSelector((s) => ({ policies: s.listingDraft.policies, agreeAll: s.listingDraft.policies.agreeAll }));
+  const toggle = (key) => dispatch(updatePolicies({ [key]: !policies[key] }));
   const ReadMore = ({ onPress }) => (
     <TouchableOpacity onPress={onPress}>
       <Text style={styles.readMore}>Read More</Text>
@@ -59,7 +60,7 @@ export default function PoliciesStep() {
 
       {/* Terms & Privacy */}
       <View style={styles.consentCard}>
-        <TouchableOpacity style={styles.row} onPress={() => setAgreeAll((v) => !v)}>
+        <TouchableOpacity style={styles.row} onPress={() => dispatch(updatePolicies({ agreeAll: !agreeAll }))}>
           <View style={[styles.checkbox, agreeAll && styles.checkboxOn]} />
           <Text style={styles.consentTxt}>
             I agree to Zishes
@@ -101,4 +102,3 @@ const styles = StyleSheet.create({
   consentTxt: { color: colors.white, flex: 1, flexWrap: 'wrap' },
   link: { color: '#7B79FF', fontWeight: '700' },
 });
-

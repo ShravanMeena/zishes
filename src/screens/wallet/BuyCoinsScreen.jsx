@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, CreditCard, QrCode, Wallet, ShieldCheck } from 'lucide-react-native';
+import CongratsModal from '../../components/modals/CongratsModal';
 
 export default function BuyCoinsScreen({ navigation }) {
   const packs = useMemo(() => ([
@@ -13,6 +14,7 @@ export default function BuyCoinsScreen({ navigation }) {
     { id: 'c4', qty: 200, price: '€199.99' },
   ]), []);
   const [selected, setSelected] = useState(null);
+  const [congratsOpen, setCongratsOpen] = useState(false);
 
   const renderPack = ({ item }) => (
     <TouchableOpacity onPress={() => setSelected(item.id)} style={[styles.pack, selected===item.id && styles.packActive]}>
@@ -69,11 +71,20 @@ export default function BuyCoinsScreen({ navigation }) {
         <TouchableOpacity
           style={[styles.bottomBtn, styles.buyBtn, !selected && styles.buyBtnDisabled]}
           disabled={!selected}
-          onPress={() => { if (selected) {/* hook into purchase flow */} }}
+          onPress={() => { if (selected) { setCongratsOpen(true); } }}
         >
           <Text style={[styles.buyTxt, !selected && styles.buyTxtDisabled]}>Buy Now</Text>
         </TouchableOpacity>
       </View>
+
+      <CongratsModal
+        visible={congratsOpen}
+        title="Purchase Successful"
+        message={selected ? `Your ${packs.find(p=>p.id===selected)?.qty || ''} ZishCoins are on the way!` : 'Coins added successfully.'}
+        primaryText="Great!"
+        onPrimary={() => { setCongratsOpen(false); navigation.goBack(); }}
+        onRequestClose={() => setCongratsOpen(false)}
+      />
     </SafeAreaView>
   );
 }

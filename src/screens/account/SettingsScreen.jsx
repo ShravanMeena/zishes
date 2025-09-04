@@ -1,13 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, KeyRound, CreditCard, Wallet2, FileText, Shield, Scale, Flag, MessageSquare, Users, LogOut } from 'lucide-react-native';
+import { POLICY_MAP } from '../../content/policies';
+import { useDispatch } from 'react-redux';
+import { logout } from '../../store/auth/authSlice';
+import AppModal from '../../components/common/AppModal';
 
 export default function SettingsScreen({ navigation }) {
-  const openUrl = (url) => Linking.openURL(url);
+  const dispatch = useDispatch();
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const goPayments = () => navigation.navigate('PaymentMethodsManage');
   const goDefaultWithdrawal = () => navigation.navigate('DefaultWithdrawal');
+
+  const openPolicy = (key) => {
+    const { title, html } = POLICY_MAP[key] || {};
+    navigation.navigate('PolicyViewer', { title: title || 'Policy', html: html || '' });
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -25,20 +35,19 @@ export default function SettingsScreen({ navigation }) {
         </Section>
 
         <Section title="Legal & Policies">
-          <Row icon={<FileText size={18} color={colors.accent} />} title="Terms & Conditions" onPress={() => openUrl('https://example.com/terms')} border />
-          <Row icon={<Shield size={18} color={colors.accent} />} title="Privacy Policy" onPress={() => openUrl('https://example.com/privacy')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Prize Competition Guidelines" onPress={() => openUrl('https://example.com/guidelines')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Fair Play Policy" onPress={() => openUrl('https://example.com/fairplay')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Tax and Compliance Guide" onPress={() => openUrl('https://example.com/tax')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Failed Delivery & Compensation Policy" onPress={() => openUrl('https://example.com/delivery')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="International Shipping & Customs Policy" onPress={() => openUrl('https://example.com/shipping')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Prohibited & Restricted Items Policy" onPress={() => openUrl('https://example.com/prohibited')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Refunds and Cancellation Policy" onPress={() => openUrl('https://example.com/refunds')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Seller Agreement" onPress={() => openUrl('https://example.com/seller')} />
+          <Row icon={<FileText size={18} color={colors.accent} />} title="Terms & Conditions" onPress={() => openPolicy('terms')} border />
+          <Row icon={<Shield size={18} color={colors.accent} />} title="Privacy Policy" onPress={() => openPolicy('privacy')} border />
+          <Row icon={<Scale size={18} color={colors.accent} />} title="Prize Competition Guidelines" onPress={() => openPolicy('guidelines')} border />
+          <Row icon={<Scale size={18} color={colors.accent} />} title="Fair Play Policy" onPress={() => openPolicy('fairplay')} border />
+          <Row icon={<Scale size={18} color={colors.accent} />} title="Tax and Compliance Guide" onPress={() => openPolicy('tax')} border />
+          <Row icon={<Scale size={18} color={colors.accent} />} title="International Shipping & Customs Policy" onPress={() => openPolicy('shipping')} border />
+          <Row icon={<Scale size={18} color={colors.accent} />} title="Prohibited & Restricted Items Policy" onPress={() => openPolicy('prohibited')} border />
+          <Row icon={<Scale size={18} color={colors.accent} />} title="Refunds and Cancellation Policy" onPress={() => openPolicy('refunds')} border />
+          <Row icon={<Scale size={18} color={colors.accent} />} title="Seller Agreement" onPress={() => openPolicy('seller')} />
         </Section>
 
         <Section title="Support & Community">
-          <Row icon={<Flag size={18} color={colors.accent} />} title="FAQs" onPress={() => openUrl('https://example.com/faq')} border />
+          <Row icon={<Flag size={18} color={colors.accent} />} title="FAQs" onPress={() => Linking.openURL('https://example.com/faq')} border />
           <Row icon={<MessageSquare size={18} color={colors.accent} />} title="Report an Issue" onPress={() => navigation.navigate('ReportIssue')} border />
           <Row icon={<Users size={18} color={colors.accent} />} title="Community/Feedback" onPress={() => navigation.navigate('CommunityFeedback')} />
         </Section>
@@ -46,9 +55,18 @@ export default function SettingsScreen({ navigation }) {
         <Section title="Account Management">
           <Row icon={<Wallet2 size={18} color="#FF7A7A" />} title="Manage  Membership" danger onPress={() => navigation.navigate('MembershipTier')} border />
           <Row icon={<Users size={18} color="#FF7A7A" />} title="Delete/Deactivate Account" danger onPress={() => navigation.navigate('ManageAccount')} border />
-          <Row icon={<LogOut size={18} color="#FF7A7A" />} title="Log Out" danger onPress={() => navigation.navigate('ProfileHome')} />
+          <Row icon={<LogOut size={18} color="#FF7A7A" />} title="Log Out" danger onPress={() => setLogoutOpen(true)} />
         </Section>
       </ScrollView>
+
+      <AppModal
+        visible={logoutOpen}
+        title="Confirm Logout"
+        message="Are you sure you want to logout? You'll need to sign in again to continue."
+        confirmText="Logout"
+        onCancel={() => setLogoutOpen(false)}
+        onConfirm={() => { setLogoutOpen(false); dispatch(logout()); }}
+      />
     </SafeAreaView>
   );
 }

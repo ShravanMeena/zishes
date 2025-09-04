@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { colors } from '../../../theme/colors';
 import { Store, Truck, TruckIcon, Mail, Check } from 'lucide-react-native';
+import { useDispatch, useSelector } from 'react-redux';
+import { updateDelivery } from '../../../store/listingDraft/listingDraftSlice';
 
 export default function DeliveryStep() {
-  const [method, setMethod] = useState('pickup');
-  const [pickupNote, setPickupNote] = useState("");
+  const dispatch = useDispatch();
+  const { method, pickupNote } = useSelector((s) => s.listingDraft.delivery);
+  const setMethod = (v) => dispatch(updateDelivery({ method: v }));
+  const setPickupNote = (v) => dispatch(updateDelivery({ pickupNote: v }));
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }}>
@@ -92,4 +96,3 @@ const styles = StyleSheet.create({
   badge: { backgroundColor: '#FFF2D6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, position: 'absolute', right: 8, top: -10 },
   badgeTxt: { color: '#5C4100', fontWeight: '800', fontSize: 12 },
 });
-
