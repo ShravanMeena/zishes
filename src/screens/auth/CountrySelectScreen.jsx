@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../theme/colors';
 import { Globe, Check } from 'lucide-react-native';
 import { useDispatch } from 'react-redux';
 import { setCountry } from '../../store/app/appSlice';
 import { completeVerification } from '../../store/auth/authSlice';
+import Button from '../../components/ui/Button';
 
 const COUNTRIES = [
   'India', 'United States', 'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Singapore', 'Canada', 'Australia', 'Japan', 'South Korea', 'China', 'Philippines', 'United Arab Emirates'
@@ -40,43 +43,41 @@ export default function CountrySelectScreen({ navigation }) {
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={[styles.row, selected === item && styles.rowActive]} onPress={() => setSelected(item)}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View style={styles.icon}><Globe size={16} color={colors.white} /></View>
-        <Text style={styles.rowText}>{item}</Text>
-      </View>
-      {selected === item ? <Check size={18} color={colors.white} /> : null}
+    <TouchableOpacity style={[styles.tile, selected === item && styles.rowActive]} onPress={() => setSelected(item)}>
+      <View style={[styles.icon, { marginRight: 0 }]}><Globe size={16} color={colors.white} /></View>
+      <Text style={styles.rowText} numberOfLines={2}>{item}</Text>
+      {selected === item ? <View style={styles.checkWrap}><Check size={16} color={colors.white} /></View> : null}
     </TouchableOpacity>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.black }}>
-      <View style={styles.header}><Text style={styles.headerTitle}>Select Your Country</Text></View>
-      <View style={{ padding: 20 }}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search for a country..."
-          placeholderTextColor={colors.textSecondary}
-          style={styles.input}
-        />
-        <Text style={{ color: colors.textSecondary, marginVertical: 8 }}>Tap to choose your country of play.</Text>
-        <TouchableOpacity onPress={detect} style={styles.detectBtn}><Text style={styles.detectText}>Use current location</Text></TouchableOpacity>
-        <FlatList
-          data={list}
-          renderItem={renderItem}
-          keyExtractor={(it) => it}
-          contentContainerStyle={{ paddingVertical: 12, gap: 10, paddingBottom: hasSelection ? 120 : 60 }}
-        />
-      </View>
-      {hasSelection ? (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.primaryBtn} onPress={onContinue}>
-            <Text style={styles.primaryText}>Continue</Text>
-          </TouchableOpacity>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
+      <KeyboardAwareScrollView enableOnAndroid keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120 }}>
+        <View style={styles.header}><Text style={styles.headerTitle}>Select Your Country</Text></View>
+        <View style={{ padding: 20 }}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search for a country..."
+            placeholderTextColor={colors.textSecondary}
+            style={styles.input}
+          />
+          <Text style={{ color: colors.textSecondary, marginVertical: 8 }}>Tap to choose your country of play.</Text>
+          <TouchableOpacity onPress={detect} style={styles.detectBtn}><Text style={styles.detectText}>Use current location</Text></TouchableOpacity>
+          <FlatList
+            data={list}
+            renderItem={renderItem}
+            keyExtractor={(it) => it}
+            numColumns={2}
+            columnWrapperStyle={{ justifyContent: 'space-between', marginBottom: 10 }}
+            contentContainerStyle={{ paddingVertical: 12, paddingBottom: 0 }}
+          />
         </View>
-      ) : null}
-    </View>
+      </KeyboardAwareScrollView>
+      <View style={styles.bottomBar}>
+        <Button title="Continue" onPress={onContinue} disabled={!hasSelection} />
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -87,13 +88,13 @@ const styles = StyleSheet.create({
     width: '100%', backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: colors.white,
   },
   row: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  tile: { width: '48%', backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 18, padding: 14, alignItems: 'center', justifyContent: 'center', minHeight: 84 },
   rowActive: { borderColor: colors.accent, backgroundColor: '#3A2B52' },
   rowText: { color: colors.white, fontWeight: '600' },
   icon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#312B42', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  checkWrap: { position: 'absolute', right: 10, top: 10, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   detectBtn: { alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
   detectText: { color: colors.accent, fontWeight: '700' },
-  primaryBtn: { backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  primaryText: { color: colors.white, fontWeight: '700' },
   bottomBar: {
     position: 'absolute',
     left: 0,

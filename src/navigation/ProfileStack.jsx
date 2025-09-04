@@ -1,0 +1,39 @@
+import React from 'react';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import ProfileScreen from '../screens/account/ProfileScreen';
+import MyListingsScreen from '../screens/profile/MyListingsScreen';
+import TournamentsWonScreen from '../screens/profile/TournamentsWonScreen';
+import EditProfileScreen from '../screens/account/EditProfileScreen';
+import SettingsScreen from '../screens/account/SettingsScreen';
+import ChangePasswordScreen from '../screens/account/ChangePasswordScreen';
+import PaymentMethodsManageScreen from '../screens/account/PaymentMethodsManageScreen';
+import DefaultWithdrawalScreen from '../screens/account/DefaultWithdrawalScreen';
+import ReportIssueScreen from '../screens/account/ReportIssueScreen';
+import CommunityFeedbackScreen from '../screens/account/CommunityFeedbackScreen';
+import ManageAccountScreen from '../screens/account/ManageAccountScreen';
+import MembershipTierScreen from '../screens/account/MembershipTierScreen';
+import TournamentsOrganizedScreen from '../screens/profile/TournamentsOrganizedScreen';
+import UploadProofScreen from '../screens/profile/UploadProofScreen';
+
+const Stack = createNativeStackNavigator();
+
+export default function ProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ProfileHome" component={ProfileScreen} />
+      <Stack.Screen name="MyListings" component={MyListingsScreen} />
+      <Stack.Screen name="TournamentsWon" component={TournamentsWonScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      <Stack.Screen name="PaymentMethodsManage" component={PaymentMethodsManageScreen} />
+      <Stack.Screen name="DefaultWithdrawal" component={DefaultWithdrawalScreen} />
+      <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
+      <Stack.Screen name="CommunityFeedback" component={CommunityFeedbackScreen} />
+      <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
+      <Stack.Screen name="MembershipTier" component={MembershipTierScreen} />
+      <Stack.Screen name="TournamentsOrganized" component={TournamentsOrganizedScreen} />
+      <Stack.Screen name="UploadProof" component={UploadProofScreen} />
+    </Stack.Navigator>
+  );
+}

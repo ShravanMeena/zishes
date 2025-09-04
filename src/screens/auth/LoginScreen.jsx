@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useDispatch, useSelector } from 'react-redux';
 import { login } from "../../store/auth/authSlice";
 import { colors } from "../../theme/colors";
@@ -18,7 +20,8 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAwareScrollView enableOnAndroid keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
       {/* Header */}
       <View style={styles.header}>
         {navigation.canGoBack() ? (
@@ -77,18 +80,21 @@ export default function LoginScreen({ navigation }) {
         <Button variant="outline" title="Continue with Google" left={<Chrome size={18} color={colors.white} />} />
         <Button variant="outline" title="Continue with Apple" left={<Apple size={18} color={colors.white} />} style={{ marginTop: 10 }} />
 
-        <TouchableOpacity style={{ alignSelf: 'flex-start', marginTop: 14 }} onPress={() => navigation.navigate('Forgot')}>
-          <Text style={styles.link}>Forgot Password?</Text>
-        </TouchableOpacity>
+        <View style={{ alignItems: 'center', marginTop: 14 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('Forgot')}>
+            <Text style={styles.link}>Forgot Password?</Text>
+          </TouchableOpacity>
+        </View>
 
-        <View style={{ flexDirection: 'row', marginTop: 10 }}>
+        <View style={{ flexDirection: 'row', marginTop: 10, alignSelf: 'center' }}>
           <Text style={{ color: colors.textSecondary }}>New user? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
             <Text style={styles.link}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+      </KeyboardAwareScrollView>
+    </SafeAreaView>
   );
 }
 

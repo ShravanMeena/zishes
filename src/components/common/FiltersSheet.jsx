@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TouchableOpacity as Touchable } from 'react-native';
 import { colors } from '../../theme/colors';
 import Button from '../ui/Button';
 import { X } from 'lucide-react-native';
@@ -13,8 +13,10 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories=[],
   const [condition, setCondition] = useState('new');
   const [cat, setCat] = useState(initialCategory || 'all');
   const [sliding, setSliding] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sortBy, setSortBy] = useState('popular');
 
-  const apply = () => onApply?.({ price, plays, progress, timeLeft, condition, category: cat });
+  const apply = () => onApply?.({ price, plays, progress, timeLeft, condition, category: cat, sortBy });
   const reset = () => {
     setPrice(500); setPlays(150); setProgress(35); setTimeLeft('today'); setCondition('new'); setCat('all');
     onReset?.();
@@ -122,18 +124,46 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories=[],
           <Text style={styles.title}>Categories</Text>
           <Text style={styles.caption}>Browse items within specific product categories.</Text>
           <View style={styles.rowWrap}>
-            {([{ id:'all', label:'All' }].concat(categories)).map((c)=> (
-              <Pressable key={c.id} onPress={()=>setCat(c.id)} style={[styles.chip, cat===c.id && styles.chipActive]}>
-                <Text style={[styles.chipTxt, cat===c.id && styles.chipTxtActive]}>{c.label}</Text>
-              </Pressable>
-            ))}
+            {(() => {
+              const dedup = [];
+              const seen = new Set();
+              const input = Array.isArray(categories) ? categories : [];
+              for (const c of input) {
+                if (!c || c.id === 'all') continue;
+                if (!seen.has(c.id)) { seen.add(c.id); dedup.push(c); }
+              }
+              const merged = [{ id: 'all', label: 'All' }, ...dedup];
+              return merged.map((c) => (
+                <Pressable key={`cat-${c.id}`} onPress={() => setCat(c.id)} style={[styles.chip, cat === c.id && styles.chipActive]}>
+                  <Text style={[styles.chipTxt, cat === c.id && styles.chipTxtActive]}>{c.label}</Text>
+                </Pressable>
+              ));
+            })()}
           </View>
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { zIndex: 2 }]}>
           <Text style={styles.title}>Sort By</Text>
           <Text style={styles.caption}>Order the search results based on a specific criterion.</Text>
-          <View style={styles.selectBox}><Text style={{ color: colors.white }}>Most Popular</Text></View>
+          <Touchable onPress={() => setSortOpen((v)=>!v)}>
+            <View style={styles.selectBox}><Text style={{ color: colors.white }}>{
+              sortBy === 'popular' ? 'Most Popular' : sortBy === 'latest' ? 'Latest' : sortBy === 'price_low' ? 'Price: Low to High' : 'Price: High to Low'
+            }</Text></View>
+          </Touchable>
+          {sortOpen ? (
+            <View style={styles.dropdown}>
+              {[
+                { id:'popular', label:'Most Popular' },
+                { id:'latest', label:'Latest' },
+                { id:'price_low', label:'Price: Low to High' },
+                { id:'price_high', label:'Price: High to Low' },
+              ].map(opt => (
+                <Touchable key={opt.id} onPress={() => { setSortBy(opt.id); setSortOpen(false); }}>
+                  <View style={styles.dropRow}><Text style={{ color: colors.white }}>{opt.label}</Text></View>
+                </Touchable>
+              ))}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -181,6 +211,8 @@ const styles = StyleSheet.create({
   chipTxtActive: { color: colors.white, fontWeight: '700' },
 
   selectBox: { height: 44, borderRadius: 8, borderWidth: 1, borderColor: '#3A4051', backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingHorizontal: 12 },
+  dropdown: { position: 'absolute', left: 16, right: 16, top: 140, backgroundColor: '#2B2F39', borderRadius: 10, borderWidth: 1, borderColor: '#343B49', overflow: 'hidden' },
+  dropRow: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343B49' },
 
   footerBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1F232C', borderTopWidth: 1, borderTopColor: '#2E3440', zIndex: 10, elevation: 10 },
   slider: { height: 44, marginTop: 10 },

@@ -10,7 +10,7 @@ export default function ShareSheet({ visible, onClose, url }) {
     onClose?.();
   };
   return (
-    <BottomSheet visible={visible} onClose={onClose}>
+    <BottomSheet visible={visible} onClose={onClose} full={false} showClose>
       <Text style={styles.title}>Share</Text>
       <Text style={styles.subtitle}>Share this link via</Text>
       <View style={styles.row}>
@@ -46,4 +46,3 @@ const styles = StyleSheet.create({
   copyBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   copyText: { color: colors.white, fontWeight: '700' },
 });
-

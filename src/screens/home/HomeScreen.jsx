@@ -1,6 +1,7 @@
 // src/screens/HomeScreen.jsx
 import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from "../../theme/colors";
 import CategoryChips from "../../components/common/CategoryChips";
 import GameCard from "../../components/cards/GameCard";
@@ -29,18 +30,20 @@ export default function HomeScreen({ navigation }) {
   const keyExtractor = useCallback((it) => it.id, []);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.brandWrap}>
           <View style={styles.brandIcon}><Text style={{color: colors.white, fontWeight: '900'}}>Z</Text></View>
           <Text style={styles.brandText}>Lets Zish it</Text>
         </View>
-        <View style={styles.pill}>
+        <TouchableOpacity style={styles.pill} onPress={() => navigation.getParent()?.navigate('Wallet')}>
           <View style={styles.coinCircle}><Text style={{color: colors.white, fontWeight:'700'}}>Z</Text></View>
           <Text style={styles.pillText}>2,500</Text>
-        </View>
-        <Bell size={22} color={colors.white} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
+          <Bell size={22} color={colors.white} />
+        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -84,7 +87,7 @@ export default function HomeScreen({ navigation }) {
         onConfirm={() => { const it = rulesItem; setRulesItem(null); if (it) navigation.navigate('UnityGame', { scene: it.scene || 'Game1' }); }}
       />
 
-      <BottomSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)} full noPadding>
+      <BottomSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)} full maxRatio={0.9} noPadding>
         <FiltersSheet
           categories={categories}
           initialCategory={selected}
@@ -93,7 +96,7 @@ export default function HomeScreen({ navigation }) {
           onReset={() => { setSelected('all'); setFiltersOpen(false); }}
         />
       </BottomSheet>
-    </View>
+    </SafeAreaView>
   );
 }
 

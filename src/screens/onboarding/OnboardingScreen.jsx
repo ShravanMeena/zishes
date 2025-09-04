@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, Image, ScrollView, Dimensions, StyleSheet, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { useDispatch } from 'react-redux';
 import { setOnboardingSeen } from '../../store/app/appSlice';
@@ -39,7 +40,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.black }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top','bottom']}>
       <View style={styles.header}><Text style={styles.brand}>Zishes</Text></View>
       <ScrollView
         ref={ref}
@@ -70,7 +71,7 @@ export default function OnboardingScreen() {
           <Text style={styles.primaryText}>{index < slides.length - 1 ? 'Continue' : 'Lets Zish'}</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -86,4 +87,3 @@ const styles = StyleSheet.create({
   primaryBtn: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   primaryText: { color: colors.white, fontWeight: '700' },
 });
-

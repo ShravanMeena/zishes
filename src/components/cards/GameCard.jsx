@@ -4,7 +4,7 @@ import { colors } from '../../theme/colors';
 import ProgressBar from '../common/ProgressBar';
 import useGameCard from './useGameCard';
 import LinearGradient from 'react-native-linear-gradient';
-import { Star, StarOff, Share2, Zap, Info, Clock } from 'lucide-react-native';
+import { Star, Share2, Zap, Info, Clock } from 'lucide-react-native';
 
 function GameCard({ item, onPress, onPlay, onCardPress, onShare }) {
   const { faved, toggleFav, progress, endsIn, loading, handlePlay } = useGameCard(item);
@@ -24,7 +24,7 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare }) {
             style={styles.imageOverlay}
           />
           <TouchableOpacity style={[styles.roundIcon, styles.leftIcon]} onPress={toggleFav} activeOpacity={0.8}>
-            {faved ? <Star size={22} color={colors.white} /> : <StarOff size={22} color={colors.white} />}
+            <Star size={22} color={colors.white} {...(faved ? { fill: colors.accent } : {})} />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.roundIcon, styles.rightIcon]} activeOpacity={0.8} onPress={() => onShare?.(item)}>
             <Share2 size={20} color={colors.white} />

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { addFavorite, removeFavorite } from '../../store/favorites/favoritesSlice';
 
 export default function useGameCard(item) {
-  const [faved, setFaved] = useState(false);
+  const dispatch = useDispatch();
+  const favItems = useSelector((s) => s.favorites.items);
+  const faved = useMemo(() => !!favItems.find((it) => it.id === item.id), [favItems, item.id]);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -17,7 +21,10 @@ export default function useGameCard(item) {
   const msLeft = Math.max(0, (item?.endsAt || Date.now()) - now);
   const endsIn = formatDuration(msLeft);
 
-  const toggleFav = useCallback(() => setFaved(v => !v), []);
+  const toggleFav = useCallback(() => {
+    if (faved) dispatch(removeFavorite(item.id));
+    else dispatch(addFavorite(item));
+  }, [dispatch, faved, item]);
 
   const [loading, setLoading] = useState(false);
   const handlePlay = useCallback(async (onPress) => {

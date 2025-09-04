@@ -1,5 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, FlatList, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
+import { useDispatch, useSelector } from 'react-redux';
+import { addFavorite, removeFavorite } from '../../store/favorites/favoritesSlice';
 import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import ProgressBar from '../../components/common/ProgressBar';
@@ -14,10 +18,24 @@ import LeaderboardTab from './details/LeaderboardTab';
 
 export default function DetailsScreen({ route, navigation }) {
   const { item } = route.params;
-  const [tab, setTab] = useState('desc');
+  const dispatch = useDispatch();
+  const favItems = useSelector((s) => s.favorites.items);
+  const isFav = !!favItems.find((it) => it.id === item.id);
+  const toggleFav = () => {
+    if (isFav) dispatch(removeFavorite(item.id));
+    else dispatch(addFavorite(item));
+  };
+  const [index, setIndex] = useState(0);
+  const [routes] = useState([
+    { key: 'desc', title: 'Description' },
+    { key: 'details', title: 'Product Details' },
+    { key: 'reviews', title: 'Seller Review' },
+    { key: 'rules', title: 'Rules' },
+    { key: 'leader', title: 'Leader Board' },
+  ]);
   const [shareOpen, setShareOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const { width } = useWindowDimensions();
+  const { width, height: screenH } = useWindowDimensions();
   const [slide, setSlide] = useState(0);
   const sliderRef = useRef(null);
 
@@ -30,23 +48,23 @@ export default function DetailsScreen({ route, navigation }) {
     navigation.navigate('UnityGame', { scene: item.scene || 'Game1' });
   };
 
-  const TABS = [
-    { id: 'desc', label: 'Description' },
-    { id: 'details', label: 'Product Details' },
-    { id: 'reviews', label: 'Seller Review' },
-    { id: 'rules', label: 'Rules' },
-    { id: 'leader', label: 'Leader Board' },
-  ];
+  const renderScene = SceneMap({
+    desc: () => <View style={styles.panel}><DescriptionTab item={item} /></View>,
+    details: () => <View style={styles.panel}><ProductDetailsTab item={item} /></View>,
+    reviews: () => <View style={styles.panel}><SellerReviewTab item={item} /></View>,
+    rules: () => <View style={styles.panel}><RulesTab item={item} /></View>,
+    leader: () => <View style={styles.panel}><LeaderboardTab item={item} /></View>,
+  });
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.black }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <ChevronLeft size={22} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{item.title}</Text>
-        <TouchableOpacity onPress={() => setShareOpen(true)} style={styles.headerBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate('Notifications')} style={styles.headerBtn}>
           <Bell size={20} color={colors.accent} />
         </TouchableOpacity>
       </View>
@@ -63,8 +81,8 @@ export default function DetailsScreen({ route, navigation }) {
           renderItem={({ item: uri }) => (
             <View style={{ width }}>
               <Image source={{ uri }} style={styles.hero} />
-              <TouchableOpacity style={[styles.circle, styles.leftCircle]}>
-                <Star color={colors.white} />
+              <TouchableOpacity style={[styles.circle, styles.leftCircle]} onPress={toggleFav}>
+                <Star color={colors.white} {...(isFav ? { fill: colors.accent } : {})} />
               </TouchableOpacity>
               <TouchableOpacity style={[styles.circle, styles.rightCircle]} onPress={() => setShareOpen(true)}>
                 <Share2 color={colors.white} />
@@ -104,24 +122,32 @@ export default function DetailsScreen({ route, navigation }) {
           <Text style={styles.endsIn}>Ends in: 01d 30h 45m</Text>
         </View>
 
-        <View style={{ paddingHorizontal: 16 }}>
+        <View style={{ paddingHorizontal: 16, marginTop: 12, marginBottom: 12 }}>
           <Button title="Play Now" onPress={playNow} />
         </View>
 
         {/* Tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
-          {TABS.map((t) => (
-            <Text key={t.id} onPress={() => setTab(t.id)} style={[styles.tab, tab===t.id && styles.tabActive]}>{t.label}</Text>
-          ))}
-        </ScrollView>
-
-        {/* Tab Content */}
-        <View style={styles.panel}>
-          {tab === 'desc' && <DescriptionTab item={item} />}
-          {tab === 'details' && <ProductDetailsTab item={item} />}
-          {tab === 'reviews' && <SellerReviewTab item={item} />}
-          {tab === 'rules' && <RulesTab item={item} />}
-          {tab === 'leader' && <LeaderboardTab item={item} />}
+        <View style={{ flex: 1 }}>
+          <TabView
+            navigationState={{ index, routes }}
+            renderScene={renderScene}
+            onIndexChange={setIndex}
+            initialLayout={{ width }}
+            style={{ height: Math.max(420, Math.round(screenH * 0.55)) }}
+            renderTabBar={(props) => (
+              <TabBar
+                {...props}
+                scrollEnabled
+                style={{ backgroundColor: 'transparent' }}
+                contentContainerStyle={styles.tabsRow}
+                indicatorStyle={{ backgroundColor: colors.accent, height: 3, borderRadius: 2 }}
+                tabStyle={{ width: 'auto' }}
+                renderLabel={({ route, focused }) => (
+                  <Text style={[styles.tab, focused && styles.tabActive]}>{route.title}</Text>
+                )}
+              />
+            )}
+          />
         </View>
 
         <View style={{ paddingHorizontal: 16 }}>
@@ -131,7 +157,7 @@ export default function DetailsScreen({ route, navigation }) {
 
       <ShareSheet visible={shareOpen} onClose={() => setShareOpen(false)} url={`https://example.com/item/${item.id}`} />
       <RulesModal visible={rulesOpen} onCancel={() => setRulesOpen(false)} onConfirm={confirmPlay} />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -159,7 +185,7 @@ const styles = StyleSheet.create({
   statusPct: { color: colors.white, fontWeight: '700' },
   endsIn: { color: colors.white, marginTop: 10 },
   tabsRow: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
-  tab: { color: colors.white, backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#3A4051', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginRight: 10 },
+  tab: { color: colors.white, backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#3A4051', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginRight: 10, textAlign: 'center' },
   tabActive: { backgroundColor: '#3A2B52', borderColor: colors.accent },
   panel: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 16, padding: 16, marginHorizontal: 16, marginTop: 10 },
 });

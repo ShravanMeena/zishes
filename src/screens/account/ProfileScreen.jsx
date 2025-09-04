@@ -1,49 +1,57 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { logout } from "../../store/auth/authSlice";
 import { colors } from "../../theme/colors";
 import AppModal from "../../components/common/AppModal";
-import { Bell, ChevronRight, Gift, Settings, ClipboardList } from 'lucide-react-native';
+import { Bell, ChevronRight, Gift, Settings, ClipboardList, Trophy } from 'lucide-react-native';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const dispatch = useDispatch();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const onLogout = () => setConfirmOpen(true);
   const confirmLogout = () => { setConfirmOpen(false); dispatch(logout()); };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-        <Bell size={20} color={colors.white} />
-      </View>
-
-      {/* Card */}
-      <View style={styles.card}>
-        <Image source={{ uri: 'https://i.pravatar.cc/150?img=3' }} style={styles.avatar} />
-        <Text style={styles.name}>Alex Johnson</Text>
-        <Text style={styles.handle}>@alexzishes</Text>
-        <TouchableOpacity style={styles.editBtn}>
-          <Text style={styles.editText}>Edit Profile</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Notifications' })}>
+          <Bell size={20} color={colors.white} />
         </TouchableOpacity>
       </View>
 
-      {/* Menu List */}
-      <View style={styles.list}>
-        <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="My Listings" />
-        <MenuRow icon={<Gift size={18} color={colors.accent} />} title="Tournaments Won" />
-        <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="Receipts" />
-        <MenuRow icon={<Bell size={18} color={colors.accent} />} title="Notifications" badge="5" />
-        <MenuRow icon={<Settings size={18} color={colors.accent} />} title="Settings" />
-      </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 140 }} showsVerticalScrollIndicator={false}>
+        {/* Card */}
+        <View style={styles.card}>
+          <Image source={{ uri: 'https://i.pravatar.cc/150?img=3' }} style={styles.avatar} />
+          <Text style={styles.name}>Alex Johnson</Text>
+          <Text style={styles.handle}>@alexzishes</Text>
+          <TouchableOpacity style={styles.editBtn} onPress={() => navigation.navigate('EditProfile')}>
+            <Text style={styles.editText}>Edit Profile</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Logout */}
-      <TouchableOpacity style={styles.logout} onPress={onLogout}>
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
+        {/* Menu List */}
+        <View style={styles.list}>
+          <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="My Listings" onPress={() => navigation.navigate('MyListings')} />
+          <MenuRow icon={<Trophy size={18} color={colors.accent} />} title="Tournaments Organized" onPress={() => navigation.navigate('TournamentsOrganized')} />
+          <MenuRow icon={<Gift size={18} color={colors.accent} />} title="Tournaments Won" onPress={() => navigation.navigate('TournamentsWon')} />
+          <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="Receipts" />
+          <MenuRow icon={<Bell size={18} color={colors.accent} />} title="Notifications" badge="5" onPress={() => navigation.navigate('Home', { screen: 'Notifications' })} />
+          <MenuRow icon={<Settings size={18} color={colors.accent} />} title="Settings" onPress={() => navigation.navigate('Settings')} />
+        </View>
+
+        {/* Logout */}
+        <TouchableOpacity style={styles.logout} onPress={onLogout}>
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
 
       <AppModal
         visible={confirmOpen}
@@ -53,13 +61,14 @@ export default function ProfileScreen() {
         onCancel={() => setConfirmOpen(false)}
         onConfirm={confirmLogout}
       />
-    </View>
+      
+    </SafeAreaView>
   );
 }
 
-function MenuRow({ icon, title, badge }) {
+function MenuRow({ icon, title, badge, onPress }) {
   return (
-    <View style={styles.row}>
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.8}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View style={styles.rowIcon}>{icon}</View>
         <Text style={styles.rowText}>{title}</Text>
@@ -70,7 +79,7 @@ function MenuRow({ icon, title, badge }) {
         ) : null}
         <ChevronRight size={18} color={colors.white} />
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

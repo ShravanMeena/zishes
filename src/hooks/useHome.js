@@ -13,7 +13,7 @@ const ITEMS = [
     id: '1',
     title: 'Pro Gamer Headset',
     category: 'electronics',
-    image: 'https://images.unsplash.com/photo-1612198185731-e4b093b84b61?q=80&w=1200&auto=format&fit=crop',
+    image: 'https://images.unsplash.com/photo-1516709331517-9e39be34efd4?q=80&w=1200&auto=format&fit=crop',
     coinPerPlay: 20,
     playsCompleted: 150,
     playsTotal: 200,
@@ -69,4 +69,3 @@ export default function useHome() {
     items: filtered,
   };
 }
-

@@ -7,6 +7,7 @@ import VerifyStack from "./VerifyStack";
 import Splash from "../components/Splash";
 import { bootstrapAuth } from "../store/auth/authSlice";
 import { bootstrapApp } from "../store/app/appSlice";
+import { bootstrapFavorites } from "../store/favorites/favoritesSlice";
 
 export default function RootNavigator() {
   const dispatch = useDispatch();
@@ -16,6 +17,7 @@ export default function RootNavigator() {
   useEffect(() => {
     dispatch(bootstrapAuth());
     dispatch(bootstrapApp());
+    dispatch(bootstrapFavorites());
   }, [dispatch]);
 
   if (!authBoot || !appBoot) return <Splash />;

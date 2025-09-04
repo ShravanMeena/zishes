@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 
 export default function VerifyScreen({ navigation }) {
@@ -7,7 +8,7 @@ export default function VerifyScreen({ navigation }) {
   const skip = () => navigation.navigate('CountrySelect');
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.black }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}><Text style={styles.headerTitle}>ID Verification</Text></View>
       <View style={{ padding: 20 }}>
         <Image source={{ uri: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&q=80&auto=format&fit=crop' }} style={styles.hero} />
@@ -25,7 +26,7 @@ export default function VerifyScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
