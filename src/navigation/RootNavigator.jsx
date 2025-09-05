@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { navigationRef } from './navigationRef';
+import linking from './linking';
 import { useDispatch, useSelector } from 'react-redux';
 import AppTabs from "./AppTabs";
 import AuthStack from "./AuthStack";
@@ -24,7 +25,7 @@ export default function RootNavigator() {
   if (!authBoot || !appBoot) return <Splash />;
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       {token ? (needsVerification ? <VerifyStack /> : <AppTabs />) : (onboardingSeen ? <AuthStack /> : <OnboardingGateway />)}
     </NavigationContainer>
   );

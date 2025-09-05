@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../../theme/colors';
@@ -8,6 +8,8 @@ import ProgressBar from '../../../components/common/ProgressBar';
 import DatePickerModal, { formatDateYYYYMMDD } from '../../../components/ui/DatePickerModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { updatePlay } from '../../../store/listingDraft/listingDraftSlice';
+import { updatePolicies } from '../../../store/listingDraft/listingDraftSlice';
+import gamesApi from '../../../services/games';
 
 export default function PlayToWinStep() {
   const dispatch = useDispatch();
@@ -23,6 +25,28 @@ export default function PlayToWinStep() {
   ], []);
   const [showGame, setShowGame] = useState(false);
   const [showDate, setShowDate] = useState(false);
+  const [games, setGames] = useState([]);
+  const [gamesLoading, setGamesLoading] = useState(false);
+  const [gamesError, setGamesError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      setGamesLoading(true); setGamesError(null);
+      try {
+        const list = await gamesApi.listPublishedGames();
+        if (!alive) return;
+        setGames(Array.isArray(list) ? list : []);
+      } catch (e) {
+        if (!alive) return;
+        setGamesError(e?.message || 'Failed to fetch games');
+      } finally {
+        if (alive) setGamesLoading(false);
+      }
+    };
+    load();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <KeyboardAwareScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }} enableOnAndroid extraScrollHeight={20}>
@@ -73,8 +97,8 @@ export default function PlayToWinStep() {
         <FieldHint>Select the final date for your listing to be active.</FieldHint>
 
         <FieldLabel>Game Option <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
-        <Select value={form.game} placeholder="Word Map, Colour Jumble etc." onPress={() => setShowGame(true)} />
-        <FieldHint>Select the final date for your listing to be active.</FieldHint>
+        <Select value={form.gameName} placeholder={gamesLoading ? 'Loading games…' : 'Select a game'} onPress={() => setShowGame(true)} />
+        {gamesError ? <FieldHint style={{ color: '#ff9999' }}>{gamesError}</FieldHint> : <FieldHint>Select a published game for this tournament.</FieldHint>}
       </View>
 
       {/* Early Termination Option */}
@@ -89,9 +113,9 @@ export default function PlayToWinStep() {
       <PickerModal
         visible={showGame}
         title="Select Game"
-        options={gameOptions}
+        options={games}
         onClose={() => setShowGame(false)}
-        onSelect={(v) => { set('game', v); setShowGame(false); }}
+        onSelect={(g) => { set('game', g?._id); set('gameName', g?.name); setShowGame(false); }}
       />
       <DatePickerModal
         visible={showDate}
@@ -104,7 +128,7 @@ export default function PlayToWinStep() {
 }
 
 function FieldLabel({ children }) { return <Text style={styles.label}>{children}</Text>; }
-function FieldHint({ children }) { return <Text style={styles.hint}>{children}</Text>; }
+function FieldHint({ children, style }) { return <Text style={[styles.hint, style]}>{children}</Text>; }
 function Input(props) { return <TextInput {...props} placeholderTextColor={colors.textSecondary} style={styles.input} />; }
 
 function Select({ placeholder, value, onPress }) {
@@ -122,11 +146,19 @@ function PickerModal({ visible, title, options, onClose, onSelect }) {
       <TouchableOpacity activeOpacity={1} onPress={onClose} style={styles.modalBackdrop}>
         <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
           <Text style={styles.modalTitle}>{title}</Text>
-          {options.map((opt) => (
-            <TouchableOpacity key={opt} style={styles.optionRow} onPress={() => onSelect(opt)}>
-              <Text style={styles.optionTxt}>{opt}</Text>
-            </TouchableOpacity>
-          ))}
+          {Array.isArray(options) && options.length > 0 ? (
+            options.map((opt) => {
+              const key = opt?._id || opt?.id || String(opt?.name || opt);
+              const label = opt?.name || String(opt);
+              return (
+                <TouchableOpacity key={key} style={styles.optionRow} onPress={() => onSelect(opt)}>
+                  <Text style={styles.optionTxt}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <Text style={[styles.optionTxt, { opacity: 0.7 }]}>No games available</Text>
+          )}
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -170,12 +202,13 @@ const styles = StyleSheet.create({
 
 function EarlyTermination({ expectedPrice, playsTotal }) {
   const thresholds = [0.75, 0.8, 0.9, 1.0];
-  const [idx, setIdx] = useState(1); // default 80%
-  const [enabled, setEnabled] = useState(true);
-  const [ack, setAck] = useState(false);
-  const [platinumOnly, setPlatinum] = useState(false);
+  const dispatch = useDispatch();
+  const { earlyTerminationEnabled, earlyTerminationThresholdPct, platinumOnly } = useSelector((s) => s.listingDraft.play);
+  const { listingExtensionAck } = useSelector((s) => s.listingDraft.policies);
+  const pctValue = Number(earlyTerminationThresholdPct || 80) / 100;
+  const idx = Math.max(0, thresholds.findIndex((t) => Math.round(t * 100) === Math.round(pctValue * 100)));
 
-  const pct = thresholds[idx];
+  const pct = thresholds[idx] ?? 0.8;
   const earlyPrice = Math.round((expectedPrice || 0) * pct);
   const entriesNeeded = Math.ceil(playsTotal * pct);
 
@@ -192,9 +225,13 @@ function EarlyTermination({ expectedPrice, playsTotal }) {
 
       <ProgressBar value={pct} height={10} />
       <View style={styles.pctRow}>
-        {thresholds.map((t, i) => (
-          <TouchableOpacity key={t} style={styles.pctBtn} onPress={() => setIdx(i)}>
-            <Text style={[styles.pctTxt, i === idx && { color: colors.primary, fontWeight: '800' }]}>{Math.round(t * 100)}%</Text>
+        {thresholds.map((t) => (
+          <TouchableOpacity
+            key={t}
+            style={styles.pctBtn}
+            onPress={() => dispatch(updatePlay({ earlyTerminationThresholdPct: Math.round(t * 100) }))}
+          >
+            <Text style={[styles.pctTxt, Math.round(t * 100) === Math.round(pct * 100) && { color: colors.primary, fontWeight: '800' }]}>{Math.round(t * 100)}%</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -203,18 +240,18 @@ function EarlyTermination({ expectedPrice, playsTotal }) {
       <Text style={styles.hint}>Current entries: 0 / {playsTotal} → Early termination available after <Text style={{ color: colors.accent, fontWeight: '800' }}>{entriesNeeded}</Text> entries.</Text>
       <Text style={styles.hint}>Closing early declares a winner immediately and no further entries are accepted.</Text>
 
-      <TouchableOpacity style={styles.checkRow} onPress={() => setEnabled((v) => !v)}>
-        <View style={[styles.checkbox, enabled && styles.checkboxOn]} />
+      <TouchableOpacity style={styles.checkRow} onPress={() => dispatch(updatePlay({ earlyTerminationEnabled: !earlyTerminationEnabled }))}>
+        <View style={[styles.checkbox, earlyTerminationEnabled && styles.checkboxOn]} />
         <Text style={styles.checkTxt}>Enable early termination option for this tournament</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.checkRow, { marginTop: 10 }]} onPress={() => setAck((v) => !v)}>
-        <View style={[styles.checkbox, ack && styles.checkboxOn]} />
+      <TouchableOpacity style={[styles.checkRow, { marginTop: 10 }]} onPress={() => dispatch(updatePolicies({ listingExtensionAck: !listingExtensionAck }))}>
+        <View style={[styles.checkbox, listingExtensionAck && styles.checkboxOn]} />
         <Text style={styles.hint}>I acknowledge that i will be allowed to extend the listing only <Text style={{ color: '#ff4d4d', fontWeight: '800' }}>TWICE</Text> in case above gameplays are not achieved.</Text>
       </TouchableOpacity>
 
       <View style={[styles.card, { marginTop: 16 }]}> 
-        <TouchableOpacity style={styles.checkRow} onPress={() => setPlatinum((v) => !v)}>
+        <TouchableOpacity style={styles.checkRow} onPress={() => dispatch(updatePlay({ platinumOnly: !platinumOnly }))}>
           <View style={[styles.checkbox, platinumOnly && styles.checkboxOn]} />
           <Text style={[styles.label, { marginTop: 0 }]}>Make this a <Text style={{ fontWeight: '900' }}>Platinum</Text> Membership Listing ONLY</Text>
         </TouchableOpacity>

@@ -22,10 +22,28 @@ export default function PoliciesStep() {
         <Text style={styles.cardTitle}>Marketplace Policies</Text>
 
         <PolicyItem
-          title="Accept Listing Standards"
-          checked={policies.listing}
-          onToggle={() => toggle('listing')}
-        >
+          title="Enable early termination option for this tournament"
+          checked={policies.enableEarlyTerminationAck}
+          onToggle={() => toggle('enableEarlyTerminationAck')}
+        />
+
+        <PolicyItem
+          title="I acknowledge that I will be allowed to extend the listing only TWICE in case planned gameplays are not achieved."
+          checked={policies.listingExtensionAck}
+          onToggle={() => toggle('listingExtensionAck')}
+        />
+
+        <PolicyItem
+          title="Make this a Platinum Membership Listing ONLY (Only Platinum members will be allowed to participate)"
+          checked={policies.platinumOnlyAck}
+          onToggle={() => toggle('platinumOnlyAck')}
+        />
+
+      <PolicyItem
+        title="Accept Listing Standards"
+        checked={policies.listing}
+        onToggle={() => toggle('listing')}
+      >
           <ReadMore onPress={() => {}} />
         </PolicyItem>
 

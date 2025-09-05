@@ -1,5 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { uploadImage } from '../../services/uploads';
+import { createProductWithTournament } from '../../services/products';
 
 const DRAFT_KEY = 'listing_draft_v1';
 
@@ -20,7 +22,12 @@ const initialState = {
     pricePerPlay: '',
     playsCount: '',
     endDate: '',
-    game: '',
+    game: '', // store selected game id (ObjectId string)
+    gameName: '', // friendly name for UI display
+    // New fields to support backend flow
+    earlyTerminationEnabled: true,
+    earlyTerminationThresholdPct: 80,
+    platinumOnly: false,
   },
   delivery: {
     method: 'pickup',
@@ -31,7 +38,17 @@ const initialState = {
     dispute: false,
     antifraud: false,
     agreeAll: false,
+    // Additional acknowledgements required by backend
+    enableEarlyTerminationAck: false,
+    listingExtensionAck: false,
+    platinumOnlyAck: false,
   },
+  // Submission UI state
+  submitting: false,
+  submitStage: 'idle', // 'idle' | 'uploading' | 'creating' | 'success' | 'error'
+  submitProgress: 0, // 0..1
+  submitError: null,
+  lastResponse: null,
 };
 
 export const loadDraft = createAsyncThunk('listingDraft/load', async () => {
@@ -108,6 +125,29 @@ const slice = createSlice({
     markSaved(state) {
       state.isDirty = false;
     },
+    setSubmitStage(state, action) {
+      state.submitStage = action.payload || 'idle';
+    },
+    setSubmitProgress(state, action) {
+      const p = Number(action.payload || 0);
+      state.submitProgress = Math.max(0, Math.min(1, p));
+    },
+    setSubmitting(state, action) {
+      state.submitting = !!action.payload;
+    },
+    setSubmitError(state, action) {
+      state.submitError = action.payload || null;
+    },
+    setSubmitResult(state, action) {
+      state.lastResponse = action.payload || null;
+    },
+    clearSubmitState(state) {
+      state.submitting = false;
+      state.submitStage = 'idle';
+      state.submitProgress = 0;
+      state.submitError = null;
+      state.lastResponse = null;
+    },
     resetDraft(state) {
       Object.assign(state, initialState);
     }
@@ -144,7 +184,157 @@ export const {
   updateDelivery,
   updatePolicies,
   markSaved,
+  setSubmitStage,
+  setSubmitProgress,
+  setSubmitting,
+  setSubmitError,
+  setSubmitResult,
+  clearSubmitState,
   resetDraft,
 } = slice.actions;
 
 export default slice.reducer;
+
+// --- Submit flow: upload images, create product + tournament ---
+
+function mapCondition(cond) {
+  if (!cond) return undefined;
+  const c = String(cond).trim().toLowerCase();
+  if (c === 'new') return 'New';
+  if (c === 'like new' || c === 'like_new' || c === 'like-new' || c === 'likenew') return 'LIKE_NEW';
+  if (c === 'good' || c === 'used') return 'GOOD';
+  if (c === 'fair') return 'FAIR';
+  return undefined;
+}
+
+function mapDelivery(method) {
+  switch (method) {
+    case 'pickup': return 'SELF_PICKUP';
+    case 'domestic': return 'COURIER_DOMESTIC';
+    case 'intl': return 'COURIER_INTERNATIONAL';
+    case 'digital': return 'DIGITAL';
+    default: return undefined;
+  }
+}
+
+export const publishListing = createAsyncThunk('listingDraft/publish', async (_, { getState, rejectWithValue, dispatch }) => {
+  const { listingDraft, auth } = getState();
+  const token = auth?.token;
+  if (!token) return rejectWithValue('You must be logged in.');
+
+  const photos = Array.isArray(listingDraft.photos) ? listingDraft.photos : [];
+  const details = listingDraft.details || {};
+  const play = listingDraft.play || {};
+  const delivery = listingDraft.delivery || {};
+  const policies = listingDraft.policies || {};
+
+  // Basic validations
+  if (!photos.length) return rejectWithValue('Please add at least one photo.');
+  if (!details.name) return rejectWithValue('Please enter item name.');
+  if (!details.description) return rejectWithValue('Please enter description.');
+  if (!details.qty && details.qty !== 0) return rejectWithValue('Please enter quantity.');
+  if (!play.expectedPrice) return rejectWithValue('Please enter expected price.');
+  if (!play.pricePerPlay) return rejectWithValue('Please enter price per gameplay.');
+  if (!play.playsCount) return rejectWithValue('Please enter number of gameplays.');
+  if (!play.endDate) return rejectWithValue('Please select an end date.');
+  if (!play.game) return rejectWithValue('Please select a game.');
+  // All terms must be acknowledged
+  const requiredTermsTrue = [
+    policies.enableEarlyTerminationAck,
+    policies.listingExtensionAck,
+    policies.platinumOnlyAck,
+    policies.listing,
+    policies.dispute,
+    policies.antifraud,
+    policies.agreeAll,
+  ].every(Boolean);
+  if (!requiredTermsTrue) return rejectWithValue('Please accept all terms in Policies tab.');
+
+  // Initialize submit state
+  dispatch(setSubmitting(true));
+  dispatch(setSubmitError(null));
+  dispatch(setSubmitResult(null));
+
+  // Upload images if local with coarse progress
+  const imageUrls = [];
+  const total = photos.length + 1; // +1 for create step
+  let step = 0;
+  const update = () => dispatch(setSubmitProgress(step / total));
+  dispatch(setSubmitStage('uploading'));
+  update();
+  for (const p of photos) {
+    const uri = p?.uri || p;
+    if (!uri) { step += 1; update(); continue; }
+    if (/^https?:\/\//i.test(uri)) {
+      imageUrls.push(uri);
+      step += 1; update();
+    } else {
+      const up = await uploadImage({ uri, token });
+      if (!up?.url) throw new Error('Image upload failed');
+      imageUrls.push(up.url);
+      step += 1; update();
+    }
+  }
+
+  // Build endedAt ISO
+  let endedAt;
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(play.endDate))) {
+      endedAt = new Date(`${play.endDate}T23:59:00.000Z`).toISOString();
+    } else {
+      endedAt = new Date(play.endDate).toISOString();
+    }
+  } catch (_) {
+    return rejectWithValue('Invalid end date.');
+  }
+
+  const payload = {
+    images: imageUrls,
+    name: String(details.name || ''),
+    categories: details.category ? [String(details.category)] : [],
+    description: String(details.description || ''),
+    condition: mapCondition(details.condition),
+    quantity: Number(details.qty || 0),
+
+    price: Number(play.expectedPrice || 0),
+    entryFee: Number(play.pricePerPlay || 0),
+    expectedPlayers: Number(play.playsCount || 0),
+    endedAt,
+    game: String(play.game),
+    earlyTermination: {
+      enabled: !!play.earlyTerminationEnabled,
+      ...(play.earlyTerminationThresholdPct ? { thresholdPct: Number(play.earlyTerminationThresholdPct) } : {}),
+    },
+    platinumOnly: !!play.platinumOnly,
+    delivery: mapDelivery(delivery.method),
+
+    terms: {
+      enableEarlyTerminationAck: !!policies.enableEarlyTerminationAck,
+      listingExtensionAck: !!policies.listingExtensionAck,
+      platinumOnlyAck: !!policies.platinumOnlyAck,
+      acceptListingStandards: !!policies.listing,
+      disputePolicy: !!policies.dispute,
+      antiFraud: !!policies.antifraud,
+      tosPrivacy: !!policies.agreeAll,
+    },
+  };
+
+  try {
+    dispatch(setSubmitStage('creating'));
+    // n-1 uploads done, now last step
+    step = total - 1; update();
+    const res = await createProductWithTournament(payload, token);
+    // Clear draft on success
+    await dispatch(clearDraftStorage());
+    dispatch(setSubmitProgress(1));
+    dispatch(setSubmitStage('success'));
+    dispatch(setSubmitting(false));
+    dispatch(setSubmitResult(res));
+    return res;
+  } catch (e) {
+    dispatch(setSubmitStage('error'));
+    dispatch(setSubmitting(false));
+    dispatch(setSubmitError(e?.message || 'Failed to publish listing'));
+    return rejectWithValue(e?.message || 'Failed to publish listing');
+  }
+});

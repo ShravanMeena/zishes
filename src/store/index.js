@@ -5,6 +5,7 @@ import appReducer from './app/appSlice';
 import favoritesReducer from './favorites/favoritesSlice';
 import listingDraftReducer from './listingDraft/listingDraftSlice';
 import walletReducer from './wallet/walletSlice';
+import filtersReducer from './filters/filtersSlice';
 
 const rootReducer = combineReducers({
   auth: authReducer,
@@ -12,6 +13,7 @@ const rootReducer = combineReducers({
   favorites: favoritesReducer,
   listingDraft: listingDraftReducer,
   wallet: walletReducer,
+  filters: filtersReducer,
 });
 
 export const store = configureStore({

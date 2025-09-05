@@ -8,6 +8,7 @@ import CategoryChips from "../../components/common/CategoryChips";
 import GameCard from "../../components/cards/GameCard";
 import GameCardSkeleton from "../../components/skeletons/GameCardSkeleton";
 import useHome from "../../hooks/useHome";
+import { buildProductQueryFromUI } from "../../services/products";
 import { Bell, Search, SlidersHorizontal } from 'lucide-react-native';
 import ShareSheet from "../../components/common/ShareSheet";
 import RulesModal from "../../components/modals/RulesModal";
@@ -17,18 +18,20 @@ import EmptyState from "../../components/common/EmptyState";
 import FiltersSheet from "../../components/common/FiltersSheet";
 import useNow from "../../hooks/useNow";
 import { useDispatch, useSelector } from 'react-redux';
+import { setFilters, resetFilters } from '../../store/filters/filtersSlice';
 import { getProductById } from "../../services/products";
 import AppModal from "../../components/common/AppModal";
 import tournaments from "../../services/tournaments";
 import { fetchMyWallet } from "../../store/wallet/walletSlice";
 
 export default function HomeScreen({ navigation }) {
-  const { query, setQuery, selected, setSelected, categories, items, refreshing, refresh, loaded } = useHome();
+  const { query, setQuery, selected, setSelected, categories, items, refreshing, refresh, loaded, applyFilters } = useHome();
   const dispatch = useDispatch();
   const token = useSelector((s) => s.auth.token);
   const [shareItem, setShareItem] = useState(null);
   const [rulesItem, setRulesItem] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const savedFilters = useSelector((s) => s.filters?.selections);
   const coins = useSelector((s) => s.wallet.availableZishCoins);
   const walletStatus = useSelector((s) => s.wallet.status);
   const lastFetched = useSelector((s) => s.wallet.lastFetched);
@@ -255,9 +258,25 @@ export default function HomeScreen({ navigation }) {
         <FiltersSheet
           categories={categories}
           initialCategory={selected}
+          initialFilters={savedFilters}
           onClose={() => setFiltersOpen(false)}
-          onApply={({ category }) => { setFiltersOpen(false); if (category) setSelected(category); }}
-          onReset={() => { setSelected('all'); setFiltersOpen(false); }}
+          onApply={(filters) => {
+            try { console.log('[HomeScreen] onApply from FiltersSheet', filters); } catch {}
+            setFiltersOpen(false);
+            if (filters?.category) setSelected(filters.category);
+            const params = buildProductQueryFromUI(filters);
+            try { console.log('[HomeScreen] mapped API params', params); } catch {}
+            // Persist UI selections
+            try { dispatch(setFilters(filters)); } catch {}
+            applyFilters(params);
+          }}
+          onReset={(defaults) => {
+            try { console.log('[HomeScreen] reset filters'); } catch {}
+            try { dispatch(resetFilters()); } catch {}
+            setSelected('all');
+            setFiltersOpen(false);
+            applyFilters({});
+          }}
         />
       </BottomSheet>
     </SafeAreaView>

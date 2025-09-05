@@ -21,15 +21,19 @@ export default function useHome() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [apiParams, setApiParams] = useState({});
 
   const load = async () => {
-    const data = await listProducts({ page: 1, limit: 20, count: true });
+    const params = { page: 1, limit: 20, count: true, ...(apiParams || {}) };
+    try { console.log('[useHome] fetching products with params', params); } catch {}
+    const data = await listProducts(params);
     const list = (data?.result || []).map((p) => {
       const mapped = mapProductToCard(p);
       // derive a slug from product category to match chips
       const slug = p?.category ? slugify(p.category) : normCategory(p?.category);
       return { ...mapped, category: slug };
     });
+    try { console.log('[useHome] products fetch result', { total: list.length, meta: data?.meta }); } catch {}
     return list;
   };
 
@@ -60,6 +64,21 @@ export default function useHome() {
     }
   };
 
+  // Apply server-side filters and fetch
+  const applyFilters = async (params = {}) => {
+    try { console.log('[useHome] applyFilters with', params); } catch {}
+    setApiParams(params || {});
+    setRefreshing(true);
+    try {
+      const list = await load();
+      setItems(list);
+    } catch (e) {
+      setError(e?.message || 'Failed to fetch filtered products');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((it) =>
@@ -79,5 +98,7 @@ export default function useHome() {
     error,
     refreshing,
     refresh,
+    applyFilters,
+    apiParams,
   };
 }

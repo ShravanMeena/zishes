@@ -6,10 +6,12 @@ import { Bell } from 'lucide-react-native';
 import ProgressBar from '../../components/common/ProgressBar';
 import Button from '../../components/ui/Button';
 import BottomSheet from '../../components/common/BottomSheet';
-import CongratsModal from '../../components/modals/CongratsModal';
+// import CongratsModal from '../../components/modals/CongratsModal';
+import SubmissionModal from '../../components/modals/SubmissionModal';
 import { CheckCircle2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadDraft, saveDraftFromStore } from '../../store/listingDraft/listingDraftSlice';
+import { loadDraft, saveDraftFromStore, clearSubmitState } from '../../store/listingDraft/listingDraftSlice';
+import { publishListing } from '../../store/listingDraft/listingDraftSlice';
 import { BackHandler, Alert } from 'react-native';
 
 import PhotosStep from './steps/PhotosStep';
@@ -24,6 +26,10 @@ export default function SellScreen({ navigation }) {
   const dispatch = useDispatch();
   const loaded = useSelector((s) => s.listingDraft.loaded);
   const isDirty = useSelector((s) => s.listingDraft.isDirty);
+  const submitting = useSelector((s) => s.listingDraft.submitting);
+  const submitStage = useSelector((s) => s.listingDraft.submitStage);
+  const submitProgress = useSelector((s) => s.listingDraft.submitProgress);
+  const submitError = useSelector((s) => s.listingDraft.submitError);
 
   const steps = useMemo(
     () => [
@@ -40,7 +46,8 @@ export default function SellScreen({ navigation }) {
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const [draftOpen, setDraftOpen] = useState(false);
-  const [congratsOpen, setCongratsOpen] = useState(false);
+  // const [congratsOpen, setCongratsOpen] = useState(false);
+  const [hideSubmitModal, setHideSubmitModal] = useState(false);
   const routes = steps;
   const progress = (index + 1) / steps.length;
 
@@ -54,10 +61,11 @@ export default function SellScreen({ navigation }) {
   const title = activeKey === 'details' ? 'Sell Item - Step 2: Details' : 'Create Listing';
   const isReview = activeKey === 'review';
 
-  const onPrimary = () => {
+  const onPrimary = async () => {
     if (isReview) {
-      // Show congratulations when publishing
-      setCongratsOpen(true);
+      if (submitting) return;
+      try { await dispatch(publishListing()).unwrap(); }
+      catch (_) { /* handled via modal state */ }
     } else {
       goNext();
     }
@@ -88,6 +96,18 @@ export default function SellScreen({ navigation }) {
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
   }, [isDirty, dispatch, navigation]);
+
+  // Ensure result modal shows even if user hid while submitting
+  useEffect(() => {
+    if (submitStage === 'success' || submitStage === 'error') {
+      setHideSubmitModal(false);
+    }
+  }, [submitStage]);
+
+  // When a new submission starts, ensure the modal is shown again
+  useEffect(() => {
+    if (submitting) setHideSubmitModal(false);
+  }, [submitting]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -140,7 +160,7 @@ export default function SellScreen({ navigation }) {
           onPress={async () => { await dispatch(saveDraftFromStore()); setDraftOpen(true); }}
           style={{ flex: 1, marginRight: 10 }}
         />
-        <Button title={isReview ? "Let's Zish It !!" : 'Next'} onPress={onPrimary} style={{ flex: 1 }} />
+        <Button title={isReview ? "Let's Zish It !!" : 'Next'} onPress={onPrimary} style={{ flex: 1 }} disabled={submitting} />
       </View>
 
       {/* Save Draft sheet (themed, not default alert) */}
@@ -158,14 +178,23 @@ export default function SellScreen({ navigation }) {
         </View>
       </BottomSheet>
 
-      {/* Publish success */}
-      <CongratsModal
-        visible={congratsOpen}
-        title="Listing Submitted"
-        message="Your listing is live. Good luck and happy zishing!"
-        primaryText="Awesome!"
-        onPrimary={() => { setCongratsOpen(false); navigation.navigate('Profile', { screen: 'MyListings' }); }}
-        onRequestClose={() => setCongratsOpen(false)}
+      {/* Submission modal with progress + success/error states */}
+      <SubmissionModal
+        visible={!hideSubmitModal && (submitting || submitStage === 'success' || submitStage === 'error')}
+        stage={submitStage}
+        progress={submitProgress}
+        error={submitError}
+        onClose={() => { setHideSubmitModal(true); }}
+        onPrimary={() => {
+          if (submitStage === 'success') {
+            setHideSubmitModal(true);
+            try { dispatch(clearSubmitState()); } catch {}
+            navigation.navigate('Profile', { screen: 'MyListings' });
+          } else if (submitStage === 'error') {
+            onPrimary(); // retry
+          }
+        }}
+        primaryText={submitStage === 'success' ? 'Go to My Listings' : undefined}
       />
     </SafeAreaView>
   );

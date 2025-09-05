@@ -5,21 +5,39 @@ import Button from '../ui/Button';
 import { X } from 'lucide-react-native';
 import Slider from '../ui/Slider';
 
-export default function FiltersSheet({ onClose, onApply, onReset, categories=[], initialCategory }) {
-  const [price, setPrice] = useState(500);
-  const [plays, setPlays] = useState(150);
-  const [progress, setProgress] = useState(35);
-  const [timeLeft, setTimeLeft] = useState('today');
-  const [condition, setCondition] = useState('new');
-  const [cat, setCat] = useState(initialCategory || 'all');
+export default function FiltersSheet({ onClose, onApply, onReset, categories=[], initialCategory, initialFilters }) {
+  const [price, setPrice] = useState(initialFilters?.price ?? 500);
+  const [plays, setPlays] = useState(initialFilters?.plays ?? 150);
+  const [progress, setProgress] = useState(initialFilters?.progress ?? 35);
+  const [timeLeft, setTimeLeft] = useState(initialFilters?.timeLeft ?? 'today');
+  const [condition, setCondition] = useState(initialFilters?.condition ?? 'new');
+  const [cat, setCat] = useState(initialFilters?.category ?? initialCategory ?? 'all');
   const [sliding, setSliding] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
-  const [sortBy, setSortBy] = useState('popular');
+  const [sortBy, setSortBy] = useState(initialFilters?.sortBy ?? 'popular');
 
-  const apply = () => onApply?.({ price, plays, progress, timeLeft, condition, category: cat, sortBy });
+  // Sync internal state when initialFilters or initialCategory changes (e.g., persisted Redux)
+  React.useEffect(() => {
+    setPrice(initialFilters?.price ?? 500);
+    setPlays(initialFilters?.plays ?? 150);
+    setProgress(initialFilters?.progress ?? 35);
+    setTimeLeft(initialFilters?.timeLeft ?? 'today');
+    setCondition(initialFilters?.condition ?? 'new');
+    setCat(initialFilters?.category ?? initialCategory ?? 'all');
+    setSortBy(initialFilters?.sortBy ?? 'popular');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFilters, initialCategory]);
+
+  const apply = () => {
+    const payload = { price, plays, progress, timeLeft, condition, category: cat, sortBy };
+    try { console.log('[FiltersSheet] apply pressed with', payload); } catch {}
+    onApply?.(payload);
+  };
   const reset = () => {
-    setPrice(500); setPlays(150); setProgress(35); setTimeLeft('today'); setCondition('new'); setCat('all');
-    onReset?.();
+    const defaults = { price: 500, plays: 150, progress: 35, timeLeft: 'today', condition: 'new', category: 'all', sortBy: 'popular' };
+    setPrice(defaults.price); setPlays(defaults.plays); setProgress(defaults.progress); setTimeLeft(defaults.timeLeft); setCondition(defaults.condition); setCat(defaults.category); setSortBy(defaults.sortBy);
+    try { console.log('[FiltersSheet] reset pressed'); } catch {}
+    onReset?.(defaults);
   };
 
   return (

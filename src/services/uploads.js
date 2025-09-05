@@ -4,52 +4,47 @@ import { API_BASE } from '../config/api';
 
 const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 20000 }));
 
-function guessNameFromUri(uri) {
+async function request(path, { method = 'POST', data, headers, token, onUploadProgress } = {}) {
   try {
-    const path = uri.split('?')[0];
-    const parts = path.split('/')
-    const last = parts[parts.length - 1] || '';
-    if (last && last.includes('.')) return last;
-  } catch {}
-  return 'upload.jpg';
-}
-
-function guessMimeFromUri(uri) {
-  const u = (uri || '').toLowerCase();
-  if (u.endsWith('.png')) return 'image/png';
-  if (u.endsWith('.webp')) return 'image/webp';
-  if (u.endsWith('.heic') || u.endsWith('.heif')) return 'image/heic';
-  if (u.endsWith('.gif')) return 'image/gif';
-  return 'image/jpeg';
-}
-
-// POST /api/v1/uploads/image
-// Body: multipart/form-data with field `file`
-// Returns: { url, key, contentType, size, name }
-export async function uploadImage(input) {
-  const asset = input || {};
-  const uri = asset.uri || asset.path || null;
-  if (!uri) throw new Error('Invalid image input');
-  const name = asset.fileName || asset.name || guessNameFromUri(uri);
-  const type = asset.type || guessMimeFromUri(uri);
-
-  const form = new FormData();
-  form.append('file', { uri, name, type });
-
-  try {
-    const res = await client.post('/uploads/image', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const res = await client.request({
+      url: path,
+      method,
+      data,
+      onUploadProgress,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(headers || {}),
+      },
     });
     return res.data;
   } catch (err) {
     const status = err?.response?.status;
-    const data = err?.response?.data;
-    const message = data?.message || data?.error || err?.message || 'Failed to upload image';
+    const body = err?.response?.data;
+    const message = body?.message || body?.error || err?.message || 'Upload failed';
     const e = new Error(message);
     e.status = status;
-    e.data = data;
+    e.data = body;
     throw e;
   }
+}
+
+// Upload a single image file
+// args: { uri, name?, type?, token }
+export async function uploadImage({ uri, name, type, token, onUploadProgress }) {
+  if (!uri) throw new Error('Missing image uri');
+  const form = new FormData();
+  const filename = name || uri.split('/').pop() || 'image.jpg';
+  const mime = type || (filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
+  form.append('file', { uri, name: filename, type: mime });
+  // POST /api/v1/uploads/image
+  const data = await request('/uploads/image', {
+    method: 'POST',
+    data: form,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    token,
+    onUploadProgress,
+  });
+  return data; // { url, key, contentType, size, name }
 }
 
 export default { uploadImage };

@@ -43,6 +43,20 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
+        <!-- Deep links: custom scheme zishes://item/:id -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="zishes" android:host="app" android:pathPrefix="/item" />
+        </intent-filter>
+        <!-- Deep links: https://example.com/item/:id -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="example.com" android:pathPrefix="/item" />
+        </intent-filter>
       </activity>
     </application>
 </manifest>

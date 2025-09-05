@@ -26,7 +26,8 @@ import useNow from '../../hooks/useNow';
 import DetailsSkeleton from '../../components/skeletons/DetailsSkeleton';
 
 export default function DetailsScreen({ route, navigation }) {
-  const initialItem = route.params?.item;
+  // Support deep link with just an id param: item or id
+  const initialItem = route.params?.item || (route.params?.id ? { id: route.params.id } : undefined);
   const dispatch = useDispatch();
   const favItems = useSelector((s) => s.favorites.items);
   const [item, setItem] = useState(initialItem);
