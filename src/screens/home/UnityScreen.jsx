@@ -5,7 +5,7 @@ import GameResultModal from "../../components/GameResultModal";
 
 export default function UnityScreen({ navigation, route }) {
   const unityRef = useRef(null);
-  const { scene } = route.params;
+  const { scene, tournamentId, productId } = route.params;
   const [unityReady, setUnityReady] = useState(false);
   const [sent, setSent] = useState(false);
   const [showResult, setShowResult] = useState(false);
@@ -89,6 +89,8 @@ export default function UnityScreen({ navigation, route }) {
         visible={showResult}
         result={result}
         scene={scene}
+        tournamentId={tournamentId}
+        productId={productId}
         onRequestClose={() => dismissResult(true)}
         onBack={() => dismissResult(true)}
         onPlayAgain={() => {

@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
+import { createUser as createZishesUser } from '../../services/users';
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_KEY = 'refresh_token';
@@ -20,6 +21,8 @@ export const login = createAsyncThunk('auth/login', async ({ email, password }, 
 
     const { accessToken, refreshToken } = result;
     if (!accessToken) throw new Error('Missing access token');
+    // Log token for debugging as requested
+    console.log('[Auth] Login success. Access token:', accessToken);
     await Promise.all([
       AsyncStorage.setItem(TOKEN_KEY, accessToken),
       refreshToken ? AsyncStorage.setItem(REFRESH_KEY, refreshToken) : Promise.resolve(),
@@ -30,7 +33,7 @@ export const login = createAsyncThunk('auth/login', async ({ email, password }, 
   }
 });
 
-export const signup = createAsyncThunk('auth/signup', async ({ email, password }, { rejectWithValue }) => {
+export const signup = createAsyncThunk('auth/signup', async ({ email, password }, { rejectWithValue, dispatch }) => {
   try {
     const result = await api.register({ email, password });
     const { accessToken, refreshToken } = result;
@@ -39,6 +42,18 @@ export const signup = createAsyncThunk('auth/signup', async ({ email, password }
       AsyncStorage.setItem(TOKEN_KEY, accessToken),
       refreshToken ? AsyncStorage.setItem(REFRESH_KEY, refreshToken) : Promise.resolve(),
     ]);
+    // Make token available in Redux immediately for interceptors
+    try { dispatch(tokenUpdated({ token: accessToken, refreshToken: refreshToken || null })); } catch {}
+    console.log('[Auth] Signup success. Access token:', accessToken);
+    // After successful auth, create user in Zishes API (ignore duplicates)
+    try {
+      await createZishesUser({ email, token: accessToken });
+    } catch (e) {
+      if (e?.status !== 409) {
+        // Non-duplicate errors can be logged for debugging
+        console.warn('Create user failed:', e?.message || e);
+      }
+    }
     return { token: accessToken, refreshToken: refreshToken || null, user: { email } };
   } catch (err) {
     return rejectWithValue(err.message || 'Signup failed');
@@ -68,7 +83,15 @@ const initialState = {
 const authSlice = createSlice({
   name: 'auth',
   initialState,
-  reducers: {},
+  reducers: {
+    tokenUpdated: (state, action) => {
+      state.token = action.payload?.token || null;
+      state.refreshToken = action.payload?.refreshToken || null;
+    },
+    setUser: (state, action) => {
+      state.user = action.payload || null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       // bootstrap
@@ -132,4 +155,5 @@ const authSlice = createSlice({
   },
 });
 
+export const { tokenUpdated, setUser } = authSlice.actions;
 export default authSlice.reducer;

@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { listProducts } from '../services/products';
+import { mapProductToCard } from '../utils/productMapper';
 
 const CATEGORIES = [
   { id: 'all', label: 'All' },
@@ -8,57 +10,68 @@ const CATEGORIES = [
   { id: 'home', label: 'Home' },
 ];
 
-const ITEMS = [
-  {
-    id: '1',
-    title: 'Pro Gamer Headset',
-    category: 'electronics',
-    image: 'https://images.unsplash.com/photo-1516709331517-9e39be34efd4?q=80&w=1200&auto=format&fit=crop',
-    coinPerPlay: 20,
-    playsCompleted: 150,
-    playsTotal: 200,
-    endsAt: Date.now() + 1 * 24 * 3600 * 1000 + 30 * 3600 * 1000,
-    gameType: 'Word',
-    gameTypeIcon: 'https://i.imgur.com/2yaf2wb.png',
-  },
-  {
-    id: '2',
-    title: 'Luxury Smartwatch',
-    category: 'fashion',
-    image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=1200&auto=format&fit=crop',
-    coinPerPlay: 20,
-    playsCompleted: 150,
-    playsTotal: 200,
-    endsAt: Date.now() + 1 * 24 * 3600 * 1000 + 30 * 3600 * 1000,
-    gameType: 'Word',
-    gameTypeIcon: 'https://i.imgur.com/2yaf2wb.png',
-    badge: 'Early Termination Opted',
-  },
-  {
-    id: '3',
-    title: 'Bluetooth Speaker',
-    category: 'electronics',
-    image: 'https://images.unsplash.com/photo-1460353581641-37baddab0fa2?q=80&w=1200&auto=format&fit=crop',
-    coinPerPlay: 10,
-    playsCompleted: 60,
-    playsTotal: 100,
-    endsAt: Date.now() + 2 * 24 * 3600 * 1000 + 2 * 3600 * 1000,
-    gameType: 'Puzzle',
-    gameTypeIcon: 'https://i.imgur.com/2yaf2wb.png',
-  },
-];
+// Local mapping from API category to chip ids (lowercase)
+function normCategory(cat) {
+  if (!cat) return 'home';
+  const c = String(cat).toLowerCase();
+  if (c.includes('elect')) return 'electronics';
+  if (c.includes('game')) return 'gaming';
+  if (c.includes('fash')) return 'fashion';
+  return c;
+}
 
 export default function useHome() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('all');
+  const [items, setItems] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = async () => {
+    const data = await listProducts({ page: 1, limit: 20, count: true });
+    const list = (data?.result || []).map((p) => {
+      const mapped = mapProductToCard(p);
+      // add a normalized category used for filtering chips
+      return { ...mapped, category: normCategory(p?.category) };
+    });
+    return list;
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await load();
+        if (alive) setItems(list);
+      } catch (e) {
+        if (alive) setError(e?.message || 'Failed to fetch products');
+      } finally {
+        if (alive) setLoaded(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      const list = await load();
+      setItems(list);
+    } catch (e) {
+      setError(e?.message || 'Failed to fetch products');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return ITEMS.filter((it) =>
+    return items.filter((it) =>
       (selected === 'all' || it.category === selected) &&
       (!q || it.title.toLowerCase().includes(q))
     );
-  }, [query, selected]);
+  }, [query, selected, items]);
 
   return {
     query,
@@ -67,5 +80,9 @@ export default function useHome() {
     setSelected,
     categories: CATEGORIES,
     items: filtered,
+    loaded,
+    error,
+    refreshing,
+    refresh,
   };
 }

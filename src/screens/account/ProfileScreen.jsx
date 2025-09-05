@@ -5,7 +5,7 @@ import { useDispatch } from 'react-redux';
 import { logout } from "../../store/auth/authSlice";
 import { colors } from "../../theme/colors";
 import AppModal from "../../components/common/AppModal";
-import { Bell, ChevronRight, Gift, Settings, ClipboardList, Trophy } from 'lucide-react-native';
+import { Bell, ChevronRight, Gift, Settings, ClipboardList } from 'lucide-react-native';
 
 export default function ProfileScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -39,7 +39,6 @@ export default function ProfileScreen({ navigation }) {
         {/* Menu List */}
         <View style={styles.list}>
           <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="My Listings" onPress={() => navigation.navigate('MyListings')} />
-          <MenuRow icon={<Trophy size={18} color={colors.accent} />} title="Tournaments Organized" onPress={() => navigation.navigate('TournamentsOrganized')} />
           <MenuRow icon={<Gift size={18} color={colors.accent} />} title="Tournaments Won" onPress={() => navigation.navigate('TournamentsWon')} />
           <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="Receipts" />
           <MenuRow icon={<Bell size={18} color={colors.accent} />} title="Notifications" badge="5" onPress={() => navigation.navigate('Home', { screen: 'Notifications' })} />

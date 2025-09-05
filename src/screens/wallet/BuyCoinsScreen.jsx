@@ -1,26 +1,44 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, CreditCard, QrCode, Wallet, ShieldCheck } from 'lucide-react-native';
 import CongratsModal from '../../components/modals/CongratsModal';
+import plansService from '../../services/plans';
+import { useSelector } from 'react-redux';
 
 export default function BuyCoinsScreen({ navigation }) {
-  const packs = useMemo(() => ([
-    { id: 'c1', qty: 10, price: '€10.00' },
-    { id: 'c2', qty: 50, price: '€49.99' },
-    { id: 'c3', qty: 100, price: '€99.99' },
-    { id: 'c4', qty: 200, price: '€199.99' },
-  ]), []);
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [congratsOpen, setCongratsOpen] = useState(false);
+  const balance = useSelector((s) => s.wallet.availableZishCoins);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await plansService.listPlans({});
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        if (alive) setPlans(list.filter(p => p?.planType === 'TOPUP'));
+      } catch (e) {
+        if (alive) setError(e?.message || 'Failed to load plans');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const renderPack = ({ item }) => (
-    <TouchableOpacity onPress={() => setSelected(item.id)} style={[styles.pack, selected===item.id && styles.packActive]}>
+    <TouchableOpacity onPress={() => setSelected(item._id)} style={[styles.pack, selected===item._id && styles.packActive]}>
       <View style={styles.coinBadge}><Text style={styles.badgeText}>Z</Text></View>
-      <Text style={styles.packQty}>{item.qty} Coins</Text>
-      <Text style={styles.packPrice}>{item.price}</Text>
+      <Text style={styles.packQty}>{Number(item.coins || 0)} Coins</Text>
+      <Text style={styles.packPrice}>{(item.currencyCode || item.baseCurrency || '')} {item.amount}</Text>
     </TouchableOpacity>
   );
 
@@ -33,8 +51,8 @@ export default function BuyCoinsScreen({ navigation }) {
       </View>
 
       <FlatList
-        data={packs}
-        keyExtractor={(it) => it.id}
+        data={plans}
+        keyExtractor={(it) => it._id}
         numColumns={2}
         renderItem={renderPack}
         ListHeaderComponent={
@@ -42,7 +60,7 @@ export default function BuyCoinsScreen({ navigation }) {
             <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.balanceCard}>
               <View style={styles.coinBadgeLg}><Text style={styles.badgeText}>Z</Text></View>
               <Text style={styles.balanceLabel}>Your Current Balance</Text>
-              <Text style={styles.balanceQty}>12,500 <Text style={{ fontSize: 16 }}>Coins</Text></Text>
+              <Text style={styles.balanceQty}>{Number(balance || 0).toLocaleString()} <Text style={{ fontSize: 16 }}>Coins</Text></Text>
               <Text style={styles.balanceCaption}>Coins power your gameplay — top up anytime.</Text>
             </LinearGradient>
             <Text style={styles.sectionTitle}>Choose Your Coin Pack</Text>
@@ -62,6 +80,18 @@ export default function BuyCoinsScreen({ navigation }) {
         contentContainerStyle={{ padding: 12, paddingBottom: 140 }}
         columnWrapperStyle={{ justifyContent: 'space-between' }}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          loading ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <ActivityIndicator color={colors.white} />
+              <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading plans…</Text>
+            </View>
+          ) : error ? (
+            <Text style={{ color: colors.textSecondary, paddingHorizontal: 12 }}>{error}</Text>
+          ) : (
+            <Text style={{ color: colors.textSecondary, paddingHorizontal: 12 }}>No packs available.</Text>
+          )
+        }
       />
 
       <View style={styles.fixedBottomBar}>
@@ -71,7 +101,13 @@ export default function BuyCoinsScreen({ navigation }) {
         <TouchableOpacity
           style={[styles.bottomBtn, styles.buyBtn, !selected && styles.buyBtnDisabled]}
           disabled={!selected}
-          onPress={() => { if (selected) { setCongratsOpen(true); } }}
+          onPress={() => {
+            if (!selected) return;
+            const plan = plans.find(p => p._id === selected);
+            if (plan) {
+              setCongratsOpen(true);
+            }
+          }}
         >
           <Text style={[styles.buyTxt, !selected && styles.buyTxtDisabled]}>Buy Now</Text>
         </TouchableOpacity>
@@ -80,7 +116,7 @@ export default function BuyCoinsScreen({ navigation }) {
       <CongratsModal
         visible={congratsOpen}
         title="Purchase Successful"
-        message={selected ? `Your ${packs.find(p=>p.id===selected)?.qty || ''} ZishCoins are on the way!` : 'Coins added successfully.'}
+        message={selected ? `Your ${Number(plans.find(p=>p._id===selected)?.coins || 0)} ZishCoins are on the way!` : 'Coins added successfully.'}
         primaryText="Great!"
         onPrimary={() => { setCongratsOpen(false); navigation.goBack(); }}
         onRequestClose={() => setCongratsOpen(false)}

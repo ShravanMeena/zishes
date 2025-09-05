@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Platform, KeyboardAvoidingView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useDispatch, useSelector } from 'react-redux';
 import { signup } from "../../store/auth/authSlice";
@@ -16,14 +17,22 @@ export default function SignupScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [referral, setReferral] = useState('');
   const [secure, setSecure] = useState(true);
+  const insets = useSafeAreaInsets();
 
   const onSubmit = () => {
     dispatch(signup({ email, password }));
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAwareScrollView enableOnAndroid keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+    <SafeAreaView style={styles.container} edges={['top','bottom']}>
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        enableOnAndroid
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: (insets?.bottom || 0) + 16 }}
+        extraScrollHeight={24}
+        extraHeight={24}
+      >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -96,14 +105,18 @@ export default function SignupScreen({ navigation }) {
         <Button variant="outline" title="Sign up with Google" left={<Chrome size={18} color={colors.white} />} />
         <Button variant="outline" title="Sign up with Apple" left={<Apple size={18} color={colors.white} />} style={{ marginTop: 10 }} />
 
-        <View style={{ flexDirection: 'row', marginTop: 18, alignSelf: 'center' }}>
-          <Text style={{ color: colors.textSecondary }}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.link}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
       </View>
       </KeyboardAwareScrollView>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} enabled>
+        <View style={[styles.bottomBar, { paddingBottom: (insets?.bottom || 0) + 12 }]}>
+          <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
+            <Text style={{ color: colors.textSecondary }}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.link}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -146,4 +159,12 @@ const styles = StyleSheet.create({
   oauthText: { color: colors.white, fontWeight: '600' },
   link: { color: colors.accent, fontWeight: '600' },
   error: { color: colors.error, marginTop: 8 },
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 16,
+    backgroundColor: colors.black,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#22252C',
+  },
 });

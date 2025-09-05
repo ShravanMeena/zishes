@@ -6,10 +6,11 @@ import { colors } from '../../theme/colors';
 import { ChevronLeft } from 'lucide-react-native';
 import AppModal from '../../components/common/AppModal';
 import { useDispatch, useSelector } from 'react-redux';
-import { logout } from '../../store/auth/authSlice';
+import { logout, setUser } from '../../store/auth/authSlice';
 import useGalleryPermission from '../../hooks/useGalleryPermission';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { setCountry as setCountryGlobal } from '../../store/app/appSlice';
+import users from '../../services/users';
 
 export default function EditProfileScreen({ navigation, route }) {
   const { user } = useSelector((s) => s.auth);
@@ -22,7 +23,18 @@ export default function EditProfileScreen({ navigation, route }) {
   const ensureGallery = useGalleryPermission();
 
   useEffect(() => {
-    const sub = navigation.addListener('focus', () => {
+    const sub = navigation.addListener('focus', async () => {
+      // Refresh user details
+      try {
+        const me = await users.getMe();
+        const doc = me?.data || me;
+        if (doc) {
+          dispatch(setUser(doc));
+          setName(doc?.username || '');
+          setEmail(doc?.email || '');
+          setCountry(doc?.address?.country || country);
+        }
+      } catch (_) {}
       const selected = route?.params?.selectedCountry;
       if (selected) {
         setCountry(selected);
@@ -34,9 +46,26 @@ export default function EditProfileScreen({ navigation, route }) {
     return sub;
   }, [navigation, route?.params?.selectedCountry, dispatch]);
 
-  const save = () => {
-    // TODO: integrate profile update API later
-    navigation.goBack();
+  const save = async () => {
+    try {
+      const patch = {};
+      if (name && name !== user?.username) patch.username = name;
+      if (email && email !== user?.email) patch.email = email;
+      if (country) patch.address = { ...(user?.address || {}), country };
+      if (!patch.username && !patch.email && !patch.address) {
+        navigation.goBack();
+        return;
+      }
+      const updated = await users.updateMe(patch);
+      const doc = updated?.data || updated;
+      if (doc) {
+        dispatch(setUser(doc));
+      }
+      navigation.goBack();
+    } catch (err) {
+      // Basic fallback: stay on screen; could show toast
+      console.warn('Failed to update profile', err?.message || err);
+    }
   };
   const cancel = () => navigation.goBack();
   const deleteAccount = () => setConfirmOpen(true);

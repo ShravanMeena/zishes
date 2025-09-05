@@ -6,10 +6,14 @@ import useGameCard from './useGameCard';
 import LinearGradient from 'react-native-linear-gradient';
 import { Star, Share2, Zap, Info, Clock } from 'lucide-react-native';
 
-function GameCard({ item, onPress, onPlay, onCardPress, onShare }) {
-  const { faved, toggleFav, progress, endsIn, loading, handlePlay } = useGameCard(item);
+function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
+  const { faved, toggleFav, progress, endsIn, loading, handlePlay, ended, msLeft, calcReady } = useGameCard(item, now);
   const onPlayPress = useCallback(() => handlePlay(onPlay || onPress), [handlePlay, onPlay, onPress]);
   const goDetails = useCallback(() => (onCardPress || onPress)?.(item), [onCardPress, onPress, item]);
+  // Treat tournament status OVER/UNFILLED as ended, regardless of countdown
+  const tourStatus = item?.tournamentStatus || item?.tournament?.status || item?.raw?.tournament?.status;
+  const statusEnded = tourStatus === 'OVER' || tourStatus === 'UNFILLED';
+  const showEndedUI = !!statusEnded;
 
   return (
     <View style={styles.card}>
@@ -60,9 +64,15 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare }) {
 
           <View style={[styles.rowBetween, { marginTop: 8 }]}>
             <View style={styles.rowLeft}>
-              <Clock size={18} color={colors.textSecondary} style={{marginRight: 6}} />
-              <Text style={styles.subtle}>Ends in:</Text>
-              <Text style={styles.endsIn}>{' '}{endsIn}</Text>
+              {showEndedUI ? (
+                <Text style={styles.endedMsg}>Game ended</Text>
+              ) : endsIn !== 'Ended' ? (
+                <>
+                  <Clock size={18} color={colors.textSecondary} style={{marginRight: 6}} />
+                  <Text style={styles.subtle}>Ends in:</Text>
+                  <Text style={styles.endsIn}>{' '}{endsIn}</Text>
+                </>
+              ) : null}
             </View>
             <View style={styles.gameTypeWrap}>
               <Image source={{ uri: item.gameTypeIcon }} style={styles.gameIcon} />
@@ -72,15 +82,25 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare }) {
       </TouchableOpacity>
 
       <View style={[styles.rowBetween, { marginTop: 16, alignItems: 'center', paddingHorizontal: 14, paddingBottom: 14 }]}>
-        <TouchableOpacity style={styles.playBtn} onPress={onPlayPress} activeOpacity={0.85} disabled={loading}>
-          <LinearGradient colors={[colors.primary, colors.gradientEnd]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.playGrad}>
-            {loading ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <Text style={styles.playText}>Play Now</Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
+        {calcReady ? (
+          showEndedUI ? (
+            <View style={[styles.playGrad, { backgroundColor: '#3A4051' }]}>
+              <Text style={styles.playText}>Game End</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.playBtn} onPress={onPlayPress} activeOpacity={0.85} disabled={loading}>
+              <LinearGradient colors={[colors.primary, colors.gradientEnd]} start={{x:0,y:0}} end={{x:1,y:1}} style={[styles.playGrad, loading && { opacity: 0.7 }]}>
+                {loading ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.playText}>Play Now</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          )
+        ) : (
+          <View style={[styles.playGrad, { backgroundColor: '#3A4051', opacity: 0.5 }]} />
+        )}
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={styles.subtle}>Game Type :</Text>
           <Text style={styles.gameType}>{' '}{item.gameType}</Text>
@@ -171,6 +191,7 @@ const styles = StyleSheet.create({
   infoIcon: { color: colors.textSecondary, marginLeft: 6 },
   clock: { color: colors.textSecondary, marginRight: 6 },
   endsIn: { color: colors.accent, fontWeight: '700' },
+  endedMsg: { color: colors.error, fontWeight: '700' },
   gameTypeWrap: {
     width: 48,
     height: 48,

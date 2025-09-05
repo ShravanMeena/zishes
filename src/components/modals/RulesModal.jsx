@@ -1,9 +1,46 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import AppModal from '../common/AppModal';
 import { colors } from '../../theme/colors';
+import Markdown from '../common/Markdown';
+import { useSelector } from 'react-redux';
+import { getProductById } from '../../services/products';
 
-export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tournament Rules' }) {
+export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tournament Rules', item, confirmLoading = false }) {
+  const token = useSelector((s) => s.auth.token);
+  const baseRules = item?.tournament?.rules || item?.raw?.tournament?.rules || '';
+  const [fetchedRules, setFetchedRules] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      if (!visible) return;
+      if (baseRules && String(baseRules).trim().length) { setFetchedRules(''); setLoading(false); setError(null); return; }
+      const id = item?.id || item?._id;
+      if (!id || !token) { setFetchedRules(''); return; }
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await getProductById(id, token);
+        if (!alive) return;
+        const rules = data?.tournament?.rules || '';
+        setFetchedRules(rules || '');
+      } catch (e) {
+        if (!alive) return;
+        setError(e?.message || 'Failed to load rules');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }
+    load();
+    return () => { alive = false; };
+  }, [visible, baseRules, item?.id, item?._id, token]);
+
+  const rules = useMemo(() => {
+    return (baseRules && String(baseRules).trim().length) ? baseRules : fetchedRules;
+  }, [baseRules, fetchedRules]);
   return (
     <AppModal
       visible={visible}
@@ -12,13 +49,21 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
       title={title}
       confirmText="Play Now"
       cancelText="Back"
+      confirmLoading={confirmLoading}
     >
       <View style={styles.box}>
-        <Text style={styles.p}>Limited Entries → Each tournament has a fixed number of slots.</Text>
-        <Text style={styles.p}>Entry Fee → Coins are deducted from your Zish Wallet when you join.</Text>
-        <Text style={styles.p}>Refunds → If cancelled or not filled, coins return to your wallet (no cash refunds).</Text>
-        <Text style={styles.p}>Fair Play → All players and sellers must follow Zishes rules.</Text>
-        <Text style={[styles.p, { fontWeight: '700' }]}>Prize → The listed item is the prize.</Text>
+        {loading ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={{ color: colors.white, marginLeft: 8 }}>Loading rules…</Text>
+          </View>
+        ) : error ? (
+          <Text style={styles.p}>{error}</Text>
+        ) : rules ? (
+          <Markdown content={rules} />
+        ) : (
+          <Text style={styles.p}>No rules provided.</Text>
+        )}
       </View>
       <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
         By entering, you confirm you understand the tournament rules and game instructions.

@@ -2,23 +2,35 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { addFavorite, removeFavorite } from '../../store/favorites/favoritesSlice';
 
-export default function useGameCard(item) {
+export default function useGameCard(item, externalNow) {
   const dispatch = useDispatch();
   const favItems = useSelector((s) => s.favorites.items);
   const faved = useMemo(() => !!favItems.find((it) => it.id === item.id), [favItems, item.id]);
-  const [now, setNow] = useState(Date.now());
+  const [internalNow, setInternalNow] = useState(Date.now());
+  const now = externalNow ?? internalNow;
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    if (externalNow !== undefined) return; // parent drives updates
+    const t = setInterval(() => setInternalNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [externalNow]);
 
   const progress = useMemo(() => {
     if (!item?.playsTotal) return 0;
     return Math.min(1, (item.playsCompleted || 0) / item.playsTotal);
   }, [item]);
 
-  const msLeft = Math.max(0, (item?.endsAt || Date.now()) - now);
+  const { targetTs, calcReady } = useMemo(() => {
+    if (item?.endedAt) {
+      const ts = Date.parse(item.endedAt);
+      if (!Number.isNaN(ts)) return { targetTs: ts, calcReady: true };
+    }
+    if (item?.endsAt) return { targetTs: item.endsAt, calcReady: true };
+    return { targetTs: Date.now(), calcReady: false };
+  }, [item]);
+
+  const msLeft = Math.max(0, targetTs - now);
+  const ended = calcReady && msLeft <= 0;
   const endsIn = formatDuration(msLeft);
 
   const toggleFav = useCallback(() => {
@@ -42,7 +54,17 @@ export default function useGameCard(item) {
     }
   }, []);
 
-  return { faved, toggleFav, progress, endsIn, loading, handlePlay };
+  return {
+    faved,
+    toggleFav,
+    progress,
+    endsIn: ended ? 'Ended' : formatDuration(msLeft),
+    loading,
+    handlePlay,
+    ended,
+    msLeft,
+    calcReady,
+  };
 }
 
 function formatDuration(ms){

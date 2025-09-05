@@ -1,17 +1,79 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import { Bell } from 'lucide-react-native';
+import { useSelector } from 'react-redux';
+import walletService from '../../services/wallet';
+import CongratsModal from '../../components/modals/CongratsModal';
+import plansService from '../../services/plans';
 
 export default function WalletScreen({ navigation }) {
-  const packs = useMemo(() => ([
-    { id: 'p1', coins: 500, price: 'INR 100' },
-    { id: 'p2', coins: 1000, price: 'INR 1,000' },
-    { id: 'p3', coins: 2500, price: 'INR 2,500' },
-  ]), []);
+  const token = useSelector((s) => s.auth.token);
+  const [wallet, setWallet] = useState({ availableZishCoins: 0, withdrawalBalance: 0 });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [congratsOpen, setCongratsOpen] = useState(false);
+  const [congratsTitle, setCongratsTitle] = useState('Success');
+  const [congratsMsg, setCongratsMsg] = useState('');
+  const [selectedPack, setSelectedPack] = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+
+  const fetchWallet = useCallback(async () => {
+    if (!token) {
+      setError('Login required');
+      setLoading(false);
+      return;
+    }
+    try {
+      setError(null);
+      const data = await walletService.getMyWallet(token);
+      setWallet({
+        availableZishCoins: Number(data?.availableZishCoins ?? 0),
+        withdrawalBalance: Number(data?.withdrawalBalance ?? 0),
+      });
+    } catch (e) {
+      setError(e?.message || 'Failed to fetch wallet');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchWallet();
+  }, [fetchWallet]);
+
+  const fetchPlans = useCallback(async () => {
+    try {
+      setPlansLoading(true);
+      const res = await plansService.listPlans({});
+      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setPlans(list);
+    } catch (e) {
+      setPlans([]);
+    } finally {
+      setPlansLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.allSettled([fetchWallet(), fetchPlans()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchWallet, fetchPlans]);
+
+  const topupPlans = useMemo(() => (plans || []).filter(p => p?.planType === 'TOPUP'), [plans]);
 
   const withdrawals = useMemo(() => ([
     { id: 'w1', title: 'Vintage Leather Jacket', amount: 'INR 45,000', status: 'pending', image: 'https://images.unsplash.com/photo-1520975922221-23a9d23708c5?w=300&q=80' },
@@ -37,38 +99,93 @@ export default function WalletScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl tintColor={colors.white} refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* Balances Row */}
         <View style={styles.row2}>
+          <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('BuyCoins')} style={{ flex: 1 }}>
           <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} start={{x:0,y:0}} end={{x:1,y:1}} style={[styles.balanceCard, { marginRight: 8 }] }>
             <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
             <Text style={styles.balanceTitle}>ZishCoin Balance</Text>
-            <Text style={styles.balanceQty}>12,450</Text>
-            <Text style={styles.balanceUnit}>Zishcoin</Text>
-            <Text style={styles.balanceCaption}>Use for gameplay and entries only. Non-withdrawable.</Text>
+            {loading ? (
+              <>
+                <View style={[styles.skelLineLg, { marginTop: 10 }]} />
+                <View style={[styles.skelLineSm, { marginTop: 8, width: 70 }]} />
+                <View style={[styles.skelLineXs, { marginTop: 10, width: '90%' }]} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.balanceQty}>{wallet.availableZishCoins.toLocaleString()}</Text>
+                <Text style={styles.balanceUnit}>Coins</Text>
+                <Text style={styles.balanceCaption}>Use for gameplay and entries only. Non-withdrawable.</Text>
+              </>
+            )}
           </LinearGradient>
+          </TouchableOpacity>
 
           <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('PaymentMethods')} style={{ flex: 1 }}>
             <View style={[styles.balanceCard, { backgroundColor: '#16a085', marginLeft: 8 }] }>
-            <Text style={[styles.balanceTitle, { marginTop: 8 }]}>Withdrawal Balance</Text>
-            <Text style={styles.balanceQty}>5,700</Text>
-            <Text style={styles.balanceUnit}>INR</Text>
-            <Text style={styles.balanceCaption}>Available to withdraw once confirmed receipt by winner</Text>
+              <Text style={[styles.balanceTitle, { marginTop: 8 }]}>Withdrawable Coins</Text>
+              {loading ? (
+                <>
+                  <View style={[styles.skelLineLg, { marginTop: 10 }]} />
+                  <View style={[styles.skelLineSm, { marginTop: 8, width: 70 }]} />
+                  <View style={[styles.skelLineXs, { marginTop: 10, width: '95%' }]} />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.balanceQty}>{wallet.withdrawalBalance.toLocaleString()}</Text>
+                  <Text style={styles.balanceUnit}>Coins</Text>
+                  <Text style={styles.balanceCaption}>Available to withdraw subject to rules</Text>
+                </>
+              )}
             </View>
           </TouchableOpacity>
         </View>
 
-        {/* Buy ZishCoin */}
+        {!!error && (
+          <Text style={{ color: '#FF7A7A', paddingHorizontal: 12, marginTop: 8 }}>{error}</Text>
+        )}
+
+        {/* Buy ZishCoin (TOPUP plans) */}
         <Text style={styles.sectionTitle}>Buy ZishCoin</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12 }}>
-          {packs.map((p, i) => (
-            <View key={p.id} style={[styles.packCard, i>0 && { marginLeft: 12 }]}>
+          {(plansLoading && (!topupPlans || topupPlans.length === 0)) ? (
+            [1,2,3].map((i) => (
+              <View key={`sk-${i}`} style={[styles.packCard, i>1 && { marginLeft: 12 }]}> 
+                <View style={[styles.skelLineSm, { width: 36, height: 36, borderRadius: 18, alignSelf: 'center' }]} />
+                <View style={[styles.skelLineSm, { marginTop: 8, width: '70%', alignSelf: 'center' }]} />
+                <View style={[styles.skelLineXs, { marginTop: 6, width: '50%', alignSelf: 'center' }]} />
+                <View style={[styles.skelLineXs, { marginTop: 10, width: '80%', alignSelf: 'center' }]} />
+              </View>
+            ))
+          ) : (topupPlans && topupPlans.length ? topupPlans : []).map((p, i) => (
+            <View key={p._id || i} style={[styles.packCard, i>0 && { marginLeft: 12 }]}>
               <View style={styles.packBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
-              <Text style={styles.packQty}>{p.coins.toLocaleString()} Coins</Text>
-              <Text style={styles.packPrice}>{p.price}</Text>
-              <Button title="Buy Now" onPress={() => navigation.navigate('BuyCoins')} style={{ marginTop: 10 }} />
+              <Text style={styles.packQty}>{Number(p.coins || 0).toLocaleString()} Coins</Text>
+              <Text style={styles.packPrice}>{(p.currencyCode || p.baseCurrency || '')} {p.amount}</Text>
+              <Button
+                title="Buy Now"
+                onPress={() => {
+                  setSelectedPack(p);
+                  setCongratsTitle('Purchase Successful');
+                  setCongratsMsg(`${Number(p.coins || 0).toLocaleString()} ZishCoins added successfully!`);
+                  setCongratsOpen(true);
+                }}
+                style={{ marginTop: 10 }}
+              />
             </View>
           ))}
+          {(!plansLoading && (!topupPlans || topupPlans.length === 0)) && (
+            <View style={[styles.packCard]}>
+              <View style={styles.packBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
+              <Text style={styles.packQty}>No packs</Text>
+              <Text style={styles.packPrice}>Try again later</Text>
+            </View>
+          )}
         </ScrollView>
 
         {/* Withdrawals (Seller only) */}
@@ -113,6 +230,14 @@ export default function WalletScreen({ navigation }) {
         </View>
 
       </ScrollView>
+      <CongratsModal
+        visible={congratsOpen}
+        title={congratsTitle}
+        message={congratsMsg}
+        primaryText="Great!"
+        onPrimary={() => { setCongratsOpen(false); setSelectedPack(null); }}
+        onRequestClose={() => setCongratsOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -154,6 +279,9 @@ const styles = StyleSheet.create({
   balanceQty: { color: colors.white, fontWeight: '900', fontSize: 28, marginTop: 6 },
   balanceUnit: { color: colors.white, fontWeight: '700' },
   balanceCaption: { color: '#E5E7EB', marginTop: 8 },
+  skelLineLg: { height: 30, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.2)', width: 120 },
+  skelLineSm: { height: 14, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.25)', width: 90 },
+  skelLineXs: { height: 10, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.15)', width: '80%' },
 
   sectionTitle: { color: colors.white, fontWeight: '800', fontSize: 18, paddingHorizontal: 12, marginTop: 14 },
 

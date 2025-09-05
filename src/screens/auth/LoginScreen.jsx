@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Platform, KeyboardAvoidingView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useDispatch, useSelector } from 'react-redux';
 import { login } from "../../store/auth/authSlice";
@@ -14,14 +15,22 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
+  const insets = useSafeAreaInsets();
 
   const onSubmit = () => {
     dispatch(login({ email, password }));
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAwareScrollView enableOnAndroid keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+    <SafeAreaView style={styles.container} edges={['top','bottom']}>
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        enableOnAndroid
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: (insets?.bottom || 0) + 24 }}
+        extraScrollHeight={24}
+        extraHeight={24}
+      >
       {/* Header */}
       <View style={styles.header}>
         {navigation.canGoBack() ? (
@@ -79,21 +88,23 @@ export default function LoginScreen({ navigation }) {
 
         <Button variant="outline" title="Continue with Google" left={<Chrome size={18} color={colors.white} />} />
         <Button variant="outline" title="Continue with Apple" left={<Apple size={18} color={colors.white} />} style={{ marginTop: 10 }} />
+      </View>
+      </KeyboardAwareScrollView>
 
-        <View style={{ alignItems: 'center', marginTop: 14 }}>
+      {/* Sticky bottom actions with keyboard avoidance */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} enabled>
+        <View style={[styles.bottomBar, { paddingBottom: (insets?.bottom || 0) + 12 }]}>
           <TouchableOpacity onPress={() => navigation.navigate('Forgot')}>
             <Text style={styles.link}>Forgot Password?</Text>
           </TouchableOpacity>
+          <View style={{ flexDirection: 'row' }}>
+            <Text style={{ color: colors.textSecondary }}>New user? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+              <Text style={styles.link}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-
-        <View style={{ flexDirection: 'row', marginTop: 10, alignSelf: 'center' }}>
-          <Text style={{ color: colors.textSecondary }}>New user? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-            <Text style={styles.link}>Sign Up</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      </KeyboardAwareScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -136,4 +147,15 @@ const styles = StyleSheet.create({
   oauthText: { color: colors.white, fontWeight: '600' },
   link: { color: colors.accent, fontWeight: '600' },
   error: { color: colors.error, marginTop: 8 },
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 16,
+    backgroundColor: colors.black,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#22252C',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
 });

@@ -4,9 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../theme/colors';
 import { Globe, Check } from 'lucide-react-native';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { setCountry } from '../../store/app/appSlice';
-import { completeVerification } from '../../store/auth/authSlice';
+import { completeVerification, setUser } from '../../store/auth/authSlice';
+import { createUser as createZishesUser, updateMe as updateCurrentUser } from '../../services/users';
+import { getAccessToken } from '../../services/tokenManager';
 import Button from '../../components/ui/Button';
 
 const COUNTRIES = [
@@ -15,6 +17,8 @@ const COUNTRIES = [
 
 export default function CountrySelectScreen({ navigation, route }) {
   const dispatch = useDispatch();
+  const email = useSelector((s) => s.auth?.user?.email);
+  const token = useSelector((s) => s.auth?.token);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
   const hasSelection = !!selected;
@@ -44,9 +48,33 @@ export default function CountrySelectScreen({ navigation, route }) {
       navigation.goBack();
       return;
     }
-    // Default onboarding flow
-    await dispatch(setCountry(selected));
-    await dispatch(completeVerification());
+    // Default onboarding flow: create user with selected country
+    try {
+      if (email) {
+        // Ensure we have a token (fallback to tokenManager if needed)
+        let bearer = token;
+        if (!bearer) {
+          try { bearer = await getAccessToken(); } catch {}
+        }
+        console.log('[CountrySelect] Using token for createUser:', bearer);
+        // Try create first time
+        const created = await createZishesUser({ email, address: { country: selected }, token: bearer });
+        if (created) dispatch(setUser(created?.data || created));
+      }
+    } catch (err) {
+      console.warn('[CountrySelect] createUser error:', err?.status, err?.message);
+      // If already exists or conflict, try patching country only
+      if (err?.status === 409 || /duplicate/i.test(err?.message || '')) {
+        try {
+          // Update current user on main API
+          const updated = await updateCurrentUser({ address: { country: selected } });
+          if (updated) dispatch(setUser(updated?.data || updated));
+        } catch (_) {}
+      }
+    } finally {
+      await dispatch(setCountry(selected));
+      await dispatch(completeVerification());
+    }
   };
 
   const renderItem = ({ item }) => (
