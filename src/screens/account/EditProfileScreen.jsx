@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Image, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -8,51 +8,41 @@ import AppModal from '../../components/common/AppModal';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout, setUser } from '../../store/auth/authSlice';
 import useGalleryPermission from '../../hooks/useGalleryPermission';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { setCountry as setCountryGlobal } from '../../store/app/appSlice';
 import users from '../../services/users';
+import { uploadImage } from '../../services/uploads';
+import ImagePickerSheet from '../../components/common/ImagePickerSheet';
+import useCameraPermission from '../../hooks/useCameraPermission';
 
 export default function EditProfileScreen({ navigation, route }) {
   const { user } = useSelector((s) => s.auth);
   const dispatch = useDispatch();
-  const [name, setName] = useState('John Doe');
-  const [email, setEmail] = useState(user?.email || 'john.doe@example.com');
-  const [country, setCountry] = useState('India');
+  const [name, setName] = useState(user?.username || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [avatarUri, setAvatarUri] = useState('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=80&auto=format&fit=crop');
+  const [avatarUri, setAvatarUri] = useState(user?.avatar || user?.avatarUrl || user?.image || null);
   const ensureGallery = useGalleryPermission();
+  const ensureCamera = useCameraPermission();
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
-    const sub = navigation.addListener('focus', async () => {
-      // Refresh user details
-      try {
-        const me = await users.getMe();
-        const doc = me?.data || me;
-        if (doc) {
-          dispatch(setUser(doc));
-          setName(doc?.username || '');
-          setEmail(doc?.email || '');
-          setCountry(doc?.address?.country || country);
-        }
-      } catch (_) {}
-      const selected = route?.params?.selectedCountry;
-      if (selected) {
-        setCountry(selected);
-        dispatch(setCountryGlobal(selected));
-        // clear param to avoid reapplying
-        navigation.setParams({ selectedCountry: undefined });
-      }
+    const sub = navigation.addListener('focus', () => {
+      // Keep form in sync with store without re-calling getMe on every focus
+      const doc = user || {};
+      setName(doc?.username || '');
+      setEmail(doc?.email || '');
+      setAvatarUri(doc?.avatar || doc?.avatarUrl || doc?.image || null);
     });
     return sub;
-  }, [navigation, route?.params?.selectedCountry, dispatch]);
+  }, [navigation, user, route?.params?.selectedCountry]);
 
   const save = async () => {
     try {
+      // Only allow updating name here
       const patch = {};
       if (name && name !== user?.username) patch.username = name;
-      if (email && email !== user?.email) patch.email = email;
-      if (country) patch.address = { ...(user?.address || {}), country };
-      if (!patch.username && !patch.email && !patch.address) {
+      if (!patch.username) {
         navigation.goBack();
         return;
       }
@@ -74,16 +64,43 @@ export default function EditProfileScreen({ navigation, route }) {
     await dispatch(logout());
   };
 
-  const pickPhoto = async () => {
+  const startGallery = async () => {
     const ok = await ensureGallery();
     if (!ok) return;
     const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, quality: 0.9 });
+    await handlePicked(res);
+  };
+  const startCamera = async () => {
+    const ok = await ensureCamera();
+    if (!ok) return;
+    const res = await launchCamera({ mediaType: 'photo', quality: 0.9, cameraType: 'front', saveToPhotos: true });
+    await handlePicked(res);
+  };
+  const handlePicked = async (res) => {
     if (res && res.assets && res.assets.length > 0) {
-      const uri = res.assets[0].uri;
-      if (uri) setAvatarUri(uri);
-      // TODO: upload to API and persist
+      const asset = res.assets[0];
+      const uri = asset.uri;
+      if (!uri) return;
+      try {
+        setAvatarUri(uri);
+        const uploaded = await uploadImage(asset);
+        const imageUrl = uploaded?.url;
+        if (imageUrl) {
+          const updated = await users.updateMe({ avatar: imageUrl });
+          const doc = updated?.data || updated;
+          if (doc) dispatch(setUser(doc));
+          setAvatarUri(imageUrl);
+        }
+      } catch (e) {
+        console.warn('Avatar upload failed:', e?.message || e);
+      }
     }
   };
+
+  const avatarSource = useMemo(() => {
+    if (avatarUri && typeof avatarUri === 'string') return { uri: avatarUri };
+    try { return require('../../assets/zishes_logo.png'); } catch { return undefined; }
+  }, [avatarUri]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
@@ -102,28 +119,21 @@ export default function EditProfileScreen({ navigation, route }) {
       >
           {/* Avatar Card */}
           <View style={styles.cardCenter}>
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            <Image source={avatarSource} style={styles.avatar} />
             <Text style={styles.name}>{name}</Text>
             <Text style={styles.email}>{email}</Text>
-            <TouchableOpacity style={styles.changeBtn} onPress={pickPhoto}><Text style={styles.changeTxt}>Change Photo</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.changeBtn} onPress={() => setPickerOpen(true)}><Text style={styles.changeTxt}>Change Photo</Text></TouchableOpacity>
           </View>
 
-          {/* Form Card */}
+          {/* Form Card (only name; email is read-only) */}
           <View style={styles.cardForm}>
             <Label>Full Name</Label>
-            <Input value={name} onChangeText={setName} placeholder="John Doe" />
+            <Input value={name} onChangeText={setName} placeholder="Your name" />
 
             <Label>Email Address</Label>
-            <Input value={email} onChangeText={setEmail} placeholder="john.doe@example.com" keyboardType="email-address" autoCapitalize="none" />
-
-            <Label>Country of Play</Label>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('CountrySelect', { mode: 'pick' })}
-              activeOpacity={0.85}
-              style={[styles.input, { justifyContent: 'center' }]}
-            >
-              <Text style={{ color: colors.white, fontWeight: '700' }}>{country || 'Select country'}</Text>
-            </TouchableOpacity>
+            <View style={[styles.input, { justifyContent: 'center' }]}>
+              <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>{email || '—'}</Text>
+            </View>
           </View>
 
           {/* Actions */}
@@ -133,9 +143,7 @@ export default function EditProfileScreen({ navigation, route }) {
           <TouchableOpacity style={[styles.actionBtn, styles.cancelBtn]} onPress={cancel}>
             <Text style={styles.cancelTxt}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={deleteAccount}>
-            <Text style={styles.deleteTxt}>Delete Account</Text>
-          </TouchableOpacity>
+          {/* Delete account moved to Settings/Manage Account */}
       </KeyboardAwareScrollView>
 
       <AppModal
@@ -145,6 +153,20 @@ export default function EditProfileScreen({ navigation, route }) {
         confirmText="Delete"
         onCancel={() => setConfirmOpen(false)}
         onConfirm={confirmDelete}
+      />
+      <ImagePickerSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPickCamera={() => {
+          // Close sheet first, then open camera to avoid iOS modal race causing auto-dismiss
+          setPickerOpen(false);
+          setTimeout(() => { startCamera(); }, 300);
+        }}
+        onPickGallery={() => {
+          setPickerOpen(false);
+          setTimeout(() => { startGallery(); }, 300);
+        }}
+        title="Change Photo"
       />
     </SafeAreaView>
   );

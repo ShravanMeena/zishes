@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Modal, Pressable, Dimensions } from 'react-native';
 import { colors } from '../../../theme/colors';
-import { launchImageLibrary } from 'react-native-image-picker';
-import useGalleryPermission from '../../../hooks/useGalleryPermission';
+import { launchCamera } from 'react-native-image-picker';
+import useCameraPermission from '../../../hooks/useCameraPermission';
 import { X, Trash2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { addPhotos as addPhotosAction, removePhotoAt, setCoverIndex } from '../../../store/listingDraft/listingDraftSlice';
@@ -11,13 +11,13 @@ export default function PhotosStep() {
   const dispatch = useDispatch();
   const images = useSelector((s) => s.listingDraft.photos);
 
-  const ensurePermission = useGalleryPermission();
+  const ensurePermission = useCameraPermission();
   const [previewIdx, setPreviewIdx] = useState(null);
 
   const addPhotos = async () => {
     const ok = await ensurePermission();
     if (!ok) return;
-    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0, quality: 0.9 });
+    const res = await launchCamera({ mediaType: 'photo', quality: 0.9, cameraType: 'back', saveToPhotos: true });
     if (res?.assets?.length) {
       const next = res.assets.map((a) => ({ uri: a.uri }));
       dispatch(addPhotosAction(next));

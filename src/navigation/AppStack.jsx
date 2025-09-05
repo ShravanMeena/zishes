@@ -9,6 +9,7 @@ import BuyCoinsScreen from "../screens/wallet/BuyCoinsScreen";
 import MyListingsScreen from "../screens/profile/MyListingsScreen";
 import TournamentsWonScreen from "../screens/profile/TournamentsWonScreen";
 import EditProfileScreen from "../screens/account/EditProfileScreen";
+import AcknowledgeReceiptScreen from "../screens/profile/AcknowledgeReceiptScreen";
 import WebsiteTermsScreen from "../screens/misc/WebsiteTermsScreen";
 
 const Stack = createNativeStackNavigator();
@@ -25,6 +26,7 @@ export default function AppStack() {
       <Stack.Screen name="MyListings" component={MyListingsScreen} />
       <Stack.Screen name="TournamentsWon" component={TournamentsWonScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="AcknowledgeReceipt" component={AcknowledgeReceiptScreen} />
       <Stack.Screen name="WebsiteTerms" component={WebsiteTermsScreen} />
       <Stack.Screen
         name="UnityGame"

@@ -4,24 +4,33 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, ChevronDown, Paperclip } from 'lucide-react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import useGalleryPermission from '../../hooks/useGalleryPermission';
+import useCameraPermission from '../../hooks/useCameraPermission';
+import ImagePickerSheet from '../../components/common/ImagePickerSheet';
 
 export default function ReportIssueScreen({ navigation }) {
   const [desc, setDesc] = useState('');
   const [category, setCategory] = useState('');
   const [showCat, setShowCat] = useState(false);
   const [attachments, setAttachments] = useState([]);
-  const ensurePerm = useGalleryPermission();
+  const ensureGallery = useGalleryPermission();
+  const ensureCamera = useCameraPermission();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const categories = useMemo(() => ['Bug', 'Payment', 'Account', 'Listing', 'Other'], []);
 
-  const addAttachments = async () => {
-    const ok = await ensurePerm();
+  const addAttachments = async () => { setPickerOpen(true); };
+  const pickFromGallery = async () => {
+    const ok = await ensureGallery();
     if (!ok) return;
     const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0 });
-    if (res?.assets?.length) {
-      setAttachments((p) => [...p, ...res.assets.map((a) => ({ uri: a.uri }))]);
-    }
+    if (res?.assets?.length) setAttachments((p) => [...p, ...res.assets.map((a) => ({ uri: a.uri }))]);
+  };
+  const pickFromCamera = async () => {
+    const ok = await ensureCamera();
+    if (!ok) return;
+    const res = await launchCamera({ mediaType: 'photo', quality: 0.9, cameraType: 'back', saveToPhotos: true });
+    if (res?.assets?.length) setAttachments((p) => [...p, ...res.assets.map((a) => ({ uri: a.uri }))]);
   };
 
   return (
@@ -73,6 +82,20 @@ export default function ReportIssueScreen({ navigation }) {
         <TouchableOpacity style={[styles.btn, styles.primary]}><Text style={styles.btnTxt}>Submit Report</Text></TouchableOpacity>
         <TouchableOpacity style={[styles.btn, styles.cancel]} onPress={() => navigation.goBack()}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
       </KeyboardAwareScrollView>
+
+      <ImagePickerSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPickCamera={() => {
+          setPickerOpen(false);
+          setTimeout(() => { pickFromCamera(); }, 300);
+        }}
+        onPickGallery={() => {
+          setPickerOpen(false);
+          setTimeout(() => { pickFromGallery(); }, 300);
+        }}
+        title="Add Attachment"
+      />
 
       <PickerModal
         visible={showCat}

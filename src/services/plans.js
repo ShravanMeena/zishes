@@ -1,8 +1,7 @@
 import axios from 'axios';
+import { API_BASE } from '../config/api';
 
-const ORIGIN = 'https://d7051ae0f1cf.ngrok-free.app/api/v1';
-
-const client = axios.create({ baseURL: ORIGIN, timeout: 15000 });
+const client = axios.create({ baseURL: API_BASE, timeout: 15000 });
 
 async function request(path, { method = 'GET', params } = {}) {
   try {
@@ -31,4 +30,3 @@ export async function listPlans({ country, page = 1, limit = 20, count = false }
 }
 
 export default { listPlans };
-

@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { attachAuthInterceptors } from './http';
+import { API_BASE } from '../config/api';
 
-const ORIGIN = 'https://d7051ae0f1cf.ngrok-free.app/api/v1';
-
-const client = attachAuthInterceptors(axios.create({ baseURL: ORIGIN, timeout: 15000 }));
+const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 15000 }));
 
 async function request(path, { method = 'GET', params, token } = {}) {
   try {

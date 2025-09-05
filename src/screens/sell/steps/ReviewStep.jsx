@@ -2,8 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from 'react-native';
 import { colors } from '../../../theme/colors';
 import { Pencil, Camera, Gamepad2, Truck, FileText } from 'lucide-react-native';
+import { useSelector } from 'react-redux';
 
 export default function ReviewStep({ onEdit }) {
+  const photos = useSelector((s) => s.listingDraft.photos);
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 160 }}>
       <Section
@@ -11,20 +13,20 @@ export default function ReviewStep({ onEdit }) {
         title="Photos"
         onEdit={() => onEdit?.('photos')}
       >
-        <View style={styles.photosRow}>
-          {[
-            'https://images.unsplash.com/photo-1606151963920-28b8ef5cbe0f?w=300',
-            'https://images.unsplash.com/photo-1519183071298-a2962be96f83?w=300',
-            'https://images.unsplash.com/photo-1470317230664-c5a7e4964068?w=300',
-          ].map((uri, i) => (
-            <View key={uri} style={styles.photoWrap}>
-              {i === 0 && (
-                <View style={styles.coverBadge}><Text style={styles.coverTxt}>Cover</Text></View>
-              )}
-              <Image source={{ uri }} style={styles.photo} />
-            </View>
-          ))}
-        </View>
+        {Array.isArray(photos) && photos.length > 0 ? (
+          <View style={styles.photosRow}>
+            {photos.map((p, i) => (
+              <View key={`${p.uri}-${i}`} style={styles.photoWrap}>
+                {i === 0 && (
+                  <View style={styles.coverBadge}><Text style={styles.coverTxt}>Cover</Text></View>
+                )}
+                <Image source={{ uri: p.uri }} style={styles.photo} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={{ color: colors.textSecondary }}>No photos added yet.</Text>
+        )}
       </Section>
 
       <Section
@@ -128,4 +130,3 @@ const styles = StyleSheet.create({
   pill: { backgroundColor: '#3A2B52', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   pillTxt: { color: colors.white, fontWeight: '800' },
 });
-

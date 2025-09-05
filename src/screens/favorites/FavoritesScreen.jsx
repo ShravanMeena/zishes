@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
@@ -6,6 +6,7 @@ import { colors } from '../../theme/colors';
 import { Bell } from 'lucide-react-native';
 import GameCard from '../../components/cards/GameCard';
 import ShareSheet from '../../components/common/ShareSheet';
+import CategoryFilter from '../../components/common/CategoryFilter';
 import { clearFavorites, removeFavorite } from '../../store/favorites/favoritesSlice';
 import AppModal from '../../components/common/AppModal';
 import tournaments from '../../services/tournaments';
@@ -29,6 +30,12 @@ export default function FavoritesScreen({ navigation }) {
   const [alreadyOpen, setAlreadyOpen] = useState(false);
   const [alreadyMsg, setAlreadyMsg] = useState('');
   const [joining, setJoining] = useState(false);
+  const [selectedCat, setSelectedCat] = useState('all');
+
+  const filteredItems = useMemo(() => {
+    if (selectedCat === 'all') return items;
+    return items.filter((it) => (it?.category || 'all') === selectedCat);
+  }, [items, selectedCat]);
 
   const requestPlay = useCallback((it) => {
     if (!it) return;
@@ -70,8 +77,10 @@ export default function FavoritesScreen({ navigation }) {
         </View>
       </View>
 
+      <CategoryFilter selected={selectedCat} onChange={setSelectedCat} />
+
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         contentContainerStyle={{ paddingVertical: 12, flexGrow: 1, paddingHorizontal: 12 }}

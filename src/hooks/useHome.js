@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { listProducts } from '../services/products';
 import { mapProductToCard } from '../utils/productMapper';
-
-const CATEGORIES = [
-  { id: 'all', label: 'All' },
-  { id: 'electronics', label: 'Electronics' },
-  { id: 'fashion', label: 'Fashion' },
-  { id: 'gaming', label: 'Gaming' },
-  { id: 'home', label: 'Home' },
-];
+import useCategories from './useCategories';
 
 // Local mapping from API category to chip ids (lowercase)
 function normCategory(cat) {
@@ -21,6 +14,7 @@ function normCategory(cat) {
 }
 
 export default function useHome() {
+  const { categories: apiCategories, slugify } = useCategories();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('all');
   const [items, setItems] = useState([]);
@@ -32,8 +26,9 @@ export default function useHome() {
     const data = await listProducts({ page: 1, limit: 20, count: true });
     const list = (data?.result || []).map((p) => {
       const mapped = mapProductToCard(p);
-      // add a normalized category used for filtering chips
-      return { ...mapped, category: normCategory(p?.category) };
+      // derive a slug from product category to match chips
+      const slug = p?.category ? slugify(p.category) : normCategory(p?.category);
+      return { ...mapped, category: slug };
     });
     return list;
   };
@@ -78,7 +73,7 @@ export default function useHome() {
     setQuery,
     selected,
     setSelected,
-    categories: CATEGORIES,
+    categories: apiCategories,
     items: filtered,
     loaded,
     error,

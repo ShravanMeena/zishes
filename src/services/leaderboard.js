@@ -1,10 +1,8 @@
 import axios from 'axios';
 import { attachAuthInterceptors } from './http';
+import { API_BASE } from '../config/api';
 
-// Keep consistent with products service origin
-const ORIGIN = 'https://d7051ae0f1cf.ngrok-free.app/api/v1';
-
-const client = attachAuthInterceptors(axios.create({ baseURL: ORIGIN, timeout: 15000 }));
+const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 15000 }));
 
 async function request(path, { method = 'GET', params, token } = {}) {
   try {
@@ -28,9 +26,16 @@ async function request(path, { method = 'GET', params, token } = {}) {
 
 export async function getLeaderboard(productId, { page = 1, limit = 100, count = true, token } = {}) {
   if (!productId) throw new Error('product is required');
-  const data = await request(`/leaderboard/${productId}`, { params: { page, limit, count: count ? 'true' : undefined }, token });
-  if (Array.isArray(data)) return { result: data.data, meta: { page, limit } };
-  return data || { result: [], meta: { page, limit } };
+  const res = await request(`/leaderboard/${productId}`, { params: { page, limit, count: count ? 'true' : undefined }, token });
+  // Normalize to { data, meta }
+  if (Array.isArray(res)) {
+    return { data: res, meta: { page, limit } };
+  }
+  if (res && typeof res === 'object') {
+    if (Array.isArray(res.data)) return { data: res.data, meta: res.meta || { page, limit } };
+    if (Array.isArray(res.result)) return { data: res.result, meta: res.meta || { page, limit } };
+  }
+  return { data: [], meta: { page, limit } };
 }
 
 export default { getLeaderboard };

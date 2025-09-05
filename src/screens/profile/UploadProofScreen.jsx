@@ -4,13 +4,18 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, Bell, Camera, Calendar, ChevronDown, X } from 'lucide-react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import useGalleryPermission from '../../hooks/useGalleryPermission';
+import useCameraPermission from '../../hooks/useCameraPermission';
+import ImagePickerSheet from '../../components/common/ImagePickerSheet';
 import DatePickerModal, { formatDateYYYYMMDD } from '../../components/ui/DatePickerModal';
 
 export default function UploadProofScreen({ route, navigation }) {
   const { item } = route.params || {};
-  const ensurePerm = useGalleryPermission();
+  const ensureGallery = useGalleryPermission();
+  const ensureCamera = useCameraPermission();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [whichSetter, setWhichSetter] = useState(null); // setter to update receipt/handover
   const [awb, setAwb] = useState('');
   const [courier, setCourier] = useState('');
   const [receipt, setReceipt] = useState(null);
@@ -22,14 +27,22 @@ export default function UploadProofScreen({ route, navigation }) {
   const [preview, setPreview] = useState(null); // 'receipt' | 'handover' | null
   const couriers = useMemo(() => ['DTDC', 'Delhivery', 'BlueDart', 'India Post', 'Other'], []);
 
-  const pick = async (setter) => {
-    const ok = await ensurePerm();
+  const openPicker = (setter) => { setWhichSetter(() => setter); setPickerOpen(true); };
+  const pickFromGallery = async () => {
+    const ok = await ensureGallery();
     if (!ok) return;
     const res = await launchImageLibrary({ mediaType: 'photo' });
-    if (res?.assets?.length) setter({ uri: res.assets[0].uri });
+    if (res?.assets?.length && whichSetter) whichSetter({ uri: res.assets[0].uri });
+  };
+  const pickFromCamera = async () => {
+    const ok = await ensureCamera();
+    if (!ok) return;
+    const res = await launchCamera({ mediaType: 'photo', cameraType: 'back', quality: 0.9, saveToPhotos: true });
+    if (res?.assets?.length && whichSetter) whichSetter({ uri: res.assets[0].uri });
   };
 
   return (
+    <>
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
@@ -58,7 +71,7 @@ export default function UploadProofScreen({ route, navigation }) {
             <Text style={[styles.selTxt, { color: courier ? colors.white : colors.textSecondary }]}>{courier || 'Select courier'}</Text>
             <ChevronDown size={18} color={colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.uploadRow} onPress={() => pick(setReceipt)}>
+          <TouchableOpacity style={styles.uploadRow} onPress={() => openPicker(setReceipt)}>
             <Camera size={16} color={colors.white} />
             <Text style={styles.uploadTxt}>{receipt ? 'Change Receipt' : 'Upload Receipt'}</Text>
           </TouchableOpacity>
@@ -75,7 +88,7 @@ export default function UploadProofScreen({ route, navigation }) {
         </View>
 
         <Text style={styles.sectionTitle}>For Local Pick Up</Text>
-        <TouchableOpacity style={styles.uploadRow} onPress={() => pick(setHandover)}>
+        <TouchableOpacity style={styles.uploadRow} onPress={() => openPicker(setHandover)}>
           <Camera size={16} color={colors.white} />
           <Text style={styles.uploadTxt}>{handover ? 'Change Handover Photo' : 'Package Handover Photo'}</Text>
         </TouchableOpacity>
@@ -125,6 +138,20 @@ export default function UploadProofScreen({ route, navigation }) {
       </Modal>
       <DatePickerModal visible={showDate} value={date ? new Date(date) : new Date()} onClose={() => setShowDate(false)} onConfirm={(d) => { setDate(formatDateYYYYMMDD(d)); setShowDate(false); }} />
     </SafeAreaView>
+    <ImagePickerSheet
+      visible={pickerOpen}
+      onClose={() => setPickerOpen(false)}
+      onPickCamera={() => {
+        setPickerOpen(false);
+        setTimeout(() => { pickFromCamera(); }, 300);
+      }}
+      onPickGallery={() => {
+        setPickerOpen(false);
+        setTimeout(() => { pickFromGallery(); }, 300);
+      }}
+      title="Upload Photo"
+    />
+  </>
   );
 }
 

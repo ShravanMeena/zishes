@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { attachAuthInterceptors } from './http';
+import { API_BASE } from '../config/api';
 
-const ORIGIN = 'https://d7051ae0f1cf.ngrok-free.app/api/v1';
-
-const client = attachAuthInterceptors(axios.create({ baseURL: ORIGIN, timeout: 15000 }));
+const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 15000 }));
 
 async function request(path, { method = 'GET', data, params, token } = {}) {
   try {
@@ -40,4 +39,10 @@ export async function submitScore(tournamentId, score, { avatar, token } = {}) {
   return request(`/tournaments/${tournamentId}/score`, { method: 'POST', data, token });
 }
 
-export default { joinTournament, submitScore };
+export async function getJoinedTournaments({ token } = {}) {
+  // Returns tournaments that the authenticated user has enrolled in
+  // GET /api/v1/tournaments/joined (auth required)
+  return request('/tournaments/joined', { method: 'GET', token });
+}
+
+export default { joinTournament, submitScore, getJoinedTournaments };

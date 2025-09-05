@@ -5,7 +5,8 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-platform :ios, min_ios_version_supported
+# Firebase/Notifee require newer iOS. Set explicit minimum.
+platform :ios, '15.0'
 prepare_react_native_project!
 
 # If you are using a `react-native-flipper` your iOS build will fail when `NO_FLIPPER=1` is set.
@@ -26,6 +27,12 @@ if linkage != nil
 end
 
 target 'unityapp' do
+  # Ensure GoogleUtilities generates module maps for Swift interop
+  pod 'GoogleUtilities', :modular_headers => true
+  # Ensure Firebase modules expose module maps when building as static libs
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseCoreInternal', :modular_headers => true
+  pod 'FirebaseInstallations', :modular_headers => true
   config = use_native_modules!
 
   use_react_native!(
@@ -54,5 +61,14 @@ target 'unityapp' do
     )
 
     # No custom tweaks required; react-native-unity venders UnityFramework itself
+
+    # Ensure all pods adopt iOS 15.0+ (RNFB v23 iOS target)
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+        # Allow non-modular includes within framework modules to avoid Clang module build issues
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      end
+    end
   end
 end

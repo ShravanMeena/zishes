@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "509686207914",
+    "project_id": "zishes-a5008",
+    "storage_bucket": "zishes-a5008.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:509686207914:android:4c20fe8644ede2e21447d3",
+        "android_client_info": {
+          "package_name": "com.zishes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_3rpkb6iwA39ZLy-NV41p2XWLYuNe4BE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -33,13 +33,23 @@ export default function LeaderboardTab({ item }) {
     return () => { alive = false; };
   }, [productId, token]);
 
-  const renderItem = ({ item: r, index }) => (
-    <View style={styles.row}>
-      <Text style={styles.cellLeft}>{index + 1}.</Text>
-      <Text style={styles.cellUser}>{String(r.user || '-')}</Text>
-      <Text style={styles.cellScore}>{String(r.score ?? '-')}</Text>
-    </View>
-  );
+  const isObjectId = (v) => typeof v === 'string' && /^[a-fA-F0-9]{24}$/.test(v);
+  const renderItem = ({ item: r, index }) => {
+    const rawUser = r?.user;
+    let display = '-';
+    if (rawUser && typeof rawUser === 'object') {
+      display = rawUser.username || rawUser.name || rawUser.handle || (rawUser._id ? `Player ${String(rawUser._id).slice(-4)}` : '-');
+    } else if (typeof rawUser === 'string') {
+      display = isObjectId(rawUser) ? `Player ${rawUser.slice(-4)}` : rawUser;
+    }
+    return (
+      <View style={styles.row}>
+        <Text style={styles.cellLeft}>{index + 1}.</Text>
+        <Text style={styles.cellUser}>{display}</Text>
+        <Text style={styles.cellScore}>{String(r.score ?? '-')}</Text>
+      </View>
+    );
+  };
 
   return (
     <View>
@@ -82,4 +92,3 @@ const styles = StyleSheet.create({
   cellScore: { color: colors.white, width: 80, textAlign: 'right' },
   metaText: { color: colors.textSecondary, marginTop: 10 },
 });
-

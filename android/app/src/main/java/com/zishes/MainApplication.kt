@@ -1,4 +1,4 @@
-package com.unityapp
+package com.zishes
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -43,3 +43,4 @@ class MainApplication : Application(), ReactApplication {
     ReactNativeFlipper.initializeFlipper(this, reactNativeHost.reactInstanceManager)
   }
 }
+

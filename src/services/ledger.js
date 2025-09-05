@@ -24,12 +24,14 @@ async function request(path, { method = 'GET', params, token } = {}) {
   }
 }
 
-// GET /api/v1/wallet/me
-export async function getMyWallet(token) {
-  if (!token) throw new Error('UNAUTHORIZED');
-  const data = await request('/wallet/me', { token });
-  // Expect: { availableZishCoins: number, withdrawalBalance: number }
-  return data?.data || { availableZishCoins: 0, withdrawalBalance: 0 };
+// GET /api/v1/ledger/me
+// Optional filter: { tournament }
+export async function getMyLedger({ tournament, token } = {}) {
+  const params = {};
+  if (tournament) params.tournament = tournament;
+  const data = await request('/ledger/me', { params, token });
+  // Expect array
+  return Array.isArray(data) ? data : (data?.data || []);
 }
 
-export default { getMyWallet };
+export default { getMyLedger };

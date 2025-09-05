@@ -8,6 +8,7 @@ import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import ProgressBar from '../../components/common/ProgressBar';
 import ShareSheet from '../../components/common/ShareSheet';
+import ImageViewerSheet from '../../components/common/ImageViewerSheet';
 import RulesModal from '../../components/modals/RulesModal';
 import InsufficientCoinsModal from '../../components/modals/InsufficientCoinsModal';
 import { getProductById } from '../../services/products';
@@ -45,6 +46,8 @@ export default function DetailsScreen({ route, navigation }) {
     { key: 'leader', title: 'Leader Board' },
   ]);
   const [shareOpen, setShareOpen] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [insufficientOpen, setInsufficientOpen] = useState(false);
   const [availableCoins, setAvailableCoins] = useState(0);
@@ -296,9 +299,11 @@ export default function DetailsScreen({ route, navigation }) {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           keyExtractor={(uri, i) => `${i}`}
-          renderItem={({ item: uri }) => (
+          renderItem={({ item: uri, index: idx }) => (
             <View style={{ width }}>
-              <Image source={{ uri }} style={styles.hero} />
+              <TouchableOpacity activeOpacity={0.9} onPress={() => { setViewerIndex(idx); setViewerOpen(true); }}>
+                <Image source={{ uri }} style={styles.hero} />
+              </TouchableOpacity>
               <TouchableOpacity style={[styles.circle, styles.leftCircle]} onPress={toggleFav}>
                 <Star color={colors.white} {...(isFav ? { fill: colors.accent } : {})} />
               </TouchableOpacity>
@@ -381,6 +386,7 @@ export default function DetailsScreen({ route, navigation }) {
       )}
 
       <ShareSheet visible={shareOpen} onClose={() => setShareOpen(false)} url={`https://example.com/item/${item?.id || ''}`} />
+      <ImageViewerSheet visible={viewerOpen} onClose={() => setViewerOpen(false)} images={images} initialIndex={viewerIndex} />
       <RulesModal visible={rulesOpen} onCancel={() => setRulesOpen(false)} onConfirm={confirmPlay} item={item} confirmLoading={joining} />
       <InsufficientCoinsModal
         visible={insufficientOpen}

@@ -9,6 +9,7 @@ import { useSelector } from 'react-redux';
 import walletService from '../../services/wallet';
 import CongratsModal from '../../components/modals/CongratsModal';
 import plansService from '../../services/plans';
+import ledgerService from '../../services/ledger';
 
 export default function WalletScreen({ navigation }) {
   const token = useSelector((s) => s.auth.token);
@@ -22,6 +23,9 @@ export default function WalletScreen({ navigation }) {
   const [selectedPack, setSelectedPack] = useState(null);
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(false);
+  const [ledger, setLedger] = useState([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState(null);
 
   const fetchWallet = useCallback(async () => {
     if (!token) {
@@ -64,14 +68,39 @@ export default function WalletScreen({ navigation }) {
     fetchPlans();
   }, [fetchPlans]);
 
+  const fetchLedger = useCallback(async () => {
+    if (!token) return;
+    try {
+      setLedgerLoading(true);
+      setLedgerError(null);
+      const data = await ledgerService.getMyLedger({ token });
+      // Ensure newest first per spec (assuming createdAt exists)
+      const sorted = (Array.isArray(data) ? data : []).sort((a, b) => {
+        const at = new Date(a?.createdAt || 0).getTime();
+        const bt = new Date(b?.createdAt || 0).getTime();
+        return bt - at;
+      });
+      setLedger(sorted);
+    } catch (e) {
+      setLedgerError(e?.message || 'Failed to fetch ledger');
+      setLedger([]);
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchLedger();
+  }, [fetchLedger]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.allSettled([fetchWallet(), fetchPlans()]);
+      await Promise.allSettled([fetchWallet(), fetchPlans(), fetchLedger()]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchWallet, fetchPlans]);
+  }, [fetchWallet, fetchPlans, fetchLedger]);
 
   const topupPlans = useMemo(() => (plans || []).filter(p => p?.planType === 'TOPUP'), [plans]);
 
@@ -82,12 +111,45 @@ export default function WalletScreen({ navigation }) {
     { id: 'w4', title: 'Hermes Togo Birkin', amount: 'INR 20,00,000', status: 'approved', image: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=300&q=80' },
   ]), []);
 
-  const history = useMemo(() => ([
-    { id: 'h1', title: 'Coin Pack', date: '2024-07-28', delta: '+ 500', unit: 'Coins', color: '#27c07d' },
-    { id: 'h2', title: 'Game Play - Prod Id : 763976565', date: '2024-07-27', delta: '- 20', unit: 'Coins', color: '#FF7A7A' },
-    { id: 'h3', title: 'Game Play - Prod Id : 763976565', date: '2024-07-27', delta: '- 10', unit: 'Coins', color: '#FF7A7A' },
-    { id: 'h4', title: 'Payout - Prod Id : 763976786', date: '2024-08-29', delta: '+ 30,000', unit: 'INR', color: '#27c07d' },
-  ]), []);
+  const history = useMemo(() => {
+    const mapTitle = (entry) => {
+      const t = entry?.type;
+      const gameName = entry?.tournament?.game?.name;
+      const productName = entry?.tournament?.product?.name;
+      if (t === 'TOPUP') return 'Top-up';
+      if (t === 'REFUND') return 'Refund';
+      if (t === 'SUBSCRIPTION') return 'Subscription';
+      // SPEND or default
+      if (gameName) return `Game Play - ${gameName}`;
+      if (productName) return `Game Play - ${productName}`;
+      return 'Game Play';
+    };
+    const mapDelta = (entry) => {
+      const amt = Number(entry?.amount || 0);
+      const positive = entry?.type === 'TOPUP' || entry?.type === 'REFUND';
+      const sign = positive ? '+' : '-';
+      return `${sign} ${amt}`;
+    };
+    const mapColor = (entry) => (entry?.type === 'TOPUP' || entry?.type === 'REFUND') ? '#27c07d' : '#FF7A7A';
+    const fmtDate = (iso) => {
+      try {
+        const d = new Date(iso);
+        if (!iso) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+      } catch { return ''; }
+    };
+    return (ledger || []).slice(0, 10).map((e) => ({
+      id: e?._id || `${e?.createdAt}-${e?.amount}`,
+      title: mapTitle(e),
+      date: fmtDate(e?.createdAt),
+      delta: mapDelta(e),
+      unit: 'Coins',
+      color: mapColor(e),
+    }));
+  }, [ledger]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -216,17 +278,38 @@ export default function WalletScreen({ navigation }) {
         </View>
 
         {/* Transaction History */}
-        <Text style={styles.sectionTitle}>Transaction History</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Transaction History</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('TransactionHistory')}>
+            <Text style={styles.viewAll}>View all</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.panel}>
-          {history.map((h, idx) => (
-            <View key={h.id} style={[styles.txnRow, idx>0 && styles.rowDivider]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.txnTitle} numberOfLines={1}>{h.title}</Text>
-                <Text style={styles.txnDate}>{h.date}</Text>
+          {(ledgerLoading && history.length === 0) ? (
+            [1,2,3].map((i) => (
+              <View key={`txn-sk-${i}`} style={[styles.txnRow, i>1 && styles.rowDivider]}>
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.skelLineSm, { width: '60%' }]} />
+                  <View style={[styles.skelLineXs, { width: '40%', marginTop: 6 }]} />
+                </View>
+                <View style={[styles.skelLineSm, { width: 70 }]} />
               </View>
-              <Text style={[styles.txnDelta, { color: h.color }]}>{h.delta} <Text style={styles.txnUnit}>{h.unit}</Text></Text>
-            </View>
-          ))}
+            ))
+          ) : (
+            history.length > 0 ? history.map((h, idx) => (
+              <View key={h.id} style={[styles.txnRow, idx>0 && styles.rowDivider]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txnTitle} numberOfLines={1}>{h.title}</Text>
+                  <Text style={styles.txnDate}>{h.date}</Text>
+                </View>
+                <Text style={[styles.txnDelta, { color: h.color }]}>{h.delta} <Text style={styles.txnUnit}>{h.unit}</Text></Text>
+              </View>
+            )) : (
+              <Text style={{ color: colors.textSecondary, textAlign: 'center', paddingVertical: 8 }}>
+                {ledgerError ? ledgerError : 'No transactions yet'}
+              </Text>
+            )
+          )}
         </View>
 
       </ScrollView>
@@ -284,6 +367,8 @@ const styles = StyleSheet.create({
   skelLineXs: { height: 10, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.15)', width: '80%' },
 
   sectionTitle: { color: colors.white, fontWeight: '800', fontSize: 18, paddingHorizontal: 12, marginTop: 14 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginTop: 14 },
+  viewAll: { color: colors.accent, fontWeight: '700' },
 
   packCard: { width: 160, backgroundColor: '#2B2F39', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 14, marginVertical: 12 },
   packBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#3A2B52', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 6 },

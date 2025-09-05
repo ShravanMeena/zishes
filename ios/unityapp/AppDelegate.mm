@@ -1,6 +1,8 @@
 #import "AppDelegate.h"
 
 #import <React/RCTBundleURLProvider.h>
+// Ensure Firebase default app is configured on iOS
+#import <FirebaseCore/FirebaseCore.h>
 
 @implementation AppDelegate
 
@@ -10,6 +12,11 @@
   // You can add your custom initial props in the dictionary below.
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
+
+  // Configure Firebase default app if not already configured
+  if ([FIRApp defaultApp] == nil) {
+    [FIRApp configure];
+  }
 
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
 }

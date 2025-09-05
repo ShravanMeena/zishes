@@ -13,6 +13,8 @@ import CommunityFeedbackScreen from '../screens/account/CommunityFeedbackScreen'
 import ManageAccountScreen from '../screens/account/ManageAccountScreen';
 import MembershipTierScreen from '../screens/account/MembershipTierScreen';
 import UploadProofScreen from '../screens/profile/UploadProofScreen';
+import AcknowledgeReceiptScreen from '../screens/profile/AcknowledgeReceiptScreen';
+import LeaderboardScreen from '../screens/profile/LeaderboardScreen';
 import PolicyViewerScreen from '../screens/misc/PolicyViewerScreen';
 import CountrySelectScreen from '../screens/auth/CountrySelectScreen';
 
@@ -34,6 +36,8 @@ export default function ProfileStack() {
       <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
       <Stack.Screen name="MembershipTier" component={MembershipTierScreen} />
       <Stack.Screen name="UploadProof" component={UploadProofScreen} />
+      <Stack.Screen name="AcknowledgeReceipt" component={AcknowledgeReceiptScreen} />
+      <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Stack.Screen name="PolicyViewer" component={PolicyViewerScreen} />
       <Stack.Screen name="CountrySelect" component={CountrySelectScreen} />
     </Stack.Navigator>

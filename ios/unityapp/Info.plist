@@ -33,12 +33,18 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We use your photo library so you can add listing photos and upload delivery proofs.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We save images you select or capture for your listings.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We use your photo library so you can add listing photos and upload delivery proofs.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We use your camera so you can take photos for listings, profile, and delivery proofs.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -51,7 +57,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-    <key>UIViewControllerBasedStatusBarAppearance</key>
-    <false/>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 </dict>
 </plist>
