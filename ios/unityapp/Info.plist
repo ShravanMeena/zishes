@@ -30,9 +30,61 @@
 		<false/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<!-- Allow web content inside SDK webviews to load required assets safely -->
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+		<!-- Be explicit about Razorpay domains -->
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>razorpay.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSRequiresCertificateTransparency</key>
+				<false/>
+			</dict>
+			<key>api.razorpay.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSRequiresCertificateTransparency</key>
+				<false/>
+			</dict>
+			<key>checkout.razorpay.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSRequiresCertificateTransparency</key>
+				<false/>
+			</dict>
+			<key>cdn.razorpay.com</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSRequiresCertificateTransparency</key>
+				<false/>
+			</dict>
+			<key>rzp.io</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSRequiresCertificateTransparency</key>
+				<false/>
+			</dict>
+		</dict>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>We use your location once to detect your country and set the right payment region.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We save images you select or capture for your listings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -70,22 +122,20 @@
 				<string>zishes</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>razorpay</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>razorpay</string>
+			</array>
+		</dict>
 	</array>
 
 	<!-- Allow opening UPI and wallet apps from Razorpay (UPI Intent on iOS) -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
-		<string>upi</string>
-		<string>tez</string>
-		<string>gpay</string>
-		<string>phonepe</string>
-		<string>paytm</string>
-		<string>bhim</string>
-		<string>amazon</string>
-		<string>amazonpay</string>
-		<string>mobikwik</string>
-		<string>freecharge</string>
-		<string>razorpay</string>
+	
 	</array>
 </dict>
 </plist>

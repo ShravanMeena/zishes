@@ -7,7 +7,7 @@ import { ChevronLeft, CreditCard, QrCode, Wallet, ShieldCheck } from 'lucide-rea
 import CongratsModal from '../../components/modals/CongratsModal';
 import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
 import paymentsService from '../../services/payments';
-import { openRazorpayCheckout } from '../../utils/razorpay';
+import RazorpayCheckout from 'react-native-razorpay';
 import { useDispatch } from 'react-redux';
 import { fetchMyWallet } from '../../store/wallet/walletSlice';
 import plansService from '../../services/plans';
@@ -68,11 +68,14 @@ export default function BuyCoinsScreen({ navigation }) {
       setProcessing(true);
       setPayProcessing(true);
       setLastPlan(plan);
+      try { console.log('[RZP][BUY] Selected plan:', JSON.stringify({ id: plan._id, coins: plan.coins, amount: plan.amount, currency: plan.currencyCode })); } catch {}
       const keyRes = await paymentsService.getRazorpayKey();
       const { keyId } = keyRes || {};
+      try { console.log('[RZP][BUY] Public key fetched:', keyRes && keyRes.keyId ? `${String(keyRes.keyId).slice(0,6)}…` : null); } catch {}
       if (!keyId) throw new Error('Missing Razorpay key');
       const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
       const { order } = orderRes || {};
+      try { console.log('[RZP][BUY] Order created:', JSON.stringify({ id: order?.id, amount: order?.amount, currency: order?.currency })); } catch {}
       if (!order?.id) throw new Error('Failed to create order');
 
       const options = {
@@ -94,7 +97,7 @@ export default function BuyCoinsScreen({ navigation }) {
 
       try {
         setPayProcessing(false);
-        await openRazorpayCheckout(options);
+        await RazorpayCheckout.open(options);
         try { dispatch(fetchMyWallet()); } catch {}
         try { setCongratsOpen(true); } catch {}
       } catch (err) {

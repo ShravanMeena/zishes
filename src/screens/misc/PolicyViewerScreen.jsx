@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft } from 'lucide-react-native';
@@ -15,6 +15,13 @@ function HtmlBlock({ html }) {
 
 export default function PolicyViewerScreen({ navigation, route }) {
   const { title = 'Policy', html = '', url } = route.params || {};
+  let WebViewComp = null;
+  try {
+    // Dynamically require to avoid crashing if not installed
+    WebViewComp = require('react-native-webview').WebView;
+  } catch (_) {
+    WebViewComp = null;
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -26,16 +33,44 @@ export default function PolicyViewerScreen({ navigation, route }) {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
-        {html ? (
-          <HtmlBlock html={html} />
-        ) : (
-          <View>
-            <Text style={styles.body}>No inline content provided.</Text>
-            {url ? <Text style={[styles.body, { marginTop: 8 }]}>URL: {url}</Text> : null}
-          </View>
-        )}
-      </ScrollView>
+      {WebViewComp && (url || html) ? (
+        <View style={{ flex: 1 }}>
+          {url ? (
+            <WebViewComp
+              source={{ uri: url }}
+              originWhitelist={["*"]}
+              startInLoadingState
+              style={{ flex: 1, backgroundColor: colors.black }}
+            />
+          ) : (
+            <WebViewComp
+              source={{ html }}
+              originWhitelist={["*"]}
+              startInLoadingState
+              style={{ flex: 1, backgroundColor: colors.black }}
+            />
+          )}
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
+          {url ? (
+            <View>
+              <Text style={styles.body}>Opening inline requires react-native-webview.</Text>
+              <Text style={[styles.body, { marginTop: 8 }]} numberOfLines={2}>URL: {url}</Text>
+              <TouchableOpacity
+                onPress={() => Linking.openURL(url)}
+                style={{ marginTop: 12, backgroundColor: '#3A2B52', paddingVertical: 10, borderRadius: 10, alignItems: 'center' }}
+              >
+                <Text style={{ color: 'white', fontWeight: '700' }}>Open in Browser</Text>
+              </TouchableOpacity>
+            </View>
+          ) : html ? (
+            <HtmlBlock html={html} />
+          ) : (
+            <Text style={styles.body}>No content provided.</Text>
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -47,4 +82,3 @@ const styles = StyleSheet.create({
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
   body: { color: '#E6F0FF', fontSize: 16, lineHeight: 22 },
 });
-

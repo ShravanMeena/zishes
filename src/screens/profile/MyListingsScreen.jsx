@@ -89,7 +89,7 @@ export default function MyListingsScreen({ navigation }) {
 
         <View style={[styles.rowBetween, { marginTop: 10 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* Future: add Extend Game Play CTA */}
+            {/* Only show Upload Proof when tournament is OVER */}
             {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
               <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })}>
                 <Chip label="Upload Proof" type="accent" />
@@ -97,6 +97,15 @@ export default function MyListingsScreen({ navigation }) {
             ) : null}
           </View>
         </View>
+        {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
+          (() => {
+            const rc = item?.raw?.fulfillment?.receiverConfirmation || {};
+            const receiverApproved = !!(rc?.confirmedAt || rc?.confirmed || (rc?.status && String(rc.status).toUpperCase() === 'CONFIRMED'));
+            return !receiverApproved ? (
+              <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Waiting for winner to approve receipt.</Text>
+            ) : null;
+          })()
+        ) : null}
       </View>
     </TouchableOpacity>
   );

@@ -27,14 +27,29 @@ function resolveRazorpayModule() {
 }
 
 export async function openRazorpayCheckout(options) {
-  console.log(options,"optionsoptions")
+  try {
+    const sanitized = {
+      ...options,
+      // Avoid logging sensitive values in full
+      key: options?.key ? `${String(options.key).slice(0, 6)}…` : undefined,
+    };
+    console.log('[RZP][OPEN] Options:', JSON.stringify(sanitized));
+  } catch {}
+
   const RazorpayCheckout = resolveRazorpayModule();
   return new Promise((resolve, reject) => {
     try {
       RazorpayCheckout.open(options)
-        .then((data) => resolve(data))
-        .catch((err) => reject(err));
+        .then((data) => {
+          try { console.log('[RZP][OPEN] Success:', JSON.stringify(data)); } catch {}
+          resolve(data);
+        })
+        .catch((err) => {
+          try { console.warn('[RZP][OPEN] Error:', JSON.stringify(err)); } catch {}
+          reject(err);
+        });
     } catch (e) {
+      try { console.warn('[RZP][OPEN] Exception:', e?.message || String(e)); } catch {}
       reject(e);
     }
   });

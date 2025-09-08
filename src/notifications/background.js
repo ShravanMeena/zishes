@@ -1,14 +1,24 @@
 import { Platform } from 'react-native';
-import messaging from '@react-native-firebase/messaging';
+import messaging, { setBackgroundMessageHandler } from '@react-native-firebase/messaging';
 import notifee, { EventType } from '@notifee/react-native';
 import { displayRemoteMessage } from './index';
 
 // Android-only background handlers
 if (Platform.OS === 'android') {
   // Handle FCM data-only messages in the background/quit state
-  messaging().setBackgroundMessageHandler(async remoteMessage => {
-    await displayRemoteMessage(remoteMessage);
-  });
+  // Modular API: setBackgroundMessageHandler, avoids deprecation warning
+  try {
+    setBackgroundMessageHandler(async remoteMessage => {
+      await displayRemoteMessage(remoteMessage);
+    });
+  } catch (e) {
+    // Fallback to namespaced API if needed
+    try {
+      messaging().setBackgroundMessageHandler(async remoteMessage => {
+        await displayRemoteMessage(remoteMessage);
+      });
+    } catch {}
+  }
 
   // Handle when a user taps a Notifee notification in the background
   notifee.onBackgroundEvent(async ({ type, detail }) => {

@@ -6,6 +6,7 @@ import { colors } from '../../theme/colors';
 import { Bell } from 'lucide-react-native';
 import GameCard from '../../components/cards/GameCard';
 import ShareSheet from '../../components/common/ShareSheet';
+import { buildShareUrlForProduct } from '../../utils/links';
 import CategoryFilter from '../../components/common/CategoryFilter';
 import { clearFavorites, removeFavorite } from '../../store/favorites/favoritesSlice';
 import AppModal from '../../components/common/AppModal';
@@ -88,7 +89,11 @@ export default function FavoritesScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       />
 
-      <ShareSheet visible={!!shareItem} onClose={() => setShareItem(null)} url={shareItem ? `https://example.com/item/${shareItem.id}` : ''} />
+      <ShareSheet
+        visible={!!shareItem}
+        onClose={() => setShareItem(null)}
+        url={shareItem ? buildShareUrlForProduct(shareItem.id) : ''}
+      />
       <RulesModal
         visible={!!rulesItem}
         onCancel={() => setRulesItem(null)}

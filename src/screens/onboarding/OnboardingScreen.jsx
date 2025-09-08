@@ -1,33 +1,21 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, ScrollView, Dimensions, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { useDispatch } from 'react-redux';
 import { setOnboardingSeen } from '../../store/app/appSlice';
+import appConfigService from '../../services/appConfig';
+import OnboardingSkeleton from '../../components/skeletons/OnboardingSkeleton';
 
 const { width } = Dimensions.get('window');
 
-const slides = [
-  {
-    title: 'Shop, Play, and Own.',
-    subtitle: 'Zishes is a global marketplace where products are offered through structured gameplays. Every listing is a prize competition with transparent, entries.',
-    img: 'https://images.unsplash.com/photo-1612178537255-7c2b18029f1f?q=80&w=800&auto=format&fit=crop',
-  },
-  {
-    title: 'Capped, Transparent, and Fair.',
-    subtitle: 'Each gameplay has a number of entries. Once the entry cap is reached, the competition closes and the prize is awarded.',
-    img: 'https://images.unsplash.com/photo-1500375592092-40eb2168fd21?q=80&w=800&auto=format&fit=crop',
-  },
-  {
-    title: 'Coins That Power Your Play',
-    subtitle: 'Top up coins, join gameplays, and withdraw your earnings securely. All transactions are transparent and compliant.',
-    img: 'https://images.unsplash.com/photo-1641932693087-9f278adef0b5?q=80&w=800&auto=format&fit=crop',
-  },
-];
+// Default slides removed; show skeleton while loading.
 
 export default function OnboardingScreen() {
   const dispatch = useDispatch();
   const [index, setIndex] = useState(0);
+  const [slides, setSlides] = useState([]);
+  const [loading, setLoading] = useState(true);
   const ref = useRef(null);
 
   const onContinue = () => {
@@ -39,36 +27,72 @@ export default function OnboardingScreen() {
     }
   };
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await appConfigService.getAppConfig();
+        const arr = Array.isArray(data?.introSlides) ? data.introSlides : [];
+        if (arr.length && alive) {
+          const mapped = arr.map((s) => ({
+            title: s?.title || '',
+            subtitle: s?.description || s?.note || '',
+            img: s?.image || '',
+          }));
+          setSlides(mapped);
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('[CONFIG] Failed to load intro slides:', e?.message || e);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top','bottom']}>
       <View style={styles.header}><Text style={styles.brand}>Zishes</Text></View>
-      <ScrollView
-        ref={ref}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={(e) => {
-          const i = Math.round(e.nativeEvent.contentOffset.x / width);
-          if (i !== index) setIndex(i);
-        }}
-        scrollEventThrottle={16}
-      >
-        {slides.map((s, i) => (
-          <View key={i} style={{ width, padding: 20 }}>
-            <Image source={{ uri: s.img }} style={styles.image} />
-            <Text style={styles.title}>{s.title}</Text>
-            <Text style={styles.subtitle}>{s.subtitle}</Text>
+      {loading ? (
+        <>
+          <OnboardingSkeleton />
+          <View style={styles.dots}>
+            <View style={styles.dot} />
+            <View style={styles.dot} />
+            <View style={styles.dot} />
           </View>
-        ))}
-      </ScrollView>
-      <View style={styles.dots}>
-        {slides.map((_, i) => (
-          <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
-        ))}
-      </View>
+        </>
+      ) : (
+        <>
+          <ScrollView
+            ref={ref}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={(e) => {
+              const i = Math.round(e.nativeEvent.contentOffset.x / width);
+              if (i !== index) setIndex(i);
+            }}
+            scrollEventThrottle={16}
+          >
+            {slides.map((s, i) => (
+              <View key={i} style={{ width, padding: 20 }}>
+                {!!s.img && <Image source={{ uri: s.img }} style={styles.image} />}
+                {!!s.title && <Text style={styles.title}>{s.title}</Text>}
+                {!!s.subtitle && <Text style={styles.subtitle}>{s.subtitle}</Text>}
+              </View>
+            ))}
+          </ScrollView>
+          <View style={styles.dots}>
+            {slides.map((_, i) => (
+              <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
+            ))}
+          </View>
+        </>
+      )}
       <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
-        <TouchableOpacity style={styles.primaryBtn} onPress={onContinue}>
-          <Text style={styles.primaryText}>{index < slides.length - 1 ? 'Continue' : 'Lets Zish'}</Text>
+        <TouchableOpacity style={[styles.primaryBtn, loading && { opacity: 0.6 }]} onPress={onContinue} disabled={loading}>
+          <Text style={styles.primaryText}>{loading ? 'Loading…' : index < slides.length - 1 ? 'Continue' : 'Lets Zish'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

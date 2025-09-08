@@ -12,7 +12,7 @@ export default function DeliveryStep() {
   const setPickupNote = (v) => dispatch(updateDelivery({ pickupNote: v }));
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }}>
+    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }} keyboardShouldPersistTaps="always">
       <Text style={styles.title}>Choose Delivery Method</Text>
       <Text style={styles.subtitle}>Select how you'd like to deliver your item to the buyer.</Text>
 

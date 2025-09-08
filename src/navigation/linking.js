@@ -1,10 +1,16 @@
 // React Navigation linking configuration for deep links
 // Supports:
-// - Custom scheme: zishes://item/:id
-// - Web: https://example.com/item/:id
+// - Custom scheme: zishes://app/item/:id
+// - Web: https://<WEB_ORIGIN>/item/:id
+import { APP_SCHEME, APP_HOST, WEB_ORIGIN } from '../config/links';
 
 const linking = {
-  prefixes: ['zishes://', 'zishes://app', 'https://example.com'],
+  // Allow both plain scheme and scheme with host for flexibility across platforms
+  prefixes: [
+    `${APP_SCHEME}://`,
+    `${APP_SCHEME}://${APP_HOST}`,
+    WEB_ORIGIN,
+  ],
   config: {
     screens: {
       // AppTabs root
@@ -15,7 +21,6 @@ const linking = {
           HomeIndex: 'home',
         },
       },
-      // You can add other stacks if needed
     },
   },
 };

@@ -9,7 +9,7 @@ import CongratsModal from '../../components/modals/CongratsModal';
 import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
 import plansService from '../../services/plans';
 import paymentsService from '../../services/payments';
-import { openRazorpayCheckout } from '../../utils/razorpay';
+import RazorpayCheckout from 'react-native-razorpay';
 import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
 import { useDispatch, useSelector } from 'react-redux';
 import AppModal from '../../components/common/AppModal';
@@ -66,9 +66,11 @@ export default function MembershipTierScreen({ navigation }) {
       setPayProcessing(true);
       const keyRes = await paymentsService.getRazorpayKey();
       const { keyId } = keyRes || {};
+      try { console.log('[RZP][SUB] Public key fetched:', keyRes && keyRes.keyId ? `${String(keyRes.keyId).slice(0,6)}…` : null); } catch {}
       if (!keyId) throw new Error('Missing Razorpay key');
       const subRes = await paymentsService.createRazorpaySubscription({ planId: plan._id });
       const { subscription } = subRes || {};
+      try { console.log('[RZP][SUB] Subscription created:', JSON.stringify({ id: subscription?.id, status: subscription?.status, total_count: subscription?.total_count })); } catch {}
       if (!subscription?.id) throw new Error('Failed to create subscription');
 
       const options = {
@@ -90,7 +92,7 @@ export default function MembershipTierScreen({ navigation }) {
       try {
         // Hide preflight processing before opening the native checkout
         setPayProcessing(false);
-        await openRazorpayCheckout(options);
+        await RazorpayCheckout.open(options);
         try { dispatch(fetchMyWallet()); } catch {}
         setSelectedTier(`${Number(plan.coins || 0)} ZC`);
         setCongratsOpen(true);

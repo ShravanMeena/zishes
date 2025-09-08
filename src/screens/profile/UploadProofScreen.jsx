@@ -355,7 +355,7 @@ export default function UploadProofScreen({ route, navigation }) {
       <DatePickerModal visible={showDate} value={date ? new Date(date) : new Date()} onClose={() => setShowDate(false)} onConfirm={(d) => { setDate(formatDateYYYYMMDD(d)); setShowDate(false); }} />
     </SafeAreaView>
     {(loading || stage !== 'idle') ? (
-      <View style={styles.fullscreenLoader} pointerEvents="none">
+      <View style={styles.fullscreenLoader} pointerEvents="auto">
         <ActivityIndicator color={colors.primary} size="large" />
         <View style={{ width: '86%', marginTop: 16 }}>
           <View style={styles.skelLineWide} />
@@ -453,6 +453,7 @@ const styles = StyleSheet.create({
   skeletonCard: { backgroundColor: '#1E2128', borderRadius: 12, borderWidth: 1, borderColor: '#24324A', padding: 14, marginBottom: 12 },
   skelLine: { height: 12, borderRadius: 6, backgroundColor: '#2B3548', marginTop: 10, width: '60%' },
   skelLineWide: { height: 16, borderRadius: 6, backgroundColor: '#2B3548', width: '80%' },
+  fullscreenLoader: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 999 },
 });
 
 function DetailRow({ label, value, multiline }) {

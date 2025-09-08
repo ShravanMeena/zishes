@@ -2,6 +2,8 @@ import { Alert, Platform } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
 import { navigate } from '../navigation/navigationRef';
+import store from '../store';
+import { fetchMyWallet } from '../store/wallet/walletSlice';
 import users from '../services/users';
 
 // Use a fresh, high-importance channel so heads-up notifications show reliably
@@ -28,21 +30,29 @@ export async function setupNotificationHandlers() {
 
   // Foreground messages
   messaging().onMessage(async (remoteMessage) => {
+    try { maybeHandleAppEvent(remoteMessage?.data || {}); } catch {}
     await displayRemoteMessage(remoteMessage);
   });
 
   // App opened from background by tapping a system notification
   messaging().onNotificationOpenedApp((remoteMessage) => {
-    if (remoteMessage) handleNotificationOpen(remoteMessage.data || {});
+    if (remoteMessage) {
+      try { maybeHandleAppEvent(remoteMessage.data || {}); } catch {}
+      handleNotificationOpen(remoteMessage.data || {});
+    }
   });
 
   // App opened from quit by tapping a notification
   const initialNotifee = await notifee.getInitialNotification();
   if (initialNotifee?.notification?.data) {
+    try { maybeHandleAppEvent(initialNotifee.notification.data); } catch {}
     handleNotificationOpen(initialNotifee.notification.data);
   } else {
     const initialFCM = await messaging().getInitialNotification();
-    if (initialFCM?.data) handleNotificationOpen(initialFCM.data);
+    if (initialFCM?.data) {
+      try { maybeHandleAppEvent(initialFCM.data); } catch {}
+      handleNotificationOpen(initialFCM.data);
+    }
   }
 
   // Foreground press handling for Notifee-created notifications
@@ -117,6 +127,7 @@ export async function enablePushAfterLogin() {
 
 export async function displayRemoteMessage(remoteMessage) {
   const data = remoteMessage?.data || {};
+  try { maybeHandleAppEvent(data); } catch {}
   const title = data.title || remoteMessage?.notification?.title || 'Notification';
   const body = data.body || remoteMessage?.notification?.body || '';
   const image = pickImage(data, remoteMessage);
@@ -166,6 +177,17 @@ export async function displayRemoteMessage(remoteMessage) {
       // eslint-disable-next-line no-console
       console.warn('Notifee displayNotification failed:', String(e));
     }
+  }
+}
+
+// If backend webhook broadcasts a wallet update push, refresh store wallet everywhere
+function maybeHandleAppEvent(data) {
+  const t = String(data?.type || data?.event || '').toLowerCase();
+  if (!t) return;
+  // Accept a few common variants
+  const walletSignals = ['wallet.updated', 'wallet_update', 'wallet:updated', 'wallet'];
+  if (walletSignals.some(sig => t === sig || t.includes('wallet'))) {
+    try { store.dispatch(fetchMyWallet()); } catch {}
   }
 }
 

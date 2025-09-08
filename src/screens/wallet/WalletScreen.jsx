@@ -10,8 +10,9 @@ import walletService from '../../services/wallet';
 import CongratsModal from '../../components/modals/CongratsModal';
 import plansService from '../../services/plans';
 import ledgerService from '../../services/ledger';
+import productsService from '../../services/products';
 import paymentsService from '../../services/payments';
-import { openRazorpayCheckout } from '../../utils/razorpay';
+import RazorpayCheckout from 'react-native-razorpay';
 import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
 import AppModal from '../../components/common/AppModal';
 import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
@@ -39,6 +40,10 @@ export default function WalletScreen({ navigation }) {
   const [payProcessing, setPayProcessing] = useState(false);
   const [payError, setPayError] = useState(null);
   const [lastPlan, setLastPlan] = useState(null);
+  // Seller withdrawals: my listings
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
+  const [withdrawalsError, setWithdrawalsError] = useState(null);
 
   const fetchWallet = useCallback(async () => {
     if (!token) {
@@ -106,23 +111,47 @@ export default function WalletScreen({ navigation }) {
     fetchLedger();
   }, [fetchLedger]);
 
+  // Fetch seller listings for withdrawals panel
+  const fetchWithdrawals = useCallback(async () => {
+    if (!token) return;
+    try {
+      setWithdrawalsLoading(true);
+      setWithdrawalsError(null);
+      const list = await productsService.getMyProducts(token);
+      const mapped = (Array.isArray(list) ? list : []).map((p) => {
+        const id = p?._id || p?.id || String(p?.slug || Math.random());
+        const title = p?.title || p?.name || 'My Listing';
+        const image = (p?.images && p.images[0]) || p?.coverImage || p?.image || 'https://via.placeholder.com/96x96.png?text=Z';
+        const amountNum = Number(p?.expectedPrice ?? p?.price ?? p?.amount ?? 0);
+        const currency = p?.currencyCode || p?.currency || 'INR';
+        const amount = amountNum > 0 ? `${currency} ${amountNum.toLocaleString()}` : `${currency} —`;
+        const rawStatus = String(p?.withdrawalStatus || p?.payoutStatus || p?.status || p?.tournamentStatus || 'pending').toUpperCase();
+        let status = 'pending';
+        if (['APPROVED','PAID','SUCCESS','COMPLETED'].includes(rawStatus)) status = 'approved';
+        else if (['REJECTED','FAILED','DECLINED','CANCELLED'].includes(rawStatus)) status = 'rejected';
+        return { id, title, amount, status, image, raw: p };
+      });
+      setWithdrawals(mapped);
+    } catch (e) {
+      setWithdrawals([]);
+      setWithdrawalsError(e?.message || 'Failed to fetch listings');
+    } finally {
+      setWithdrawalsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { fetchWithdrawals(); }, [fetchWithdrawals]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.allSettled([fetchWallet(), fetchPlans(), fetchLedger()]);
+      await Promise.allSettled([fetchWallet(), fetchPlans(), fetchLedger(), fetchWithdrawals()]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchWallet, fetchPlans, fetchLedger]);
+  }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals]);
 
   const topupPlans = useMemo(() => (plans || []).filter(p => p?.planType === 'TOPUP'), [plans]);
-
-  const withdrawals = useMemo(() => ([
-    { id: 'w1', title: 'Vintage Leather Jacket', amount: 'INR 45,000', status: 'pending', image: 'https://images.unsplash.com/photo-1520975922221-23a9d23708c5?w=300&q=80' },
-    { id: 'w2', title: 'Gaming PC Setup', amount: 'INR 30,000', status: 'approved', image: 'https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?w=300&q=80' },
-    { id: 'w3', title: 'Collectible Action Figure', amount: 'INR 2,000', status: 'rejected', image: 'https://images.unsplash.com/photo-1614286091228-c481b92a8eb0?w=300&q=80' },
-    { id: 'w4', title: 'Hermes Togo Birkin', amount: 'INR 20,00,000', status: 'approved', image: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=300&q=80' },
-  ]), []);
 
   const history = useMemo(() => {
     const mapTitle = (entry) => {
@@ -174,12 +203,15 @@ export default function WalletScreen({ navigation }) {
       if (!plan?._id) throw new Error('Invalid plan');
       setProcessingPlanId(plan._id);
       setPayProcessing(true);
+      try { console.log('[RZP][TOPUP] Selected plan:', JSON.stringify({ id: plan._id, coins: plan.coins, amount: plan.amount, currency: plan.currencyCode })); } catch {}
       // Fetch public key and create an order
       const keyRes = await paymentsService.getRazorpayKey();
       const { keyId } = keyRes || {};
+      try { console.log('[RZP][TOPUP] Public key fetched:', keyRes && keyRes.keyId ? `${String(keyRes.keyId).slice(0,6)}…` : null); } catch {}
       if (!keyId) throw new Error('Missing Razorpay key');
       const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
       const { order } = orderRes || {};
+      try { console.log('[RZP][TOPUP] Order created:', JSON.stringify({ id: order?.id, amount: order?.amount, currency: order?.currency })); } catch {}
       if (!order?.id) throw new Error('Failed to create order');
 
       const options = {
@@ -201,7 +233,7 @@ export default function WalletScreen({ navigation }) {
 
       try {
         setPayProcessing(false);
-        await openRazorpayCheckout(options);
+        await RazorpayCheckout.open(options);
         // Backend credits on webhook; refresh wallet optimistically
         try { dispatch(fetchMyWallet()); } catch {}
         try {
@@ -326,28 +358,50 @@ export default function WalletScreen({ navigation }) {
         {/* Withdrawals (Seller only) */}
         <Text style={styles.sectionTitle}>Withdrawals (Seller only)</Text>
         <View style={styles.panel}>
-          {withdrawals.map((w, idx) => (
-            <View key={w.id} style={[styles.withdrawRow, idx>0 && styles.rowDivider]}>
-              <Image source={{ uri: w.image }} style={styles.thumb} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.withdrawTitle} numberOfLines={2}>{w.title}</Text>
-                <Text style={styles.withdrawAmount}>{w.amount}</Text>
+          {withdrawalsLoading ? (
+            [1,2,3].map((i) => (
+              <View key={`wd-sk-${i}`} style={[styles.withdrawRow, i>1 && styles.rowDivider]}>
+                <View style={[styles.thumb, { backgroundColor: 'rgba(255,255,255,0.12)' }]} />
+                <View style={{ flex: 1 }}>
+                  <View style={[styles.skelLineSm, { width: '80%' }]} />
+                  <View style={[styles.skelLineXs, { width: '50%', marginTop: 6 }]} />
+                </View>
+                <View style={{ alignItems: 'flex-end', width: 90 }}>
+                  <View style={[styles.skelLineSm, { width: 70 }]} />
+                </View>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <StatusChip status={w.status} />
-                <ActionButton
-                  status={w.status}
-                  onPress={() => {
-                    if (w.status === 'approved') {
-                      navigation.navigate('PaymentMethods');
-                    } else if (w.status === 'pending') {
-                      navigation.navigate('UploadProof', { item: w });
-                    }
-                  }}
-                />
-              </View>
-            </View>
-          ))}
+            ))
+          ) : (withdrawals && withdrawals.length > 0) ? (
+            withdrawals.map((w, idx) => {
+              const over = String(w?.raw?.tournament?.status || w?.raw?.tournamentStatus || '').toUpperCase() === 'OVER';
+              const rc = w?.raw?.fulfillment?.receiverConfirmation || {};
+              const receiverApproved = !!(rc?.confirmedAt || rc?.confirmed || (rc?.status && String(rc.status).toUpperCase() === 'CONFIRMED'));
+              return (
+                <View key={w.id} style={[styles.withdrawRow, idx>0 && styles.rowDivider]}>
+                  <Image source={{ uri: w.image }} style={styles.thumb} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.withdrawTitle} numberOfLines={2}>{w.title}</Text>
+                    <Text style={styles.withdrawAmount}>{w.amount}</Text>
+                    {over && !receiverApproved ? (
+                      <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Waiting for winner to approve receipt.</Text>
+                    ) : null}
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <StatusChip status={w.status} />
+                    {over ? (
+                      <TouchableOpacity style={[styles.smallBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('UploadProof', { item: { id: w.id, _id: w.id, raw: w.raw, title: w.title, image: w.image } })}>
+                        <Text style={styles.smallBtnText}>Upload Proof</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <Text style={{ color: withdrawalsError ? '#FF7A7A' : colors.textSecondary, textAlign: 'center', paddingVertical: 8 }}>
+              {withdrawalsError ? withdrawalsError : 'No items found'}
+            </Text>
+          )}
         </View>
 
         {/* Transaction History */}

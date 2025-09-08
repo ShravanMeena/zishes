@@ -8,6 +8,7 @@ import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import ProgressBar from '../../components/common/ProgressBar';
 import ShareSheet from '../../components/common/ShareSheet';
+import { buildShareUrlForProduct } from '../../utils/links';
 import ImageViewerSheet from '../../components/common/ImageViewerSheet';
 import RulesModal from '../../components/modals/RulesModal';
 import InsufficientCoinsModal from '../../components/modals/InsufficientCoinsModal';
@@ -386,7 +387,11 @@ export default function DetailsScreen({ route, navigation }) {
         </ScrollView>
       )}
 
-      <ShareSheet visible={shareOpen} onClose={() => setShareOpen(false)} url={`https://example.com/item/${item?.id || ''}`} />
+      <ShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        url={item?.id ? buildShareUrlForProduct(item.id) : ''}
+      />
       <ImageViewerSheet visible={viewerOpen} onClose={() => setViewerOpen(false)} images={images} initialIndex={viewerIndex} />
       <RulesModal visible={rulesOpen} onCancel={() => setRulesOpen(false)} onConfirm={confirmPlay} item={item} confirmLoading={joining} />
       <InsufficientCoinsModal

@@ -11,6 +11,7 @@ import useHome from "../../hooks/useHome";
 import { buildProductQueryFromUI } from "../../services/products";
 import { Bell, Search, SlidersHorizontal } from 'lucide-react-native';
 import ShareSheet from "../../components/common/ShareSheet";
+import { buildShareUrlForProduct } from "../../utils/links";
 import RulesModal from "../../components/modals/RulesModal";
 import InsufficientCoinsModal from "../../components/modals/InsufficientCoinsModal";
 import BottomSheet from "../../components/common/BottomSheet";
@@ -190,7 +191,11 @@ export default function HomeScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         />
       )}
-      <ShareSheet visible={!!shareItem} onClose={() => setShareItem(null)} url={shareItem ? `https://example.com/item/${shareItem.id}` : ''} />
+      <ShareSheet
+        visible={!!shareItem}
+        onClose={() => setShareItem(null)}
+        url={shareItem ? buildShareUrlForProduct(shareItem.id) : ''}
+      />
       <RulesModal
         visible={!!rulesItem}
         onCancel={() => setRulesItem(null)}

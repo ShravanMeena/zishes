@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, TextInput, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { Bell } from 'lucide-react-native';
@@ -21,6 +21,7 @@ import DeliveryStep from './steps/DeliveryStep';
 import PoliciesStep from './steps/PoliciesStep';
 import ReviewStep from './steps/ReviewStep';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
+import PagerView from 'react-native-pager-view';
 
 export default function SellScreen({ navigation, route }) {
   const dispatch = useDispatch();
@@ -54,6 +55,7 @@ export default function SellScreen({ navigation, route }) {
   const [leaveAfterAction, setLeaveAfterAction] = useState(null); // route name to leave to
   // const [congratsOpen, setCongratsOpen] = useState(false);
   const [hideSubmitModal, setHideSubmitModal] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const routes = steps;
   const progress = (index + 1) / steps.length;
 
@@ -133,6 +135,59 @@ export default function SellScreen({ navigation, route }) {
     if (submitting) setHideSubmitModal(false);
   }, [submitting]);
 
+  // Track keyboard visibility to adjust TabView behavior
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Stable scenes: memoize SceneMap so scenes don't remount on every keystroke
+  const renderScene = useMemo(() => {
+    const PhotosRoute = () => (
+      <View style={{ flex: 1 }}>
+        <PhotosStep />
+      </View>
+    );
+    const DetailsRoute = () => (
+      <View style={{ flex: 1 }}>
+        <DetailsStep />
+      </View>
+    );
+    const PlayRoute = () => (
+      <View style={{ flex: 1 }}>
+        <PlayToWinStep />
+      </View>
+    );
+    const DeliveryRoute = () => (
+      <View style={{ flex: 1 }}>
+        <DeliveryStep />
+      </View>
+    );
+    const PoliciesRoute = () => (
+      <View style={{ flex: 1 }}>
+        <PoliciesStep />
+      </View>
+    );
+    const ReviewRoute = () => (
+      <View style={{ flex: 1 }}>
+        <ReviewStep onEdit={goTo} />
+      </View>
+    );
+    return SceneMap({
+      photos: PhotosRoute,
+      details: DetailsRoute,
+      play: PlayRoute,
+      delivery: DeliveryRoute,
+      policies: PoliciesRoute,
+      review: ReviewRoute,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -147,14 +202,11 @@ export default function SellScreen({ navigation, route }) {
         navigationState={{ index, routes }}
         onIndexChange={setIndex}
         initialLayout={{ width }}
-        renderScene={SceneMap({
-          photos: () => <View style={{ flex: 1 }}><PhotosStep /></View>,
-          details: () => <View style={{ flex: 1 }}><DetailsStep /></View>,
-          play: () => <View style={{ flex: 1 }}><PlayToWinStep /></View>,
-          delivery: () => <View style={{ flex: 1 }}><DeliveryStep /></View>,
-          policies: () => <View style={{ flex: 1 }}><PoliciesStep /></View>,
-          review: () => <View style={{ flex: 1 }}><ReviewStep onEdit={goTo} /></View>,
-        })}
+        swipeEnabled={!keyboardOpen}
+        renderPager={(pagerProps) => (
+          <PagerView {...pagerProps} keyboardDismissMode="none" />
+        )}
+        renderScene={renderScene}
         renderTabBar={(props) => (
           <TabBar
             {...props}

@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   title: { color: colors.white, fontWeight: '700' },
   subtitle: { color: colors.textSecondary, marginTop: 4 },
   btnRow: { flexDirection: 'row', alignItems: 'center' },
-  btn: { paddingHorizontal: 14, height: 40 },
+  btn: { paddingHorizontal: 14 },
   empty: { alignItems: 'center', marginTop: 60, paddingHorizontal: 24 },
   emptyText: { color: colors.white, fontWeight: '800', fontSize: 18 },
   emptySub: { color: colors.textSecondary, textAlign: 'center', marginTop: 8 },

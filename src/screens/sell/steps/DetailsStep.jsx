@@ -19,7 +19,7 @@ export default function DetailsStep() {
   return (
     <KeyboardAwareScrollView
       contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps="always"
       enableOnAndroid
       extraScrollHeight={20}
     >
@@ -64,7 +64,7 @@ function FieldLabel({ children }) {
 }
 
 function Input(props) {
-  return <TextInput {...props} placeholderTextColor={colors.textSecondary} style={[styles.input, props.style]} />;
+  return <TextInput {...props} blurOnSubmit={false} placeholderTextColor={colors.textSecondary} style={[styles.input, props.style]} />;
 }
 
 function Select({ placeholder, value, onPress }) {

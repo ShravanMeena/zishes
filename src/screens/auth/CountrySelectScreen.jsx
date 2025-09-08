@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../theme/colors';
@@ -9,6 +9,8 @@ import { completeVerification, setUser } from '../../store/auth/authSlice';
 import { createUser as createZishesUser, updateMe as updateCurrentUser } from '../../services/users';
 import { getAccessToken } from '../../services/tokenManager';
 import Button from '../../components/ui/Button';
+import useLocationPermission from '../../hooks/useLocationPermission';
+import { detectCityCountry } from '../../services/location';
 
 const COUNTRIES = [
   'India', 'United States', 'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Singapore', 'Canada', 'Australia', 'Japan', 'South Korea', 'China', 'Philippines', 'United Arab Emirates'
@@ -20,7 +22,10 @@ export default function CountrySelectScreen({ navigation, route }) {
   const token = useSelector((s) => s.auth?.token);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
+  const [detecting, setDetecting] = useState(false);
+  const [detectedLabel, setDetectedLabel] = useState('');
   const hasSelection = !!selected;
+  const ensureLocationPermission = useLocationPermission();
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -28,14 +33,37 @@ export default function CountrySelectScreen({ navigation, route }) {
   }, [query]);
 
   const detect = async () => {
+    if (detecting) return;
+    setDetecting(true);
+    setDetectedLabel('');
     try {
-      if (Platform.OS === 'android') {
-        await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      const ok = await ensureLocationPermission();
+      // Proceed even if permission denied; we'll fallback to IP geo
+      const place = await detectCityCountry();
+      const { city, country, countryCode, method } = place || {};
+      const label = [city, country].filter(Boolean).join(', ');
+      if (label) setDetectedLabel(label);
+      // Try to match to our allowed list
+      const listCountry = (country || '').toLowerCase();
+      const found = COUNTRIES.find(c => c.toLowerCase() === listCountry) ||
+                    COUNTRIES.find(c => listCountry.includes(c.toLowerCase()));
+      if (found) setSelected(found);
+      else if (!found && countryCode) {
+        // Limited aliasing for common variants
+        const aliasMap = {
+          'US': 'United States', 'GB': 'United Kingdom', 'AE': 'United Arab Emirates',
+          'KR': 'South Korea'
+        };
+        const aliased = aliasMap[countryCode];
+        if (aliased && COUNTRIES.includes(aliased)) setSelected(aliased);
       }
-      // Placeholder: you can integrate actual geo lookup later
-      // For now we default to 'India' if none selected
+      // As a last resort, keep previous selection or default to India if none
       setSelected((s) => s || 'India');
-    } catch {}
+    } catch (e) {
+      setSelected((s) => s || 'India');
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const onContinue = async () => {
@@ -91,7 +119,19 @@ export default function CountrySelectScreen({ navigation, route }) {
             style={styles.input}
           />
           <Text style={{ color: colors.textSecondary, marginVertical: 8 }}>Tap to choose your country of play.</Text>
-          <TouchableOpacity onPress={detect} style={styles.detectBtn}><Text style={styles.detectText}>Use current location</Text></TouchableOpacity>
+          <TouchableOpacity onPress={detect} style={[styles.detectBtn, detecting && { opacity: 0.7 }]}> 
+            {detecting ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text style={[styles.detectText, { marginLeft: 8 }]}>Detecting…</Text>
+              </View>
+            ) : (
+              <Text style={styles.detectText}>Use current location</Text>
+            )}
+          </TouchableOpacity>
+          {!!detectedLabel && (
+            <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Detected: {detectedLabel}</Text>
+          )}
           <FlatList
             data={list}
             renderItem={renderItem}

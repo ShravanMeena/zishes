@@ -28,6 +28,9 @@
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Location (for country auto-detect) -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Media permissions for gallery access -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
@@ -76,12 +79,12 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="zishes" android:host="app" android:pathPrefix="/item" />
         </intent-filter>
-        <!-- Deep links: https://example.com/item/:id -->
-        <intent-filter>
+        <!-- Deep links: https://zishes.com/item/:id -->
+        <intent-filter android:autoVerify="true">
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
             <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="example.com" android:pathPrefix="/item" />
+            <data android:scheme="https" android:host="zishes.com" android:pathPrefix="/item" />
         </intent-filter>
       </activity>
     </application>

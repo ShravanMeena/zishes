@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, KeyRound, CreditCard, Wallet2, FileText, Shield, Scale, Flag, MessageSquare, Users, LogOut } from 'lucide-react-native';
@@ -7,10 +7,13 @@ import { POLICY_MAP } from '../../content/policies';
 import { useDispatch } from 'react-redux';
 import { logout } from '../../store/auth/authSlice';
 import AppModal from '../../components/common/AppModal';
+import appConfigService from '../../services/appConfig';
 
 export default function SettingsScreen({ navigation }) {
   const dispatch = useDispatch();
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [legalPolicies, setLegalPolicies] = useState(null);
   const goPayments = () => navigation.navigate('PaymentMethodsManage');
   const goDefaultWithdrawal = () => navigation.navigate('DefaultWithdrawal');
 
@@ -18,6 +21,30 @@ export default function SettingsScreen({ navigation }) {
     const { title, html } = POLICY_MAP[key] || {};
     navigation.navigate('PolicyViewer', { title: title || 'Policy', html: html || '' });
   };
+
+  const openPolicyUrl = (item) => {
+    if (!item) return;
+    const { title, url } = item;
+    navigation.navigate('PolicyViewer', { title: title || 'Policy', url });
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoadingConfig(true);
+        const data = await appConfigService.getAppConfig();
+        const list = Array.isArray(data?.legalPolicies) ? data.legalPolicies : [];
+        if (alive) setLegalPolicies(list);
+      } catch (e) {
+        // Keep fallback static policies section if API fails
+        if (__DEV__) console.warn('[CONFIG] Failed to load app-config:', e?.message || e);
+      } finally {
+        if (alive) setLoadingConfig(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -35,15 +62,35 @@ export default function SettingsScreen({ navigation }) {
         </Section>
 
         <Section title="Legal & Policies">
-          <Row icon={<FileText size={18} color={colors.accent} />} title="Terms & Conditions" onPress={() => openPolicy('terms')} border />
-          <Row icon={<Shield size={18} color={colors.accent} />} title="Privacy Policy" onPress={() => openPolicy('privacy')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Prize Competition Guidelines" onPress={() => openPolicy('guidelines')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Fair Play Policy" onPress={() => openPolicy('fairplay')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Tax and Compliance Guide" onPress={() => openPolicy('tax')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="International Shipping & Customs Policy" onPress={() => openPolicy('shipping')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Prohibited & Restricted Items Policy" onPress={() => openPolicy('prohibited')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Refunds and Cancellation Policy" onPress={() => openPolicy('refunds')} border />
-          <Row icon={<Scale size={18} color={colors.accent} />} title="Seller Agreement" onPress={() => openPolicy('seller')} />
+          {legalPolicies == null && loadingConfig && (
+            <View style={{ padding: 14, alignItems: 'center' }}>
+              <ActivityIndicator color={colors.white} />
+              <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading policies…</Text>
+            </View>
+          )}
+          {Array.isArray(legalPolicies) && legalPolicies.length > 0 ? (
+            legalPolicies.map((p, idx) => (
+              <Row
+                key={`${p.title}-${idx}`}
+                icon={<FileText size={18} color={colors.accent} />}
+                title={p.title}
+                onPress={() => openPolicyUrl(p)}
+                border={idx !== legalPolicies.length - 1}
+              />
+            ))
+          ) : (
+            <>
+              <Row icon={<FileText size={18} color={colors.accent} />} title="Terms & Conditions" onPress={() => openPolicy('terms')} border />
+              <Row icon={<Shield size={18} color={colors.accent} />} title="Privacy Policy" onPress={() => openPolicy('privacy')} border />
+              <Row icon={<Scale size={18} color={colors.accent} />} title="Prize Competition Guidelines" onPress={() => openPolicy('guidelines')} border />
+              <Row icon={<Scale size={18} color={colors.accent} />} title="Fair Play Policy" onPress={() => openPolicy('fairplay')} border />
+              <Row icon={<Scale size={18} color={colors.accent} />} title="Tax and Compliance Guide" onPress={() => openPolicy('tax')} border />
+              <Row icon={<Scale size={18} color={colors.accent} />} title="International Shipping & Customs Policy" onPress={() => openPolicy('shipping')} border />
+              <Row icon={<Scale size={18} color={colors.accent} />} title="Prohibited & Restricted Items Policy" onPress={() => openPolicy('prohibited')} border />
+              <Row icon={<Scale size={18} color={colors.accent} />} title="Refunds and Cancellation Policy" onPress={() => openPolicy('refunds')} border />
+              <Row icon={<Scale size={18} color={colors.accent} />} title="Seller Agreement" onPress={() => openPolicy('seller')} />
+            </>
+          )}
         </Section>
 
         <Section title="Support & Community">

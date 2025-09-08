@@ -4,6 +4,7 @@ require Pod::Executable.execute_command('node', ['-p',
     "react-native/scripts/react_native_pods.rb",
     {paths: [process.argv[1]]},
   )', __dir__]).strip
+pod 'react-native-razorpay', :path => '../node_modules/react-native-razorpay'
 
 # Firebase/Notifee require newer iOS. Set explicit minimum.
 platform :ios, '15.0'
