@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { uploadImage } from '../../services/uploads';
 import { createProductWithTournament } from '../../services/products';
+import { saveNewDraft } from './draftsStorage';
 
 const DRAFT_KEY = 'listing_draft_v1';
 
@@ -49,6 +50,10 @@ const initialState = {
   submitProgress: 0, // 0..1
   submitError: null,
   lastResponse: null,
+  // UI helpers
+  ui: {
+    pendingLeaveToRoute: null, // if user tries to leave Sell tab while dirty
+  },
 };
 
 export const loadDraft = createAsyncThunk('listingDraft/load', async () => {
@@ -78,6 +83,14 @@ export const saveDraftFromStore = createAsyncThunk('listingDraft/saveCurrent', a
 export const clearDraftStorage = createAsyncThunk('listingDraft/clear', async () => {
   await AsyncStorage.removeItem(DRAFT_KEY);
   return true;
+});
+
+// Save the current draft as a new entry in the drafts list
+export const saveCurrentAsNewDraft = createAsyncThunk('listingDraft/saveNewDraft', async ({ name }, { getState }) => {
+  const state = getState().listingDraft;
+  const toSave = { ...state, isDirty: false };
+  const saved = await saveNewDraft({ name: name || state?.details?.name || 'Untitled Item', data: toSave });
+  return saved;
 });
 
 const slice = createSlice({
@@ -150,7 +163,17 @@ const slice = createSlice({
     },
     resetDraft(state) {
       Object.assign(state, initialState);
-    }
+    },
+    // Load full draft data programmatically (e.g., Continue from Drafts)
+    loadFromDraft(state, action) {
+      const payload = action.payload || {};
+      const merged = { ...initialState, ...payload };
+      merged.loaded = true;
+      Object.assign(state, merged);
+    },
+    setPendingLeaveRoute(state, action) {
+      state.ui.pendingLeaveToRoute = action.payload || null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -170,6 +193,9 @@ const slice = createSlice({
       })
       .addCase(clearDraftStorage.fulfilled, (state) => {
         Object.assign(state, { ...initialState, loaded: true });
+      })
+      .addCase(saveCurrentAsNewDraft.fulfilled, (state) => {
+        state.isDirty = false;
       });
   }
 });
@@ -191,6 +217,8 @@ export const {
   setSubmitResult,
   clearSubmitState,
   resetDraft,
+  loadFromDraft,
+  setPendingLeaveRoute,
 } = slice.actions;
 
 export default slice.reducer;

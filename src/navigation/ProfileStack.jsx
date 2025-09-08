@@ -10,12 +10,14 @@ import PaymentMethodsManageScreen from '../screens/account/PaymentMethodsManageS
 import DefaultWithdrawalScreen from '../screens/account/DefaultWithdrawalScreen';
 import ReportIssueScreen from '../screens/account/ReportIssueScreen';
 import CommunityFeedbackScreen from '../screens/account/CommunityFeedbackScreen';
+import SellerReviewScreen from '../screens/profile/SellerReviewScreen';
 import ManageAccountScreen from '../screens/account/ManageAccountScreen';
 import MembershipTierScreen from '../screens/account/MembershipTierScreen';
 import UploadProofScreen from '../screens/profile/UploadProofScreen';
 import AcknowledgeReceiptScreen from '../screens/profile/AcknowledgeReceiptScreen';
 import LeaderboardScreen from '../screens/profile/LeaderboardScreen';
 import PolicyViewerScreen from '../screens/misc/PolicyViewerScreen';
+import DraftsScreen from '../screens/profile/DraftsScreen';
 import CountrySelectScreen from '../screens/auth/CountrySelectScreen';
 
 const Stack = createNativeStackNavigator();
@@ -25,6 +27,7 @@ export default function ProfileStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ProfileHome" component={ProfileScreen} />
       <Stack.Screen name="MyListings" component={MyListingsScreen} />
+      <Stack.Screen name="Drafts" component={DraftsScreen} />
       <Stack.Screen name="TournamentsWon" component={TournamentsWonScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
@@ -34,6 +37,7 @@ export default function ProfileStack() {
       <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
       <Stack.Screen name="CommunityFeedback" component={CommunityFeedbackScreen} />
       <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
+      <Stack.Screen name="SellerReview" component={SellerReviewScreen} />
       <Stack.Screen name="MembershipTier" component={MembershipTierScreen} />
       <Stack.Screen name="UploadProof" component={UploadProofScreen} />
       <Stack.Screen name="AcknowledgeReceipt" component={AcknowledgeReceiptScreen} />

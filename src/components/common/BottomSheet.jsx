@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, View, StyleSheet, Animated, TouchableWithoutFeedback, Dimensions, TouchableOpacity } from 'react-native';
+import { Modal, View, StyleSheet, Animated, TouchableWithoutFeedback, Dimensions, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 
@@ -31,22 +31,24 @@ export default function BottomSheet({ visible, onClose, children, height, full =
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
-      <Animated.View style={[
-        styles.sheet,
-        noPadding ? { paddingLeft: 0, paddingRight: 0, paddingTop: 0 } : null,
-        // add extra bottom breathing room for compact sheets
-        { paddingBottom: (noPadding ? 0 : (full ? 12 : 36)) + insets.bottom },
-        { height: computedH, transform: [{ translateY }] }
-      ]}>
-        <View style={{ flex: 1 }} onLayout={(e) => setContentH(e.nativeEvent.layout.height)}>
-          {children}
-        </View>
-        {showClose ? (
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
-            <X color="#fff" size={20} />
-          </TouchableOpacity>
-        ) : null}
-      </Animated.View>
+      <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: 'height', default: undefined })}>
+        <Animated.View style={[
+          styles.sheet,
+          noPadding ? { paddingLeft: 0, paddingRight: 0, paddingTop: 0 } : null,
+          // add extra bottom breathing room for compact sheets
+          { paddingBottom: (noPadding ? 0 : (full ? 12 : 36)) + insets.bottom },
+          { height: computedH, transform: [{ translateY }] }
+        ]}>
+          <View style={{ flex: 1 }} onLayout={(e) => setContentH(e.nativeEvent.layout.height)}>
+            {children}
+          </View>
+          {showClose ? (
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
+              <X color="#fff" size={20} />
+            </TouchableOpacity>
+          ) : null}
+        </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

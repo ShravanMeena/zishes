@@ -1,6 +1,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Package visibility for UPI/wallet apps used by Razorpay (Android 11+) -->
+    <queries>
+        <!-- Common UPI apps -->
+        <package android:name="com.google.android.apps.nbu.paisa.user" /> <!-- Google Pay -->
+        <package android:name="com.phonepe.app" />
+        <package android:name="net.one97.paytm" />
+        <package android:name="in.org.npci.upiapp" /> <!-- BHIM -->
+        <package android:name="in.amazon.mShop.android.shopping" /> <!-- Amazon Pay UPI -->
+        <package android:name="com.freecharge.android" />
+        <package android:name="com.mobikwik_new" />
+
+        <!-- Allow matching apps by VIEW intents with upi/tez/paytm schemes -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tez" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="paytm" />
+        </intent>
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Media permissions for gallery access -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />

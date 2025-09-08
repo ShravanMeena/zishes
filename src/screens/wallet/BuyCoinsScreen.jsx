@@ -1,20 +1,34 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, CreditCard, QrCode, Wallet, ShieldCheck } from 'lucide-react-native';
 import CongratsModal from '../../components/modals/CongratsModal';
+import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
+import paymentsService from '../../services/payments';
+import { openRazorpayCheckout } from '../../utils/razorpay';
+import { useDispatch } from 'react-redux';
+import { fetchMyWallet } from '../../store/wallet/walletSlice';
 import plansService from '../../services/plans';
 import { useSelector } from 'react-redux';
+import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
+import AppModal from '../../components/common/AppModal';
 
 export default function BuyCoinsScreen({ navigation }) {
+  const dispatch = useDispatch();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [congratsOpen, setCongratsOpen] = useState(false);
   const balance = useSelector((s) => s.wallet.availableZishCoins);
+  const country = useSelector((s) => s.auth.user?.address?.country);
+  const [processing, setProcessing] = useState(false);
+  const [regionModal, setRegionModal] = useState(false);
+  const [payProcessing, setPayProcessing] = useState(false);
+  const [payError, setPayError] = useState(null);
+  const [lastPlan, setLastPlan] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -42,6 +56,65 @@ export default function BuyCoinsScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  const startTopup = useCallback(async () => {
+    try {
+      if (!selected) return;
+      if (!country || String(country).toLowerCase() !== 'india') {
+        setRegionModal(true);
+        return;
+      }
+      const plan = plans.find(p => p._id === selected);
+      if (!plan) throw new Error('Invalid plan');
+      setProcessing(true);
+      setPayProcessing(true);
+      setLastPlan(plan);
+      const keyRes = await paymentsService.getRazorpayKey();
+      const { keyId } = keyRes || {};
+      if (!keyId) throw new Error('Missing Razorpay key');
+      const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
+      const { order } = orderRes || {};
+      if (!order?.id) throw new Error('Failed to create order');
+
+      const options = {
+        key: keyId,
+        name: 'Zishes',
+        description: 'Coins Topup',
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency || plan.currencyCode || 'INR',
+        prefill: {
+          // email: user?.email,
+          // contact: user?.phone,
+        },
+        theme: { color: '#6C7BFF' },
+        retry: { enabled: true, max_count: 2 },
+        external: { wallets: ['paytm', 'phonepe'] },
+        notes: { planId: plan._id },
+      };
+
+      try {
+        setPayProcessing(false);
+        await openRazorpayCheckout(options);
+        try { dispatch(fetchMyWallet()); } catch {}
+        try { setCongratsOpen(true); } catch {}
+      } catch (err) {
+        const desc = String(err?.description || err?.message || '').toLowerCase();
+        console.warn('[RZP][TOPUP-BUY] error:', JSON.stringify(err));
+        if (desc.includes('cancel')) return;
+        if (err?.code === 'RAZORPAY_SDK_MISSING') {
+          Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
+        } else {
+          setPayError(err?.description || err?.message || 'Payment failed');
+        }
+      }
+    } catch (e) {
+      setPayError(e?.message || 'Could not start topup');
+    } finally {
+      setProcessing(false);
+      setPayProcessing(false);
+    }
+  }, [country, selected, plans, dispatch]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -68,14 +141,7 @@ export default function BuyCoinsScreen({ navigation }) {
         }
         ListFooterComponent={
           <>
-            <Text style={[styles.sectionTitle, { marginHorizontal: 0 }]}>Choose Payment Method</Text>
-            <View style={styles.methodsWrap}>
-              <MethodRow title="Credit/Debit Card" icon={<CreditCard size={18} color={colors.white} />} />
-              <MethodRow title="UPI / Bank Transfer" icon={<QrCode size={18} color={colors.white} />} />
-              <MethodRow title="PayPal" icon={<Wallet size={18} color={colors.white} />} />
-            </View>
-            <View style={styles.disclaimer}><ShieldCheck size={14} color={colors.white} /><Text style={styles.disclaimerTxt}> By purchasing coins, you agree to our Terms. All sales are final.</Text></View>
-          </>
+         </>
         }
         contentContainerStyle={{ padding: 12, paddingBottom: 140 }}
         columnWrapperStyle={{ justifyContent: 'space-between' }}
@@ -101,15 +167,9 @@ export default function BuyCoinsScreen({ navigation }) {
         <TouchableOpacity
           style={[styles.bottomBtn, styles.buyBtn, !selected && styles.buyBtnDisabled]}
           disabled={!selected}
-          onPress={() => {
-            if (!selected) return;
-            const plan = plans.find(p => p._id === selected);
-            if (plan) {
-              setCongratsOpen(true);
-            }
-          }}
+          onPress={startTopup}
         >
-          <Text style={[styles.buyTxt, !selected && styles.buyTxtDisabled]}>Buy Now</Text>
+          <Text style={[styles.buyTxt, (!selected || processing) && styles.buyTxtDisabled]}>{processing ? 'Processing…' : 'Buy Now'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -120,6 +180,17 @@ export default function BuyCoinsScreen({ navigation }) {
         primaryText="Great!"
         onPrimary={() => { setCongratsOpen(false); navigation.goBack(); }}
         onRequestClose={() => setCongratsOpen(false)}
+      />
+      <PaymentsRegionModal visible={regionModal} onClose={() => setRegionModal(false)} />
+      <ProcessingPaymentModal visible={payProcessing} />
+      <AppModal
+        visible={!!payError}
+        title="Payment Failed"
+        message={payError || 'Something went wrong while starting payment.'}
+        cancelText="Close"
+        confirmText="Retry"
+        onCancel={() => setPayError(null)}
+        onConfirm={() => { setPayError(null); if (lastPlan) { setSelected(lastPlan._id); startTopup(); } }}
       />
     </SafeAreaView>
   );

@@ -65,15 +65,11 @@ export default function TournamentsWonScreen({ navigation }) {
     const isWinner = !!(winnerId && currentUserId && String(winnerId) === String(currentUserId));
 
     const onPress = () => {
-      if (isWinner) {
-        navigation.navigate('AcknowledgeReceipt', { item });
-      } else {
-        // Navigate to product details until result declared / or if not winner
-        const product = item?.product || {};
-        const prodId = product?._id || product?.id;
-        const detailsItem = prodId ? { id: prodId, _id: prodId, images: product?.images || [], image: (product?.images || [])[0], title: product?.name || title } : null;
-        navigation.navigate('Home', { screen: 'Details', params: { item: detailsItem } });
-      }
+      // Navigate to product details for full-card press
+      const product = item?.product || {};
+      const prodId = product?._id || product?.id;
+      const detailsItem = prodId ? { id: prodId, _id: prodId, images: product?.images || [], image: (product?.images || [])[0], title: product?.name || title } : null;
+      navigation.navigate('Home', { screen: 'Details', params: { item: detailsItem } });
     };
 
     return (

@@ -1,20 +1,34 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, CheckCircle2 } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Button from '../../components/ui/Button';
 import CongratsModal from '../../components/modals/CongratsModal';
+import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
 import plansService from '../../services/plans';
+import paymentsService from '../../services/payments';
+import { openRazorpayCheckout } from '../../utils/razorpay';
+import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
+import { useDispatch, useSelector } from 'react-redux';
+import AppModal from '../../components/common/AppModal';
+import { fetchMyWallet } from '../../store/wallet/walletSlice';
 
 export default function MembershipTierScreen({ navigation }) {
+  const dispatch = useDispatch();
+  const userCountry = useSelector((s) => s.auth.user?.address?.country);
   const [congratsOpen, setCongratsOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState(null);
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [processingPlanId, setProcessingPlanId] = useState(null);
+  const [regionModal, setRegionModal] = useState(false);
+  const [payProcessing, setPayProcessing] = useState(false);
+  const [payError, setPayError] = useState(null);
+  const [lastPlan, setLastPlan] = useState(null);
 
   const fetchPlans = useCallback(async () => {
     try {
@@ -40,6 +54,66 @@ export default function MembershipTierScreen({ navigation }) {
     try { await fetchPlans(); } finally { setRefreshing(false); }
   }, [fetchPlans]);
 
+  const startSubscribe = useCallback(async (plan) => {
+    try {
+      setLastPlan(plan);
+      if (!userCountry || String(userCountry).toLowerCase() !== 'india') {
+        setRegionModal(true);
+        return;
+      }
+      if (!plan?._id) throw new Error('Invalid plan');
+      setProcessingPlanId(plan._id);
+      setPayProcessing(true);
+      const keyRes = await paymentsService.getRazorpayKey();
+      const { keyId } = keyRes || {};
+      if (!keyId) throw new Error('Missing Razorpay key');
+      const subRes = await paymentsService.createRazorpaySubscription({ planId: plan._id });
+      const { subscription } = subRes || {};
+      if (!subscription?.id) throw new Error('Failed to create subscription');
+
+      const options = {
+        key: keyId,
+        name: 'Zishes',
+        description: 'Plan Subscription',
+        subscription_id: subscription.id,
+        prefill: {
+          // Add if available from user profile/redux when you wire it
+          // email: user?.email,
+          // contact: user?.phone,
+        },
+        theme: { color: '#6C7BFF' },
+        retry: { enabled: true, max_count: 2 },
+        external: { wallets: ['paytm', 'phonepe'] },
+        notes: { planId: plan._id },
+      };
+
+      try {
+        // Hide preflight processing before opening the native checkout
+        setPayProcessing(false);
+        await openRazorpayCheckout(options);
+        try { dispatch(fetchMyWallet()); } catch {}
+        setSelectedTier(`${Number(plan.coins || 0)} ZC`);
+        setCongratsOpen(true);
+      } catch (err) {
+        const desc = String(err?.description || err?.message || '').toLowerCase();
+        if (desc.includes('cancel')) return;
+        console.warn('[RZP][SUBSCRIPTION] error:', JSON.stringify(err));
+        if (err?.code === 'RAZORPAY_SDK_MISSING') {
+          Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
+        } else {
+          setPayError(err?.description || err?.message || 'Payment failed');
+        }
+      }
+    } catch (e) {
+      setPayError(e?.message || 'Could not start subscription');
+    } finally {
+      setPayProcessing(false);
+      setProcessingPlanId(null);
+    }
+  }, [userCountry]);
+
+  // Debug: log resolved user country
+  // console.log(userCountry, "countrycountry")
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
@@ -67,7 +141,12 @@ export default function MembershipTierScreen({ navigation }) {
               <Text style={[styles.tierTitle]}>{(pl.billingPeriod ? `${(pl.billingInterval || 1)} ${pl.billingPeriod}` : 'Membership')}</Text>
               <Text style={styles.price}>{(pl.currencyCode || pl.baseCurrency || '')} {pl.amount}</Text>
               <Text style={styles.credits}>{Number(pl.coins || 0).toLocaleString()} ZC credits</Text>
-              <Button title="Subscribe Now" onPress={() => { setSelectedTier(`${Number(pl.coins || 0)} ZC`); setCongratsOpen(true); }} style={{ marginTop: 14 }} />
+              <Button
+                title={processingPlanId === (pl._id) ? 'Processing…' : 'Subscribe Now'}
+                onPress={() => startSubscribe(pl)}
+                disabled={processingPlanId === (pl._id)}
+                style={{ marginTop: 14 }}
+              />
             </View>
           ))
         )}
@@ -80,6 +159,17 @@ export default function MembershipTierScreen({ navigation }) {
         primaryText="Awesome!"
         onPrimary={() => { setCongratsOpen(false); navigation.goBack(); }}
         onRequestClose={() => setCongratsOpen(false)}
+      />
+      <PaymentsRegionModal visible={regionModal} onClose={() => setRegionModal(false)} />
+      <ProcessingPaymentModal visible={payProcessing} />
+      <AppModal
+        visible={!!payError}
+        title="Payment Failed"
+        message={payError || 'Something went wrong while starting payment.'}
+        cancelText="Close"
+        confirmText="Retry"
+        onCancel={() => setPayError(null)}
+        onConfirm={() => { setPayError(null); if (lastPlan) startSubscribe(lastPlan); }}
       />
     </SafeAreaView>
   );

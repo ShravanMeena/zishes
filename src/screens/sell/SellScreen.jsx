@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { Bell } from 'lucide-react-native';
@@ -10,7 +10,7 @@ import BottomSheet from '../../components/common/BottomSheet';
 import SubmissionModal from '../../components/modals/SubmissionModal';
 import { CheckCircle2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadDraft, saveDraftFromStore, clearSubmitState } from '../../store/listingDraft/listingDraftSlice';
+import { loadDraft, saveDraftFromStore, clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute } from '../../store/listingDraft/listingDraftSlice';
 import { publishListing } from '../../store/listingDraft/listingDraftSlice';
 import { BackHandler, Alert } from 'react-native';
 
@@ -22,7 +22,7 @@ import PoliciesStep from './steps/PoliciesStep';
 import ReviewStep from './steps/ReviewStep';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 
-export default function SellScreen({ navigation }) {
+export default function SellScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const loaded = useSelector((s) => s.listingDraft.loaded);
   const isDirty = useSelector((s) => s.listingDraft.isDirty);
@@ -30,6 +30,8 @@ export default function SellScreen({ navigation }) {
   const submitStage = useSelector((s) => s.listingDraft.submitStage);
   const submitProgress = useSelector((s) => s.listingDraft.submitProgress);
   const submitError = useSelector((s) => s.listingDraft.submitError);
+  const pendingLeaveToRoute = useSelector((s) => s.listingDraft.ui.pendingLeaveToRoute);
+  const details = useSelector((s) => s.listingDraft.details);
 
   const steps = useMemo(
     () => [
@@ -46,6 +48,10 @@ export default function SellScreen({ navigation }) {
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const [draftOpen, setDraftOpen] = useState(false);
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [forceAskName, setForceAskName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [leaveAfterAction, setLeaveAfterAction] = useState(null); // route name to leave to
   // const [congratsOpen, setCongratsOpen] = useState(false);
   const [hideSubmitModal, setHideSubmitModal] = useState(false);
   const routes = steps;
@@ -71,31 +77,49 @@ export default function SellScreen({ navigation }) {
     }
   };
 
-  // Load persisted draft once
+  // Initialize: reset by default; prefill only if draftData is provided
   useEffect(() => {
-    if (!loaded) dispatch(loadDraft());
-  }, [dispatch, loaded]);
+    const draftData = route?.params?.draftData;
+    if (draftData) {
+      dispatch(loadFromDraft(draftData));
+    } else {
+      dispatch(resetDraft());
+    }
+  }, [route?.params?.draftData, dispatch]);
 
   // Intercept Android back to prompt save if there are unsaved changes
   useEffect(() => {
     const onBack = () => {
       if (isDirty) {
-        Alert.alert(
-          'Save your changes?',
-          'You have unsaved changes in your listing. Do you want to save them as a draft before leaving?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Discard', style: 'destructive', onPress: () => navigation.goBack() },
-            { text: 'Save', onPress: async () => { await dispatch(saveDraftFromStore()); Alert.alert('Saved', 'Your draft has been saved.'); navigation.goBack(); } },
-          ]
-        );
+        setLeaveAfterAction('BACK');
+        setForceAskName(!details?.name);
+        setNameInput(details?.name || '');
+        setSavePromptOpen(true);
         return true;
       }
       return false;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
-  }, [isDirty, dispatch, navigation]);
+  }, [isDirty, dispatch, navigation, details?.name]);
+
+  // If tab bar requested leave to a route
+  useEffect(() => {
+    if (pendingLeaveToRoute) {
+      setLeaveAfterAction(pendingLeaveToRoute);
+      setForceAskName(!details?.name);
+      setNameInput(details?.name || '');
+      setSavePromptOpen(true);
+    }
+  }, [pendingLeaveToRoute, details?.name]);
+
+  const handleAfterLeave = (target) => {
+    if (!target) return;
+    if (target === 'BACK') navigation.goBack();
+    else navigation.navigate(target);
+    dispatch(setPendingLeaveRoute(null));
+    setLeaveAfterAction(null);
+  };
 
   // Ensure result modal shows even if user hid while submitting
   useEffect(() => {
@@ -157,7 +181,20 @@ export default function SellScreen({ navigation }) {
         <Button
           title="Save Draft"
           variant="outline"
-          onPress={async () => { await dispatch(saveDraftFromStore()); setDraftOpen(true); }}
+          onPress={() => {
+            const needsName = !details?.name;
+            if (needsName) {
+              setForceAskName(true);
+              setNameInput('');
+              setLeaveAfterAction(null);
+              setSavePromptOpen(true);
+            } else {
+              dispatch(saveCurrentAsNewDraft({ name: details.name }))
+                .unwrap()
+                .then(() => setDraftOpen(true))
+                .catch(() => {});
+            }
+          }}
           style={{ flex: 1, marginRight: 10 }}
         />
         <Button title={isReview ? "Let's Zish It !!" : 'Next'} onPress={onPrimary} style={{ flex: 1 }} disabled={submitting} />
@@ -172,8 +209,8 @@ export default function SellScreen({ navigation }) {
             Your listing has been saved. You can return and finish anytime.
           </Text>
           <View style={{ flexDirection: 'row', marginTop: 14 }}>
-            <Button title="Keep Editing" variant="outline" onPress={() => setDraftOpen(false)} style={{ flex: 1, marginRight: 8 }} />
-            <Button title="Go to Profile" onPress={() => { setDraftOpen(false); navigation.navigate('Profile', { screen: 'MyListings' }); }} style={{ flex: 1 }} />
+            <Button title="Keep Editing" variant="outline" onPress={() => setDraftOpen(false)} fullWidth={false} style={{ flex: 1, marginRight: 8 }} />
+            <Button title="Go to Drafts" onPress={() => { setDraftOpen(false); navigation.navigate('Profile', { screen: 'Drafts' }); }} fullWidth={false} style={{ flex: 1 }} />
           </View>
         </View>
       </BottomSheet>
@@ -196,6 +233,52 @@ export default function SellScreen({ navigation }) {
         }}
         primaryText={submitStage === 'success' ? 'Go to My Listings' : undefined}
       />
+
+      {/* Save/Leave Prompt */}
+      <BottomSheet visible={savePromptOpen} onClose={() => { setSavePromptOpen(false); dispatch(setPendingLeaveRoute(null)); }} full={false}>
+        <View style={{ padding: 4 }}>
+          <Text style={{ color: colors.white, fontWeight: '800', fontSize: 18, textAlign: 'center' }}>Save your progress?</Text>
+          <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
+            You have unsaved changes. Save as a draft or discard.
+          </Text>
+          {forceAskName ? (
+            <View style={{ marginTop: 12 }}>
+              <Text style={{ color: colors.white, fontWeight: '700', marginBottom: 6 }}>Item Name (required)</Text>
+              <TextInput
+                placeholder="Enter item name"
+                placeholderTextColor={colors.textSecondary}
+                style={{ backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 12, color: colors.white }}
+                value={nameInput}
+                onChangeText={setNameInput}
+                // Do not autoFocus to avoid immediate keyboard overlay on open
+              />
+            </View>
+          ) : null}
+          <View style={{ flexDirection: 'row', marginTop: 14 }}>
+            <Button
+              title="Discard"
+              variant="outline"
+              onPress={() => { setSavePromptOpen(false); handleAfterLeave(leaveAfterAction); }}
+              fullWidth={false}
+              style={{ flex: 1, marginRight: 8 }}
+            />
+            <Button
+              title="Save & Continue"
+              onPress={async () => {
+                const name = forceAskName ? (nameInput || '').trim() : (details?.name || '').trim();
+                if (!name) return; // keep the modal open until name provided
+                try {
+                  await dispatch(saveCurrentAsNewDraft({ name })).unwrap();
+                  setSavePromptOpen(false);
+                  handleAfterLeave(leaveAfterAction);
+                } catch (_) { /* ignore */ }
+              }}
+              fullWidth={false}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   );
 }

@@ -23,11 +23,14 @@ import { getProductById } from "../../services/products";
 import AppModal from "../../components/common/AppModal";
 import tournaments from "../../services/tournaments";
 import { fetchMyWallet } from "../../store/wallet/walletSlice";
+import users from '../../services/users';
+import { setUser } from '../../store/auth/authSlice';
 
 export default function HomeScreen({ navigation }) {
   const { query, setQuery, selected, setSelected, categories, items, refreshing, refresh, loaded, applyFilters } = useHome();
   const dispatch = useDispatch();
   const token = useSelector((s) => s.auth.token);
+  const user = useSelector((s) => s.auth.user);
   const [shareItem, setShareItem] = useState(null);
   const [rulesItem, setRulesItem] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -57,6 +60,25 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       fetchWallet();
+      // Background check: ensure user profile exists and has country; update if changed
+      let cancelled = false;
+      (async () => {
+        if (!token) return;
+        try {
+          const me = await users.getMe();
+          const doc = me?.data || me;
+          if (cancelled) return;
+          if (!doc?.address?.country) {
+            // Update store and let RootNavigator switch to CountrySelect
+            try { dispatch(setUser(doc)); } catch {}
+            return;
+          }
+          if (!user || user?.address?.country !== doc.address.country) {
+            try { dispatch(setUser(doc)); } catch {}
+          }
+        } catch {}
+      })();
+      return () => { cancelled = true; };
     }, [fetchWallet])
   );
 

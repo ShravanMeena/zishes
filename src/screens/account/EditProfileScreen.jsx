@@ -22,6 +22,7 @@ export default function EditProfileScreen({ navigation, route }) {
   const [email, setEmail] = useState(user?.email || '');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [avatarUri, setAvatarUri] = useState(user?.avatar || user?.avatarUrl || user?.image || null);
+  const [country, setCountry] = useState(user?.address?.country || '');
   const ensureGallery = useGalleryPermission();
   const ensureCamera = useCameraPermission();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -33,16 +34,22 @@ export default function EditProfileScreen({ navigation, route }) {
       setName(doc?.username || '');
       setEmail(doc?.email || '');
       setAvatarUri(doc?.avatar || doc?.avatarUrl || doc?.image || null);
+      // Apply selectedCountry if passed back from picker
+      const picked = route?.params?.selectedCountry;
+      if (picked) setCountry(picked);
+      else setCountry(doc?.address?.country || '');
     });
     return sub;
   }, [navigation, user, route?.params?.selectedCountry]);
 
   const save = async () => {
     try {
-      // Only allow updating name here
+      // Allow updating name and country
       const patch = {};
       if (name && name !== user?.username) patch.username = name;
-      if (!patch.username) {
+      const currentCountry = user?.address?.country || '';
+      if (country && country !== currentCountry) patch.address = { ...(user?.address || {}), country };
+      if (Object.keys(patch).length === 0) {
         navigation.goBack();
         return;
       }
@@ -125,7 +132,7 @@ export default function EditProfileScreen({ navigation, route }) {
             <TouchableOpacity style={styles.changeBtn} onPress={() => setPickerOpen(true)}><Text style={styles.changeTxt}>Change Photo</Text></TouchableOpacity>
           </View>
 
-          {/* Form Card (only name; email is read-only) */}
+          {/* Form Card */}
           <View style={styles.cardForm}>
             <Label>Full Name</Label>
             <Input value={name} onChangeText={setName} placeholder="Your name" />
@@ -134,6 +141,18 @@ export default function EditProfileScreen({ navigation, route }) {
             <View style={[styles.input, { justifyContent: 'center' }]}>
               <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>{email || '—'}</Text>
             </View>
+
+            <Label>Country</Label>
+            <TouchableOpacity
+              style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+              onPress={() => navigation.navigate('CountrySelect', { mode: 'pick' })}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: country ? colors.white : colors.textSecondary, fontWeight: '600' }}>
+                {country || 'Select your country'}
+              </Text>
+              <Text style={{ color: colors.textSecondary }}>Change</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Actions */}

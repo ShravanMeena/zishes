@@ -4,9 +4,13 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, User, CreditCard, Heart, ShoppingBag } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { useSelector, useDispatch } from 'react-redux';
+import { setPendingLeaveRoute } from '../store/listingDraft/listingDraftSlice';
 
 export default function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
+  const isDirty = useSelector((s) => s.listingDraft.isDirty);
+  const dispatch = useDispatch();
 
   // Respect per-screen request to hide tab bar (e.g., Unity)
   const shouldHide = useMemo(() => {
@@ -32,6 +36,16 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
   const height = 58 + insets.bottom;
 
   const onPress = (route, isFocused) => {
+    const currentRoute = state.routes[state.index];
+    // If leaving Sell with unsaved changes, prompt there and block navigation
+    if (currentRoute?.name === 'Sell' && route.name !== 'Sell' && isDirty) {
+      const evt = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+      if (!evt.defaultPrevented) {
+        // prevent switch and ask Sell screen to show save modal and then navigate
+        dispatch(setPendingLeaveRoute(route.name));
+      }
+      return;
+    }
     const event = navigation.emit({
       type: 'tabPress',
       target: route.key,
@@ -128,4 +142,3 @@ const styles = StyleSheet.create({
   },
   sellText: { color: colors.white, fontWeight: '900', letterSpacing: 1 },
 });
-

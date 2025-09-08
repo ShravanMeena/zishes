@@ -66,28 +66,37 @@ export default function MyListingsScreen({ navigation }) {
     <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Home', { screen: 'Details', params: { item } })} style={styles.card}>
       <Image source={{ uri: item.image }} style={styles.thumb} />
       <View style={{ flex: 1 }}>
-        {/* Chips row aligned to right to avoid overlap */}
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-          <Chip label={statusLabel(item)} type={isCompleted(item) ? 'danger' : 'info'} />
-          <TouchableOpacity onPress={() => openEdit(item)}>
-            <Chip label="Edit" type="accent" style={{ marginLeft: 8 }} />
-          </TouchableOpacity>
+        <View style={styles.rowBetween}>
+          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Chip label={statusLabel(item)} type={isCompleted(item) ? 'danger' : 'info'} />
+            <TouchableOpacity onPress={() => openEdit(item)}>
+              <Chip label="Edit" type="accent" style={{ marginLeft: 8 }} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Title and price on their own lines with shrink to prevent overlap */}
-        <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.price}>{formatINR(item?.raw?.price)}</Text>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-          <Chip label="Extend Game Play" />
+        <View style={styles.rowBetween}>
+          <Text style={styles.price}>{formatINR(item?.raw?.price)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Clock size={14} color={colors.textSecondary} />
+            <Text style={styles.time}>{'  '}{timeLeft(item)}</Text>
+          </View>
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-          <Clock size={14} color={colors.textSecondary} />
-          <Text style={styles.time}>{'  '}{timeLeft(item)}</Text>
-        </View>
         <Text style={styles.progressTxt}>{`${item.playsCompleted}/${item.playsTotal} Gameplays`}</Text>
         <ProgressBar value={safeProgress(item)} />
+
+        <View style={[styles.rowBetween, { marginTop: 10 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* Future: add Extend Game Play CTA */}
+            {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
+              <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })}>
+                <Chip label="Upload Proof" type="accent" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -177,13 +186,14 @@ const styles = StyleSheet.create({
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
 
   card: { flexDirection: 'row', backgroundColor: '#2B2F39', borderRadius: 18, borderWidth: 1, borderColor: '#343B49', padding: 12 },
-  thumb: { width: 70, height: 70, borderRadius: 10, marginRight: 12, backgroundColor: '#222' },
-  title: { color: colors.white, fontWeight: '800', fontSize: 18, marginTop: 8 },
+  thumb: { width: 80, height: 80, borderRadius: 10, marginRight: 12, backgroundColor: '#222' },
+  title: { color: colors.white, fontWeight: '800', fontSize: 16, flexShrink: 1, paddingRight: 8 },
   price: { color: '#27c07d', fontWeight: '800', marginTop: 2 },
   time: { color: colors.textSecondary },
   progressTxt: { color: colors.textSecondary, marginTop: 6, marginBottom: 6 },
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
   chipTxt: { fontWeight: '700' },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   modalCard: { width: '90%', backgroundColor: '#1E2128', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 16 },
   modalTitle: { color: colors.white, fontWeight: '900', fontSize: 18 },

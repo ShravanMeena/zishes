@@ -1,11 +1,13 @@
 import axios from 'axios';
 import { API_BASE } from '../config/api';
+import { attachAuthInterceptors } from './http';
 
-const client = axios.create({ baseURL: API_BASE, timeout: 15000 });
+// Attach auth interceptors so Authorization: Bearer <token> is sent automatically
+const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 15000 }));
 
-async function request(path, { method = 'GET', params } = {}) {
+async function request(path, { method = 'GET', params, headers } = {}) {
   try {
-    const res = await client.request({ url: path, method, params });
+    const res = await client.request({ url: path, method, params, headers });
     return res.data;
   } catch (err) {
     const status = err?.response?.status;

@@ -1,13 +1,38 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, MessageSquare, Share2, MessageCircleQuestion } from 'lucide-react-native';
+import feedbackApi from '../../services/communityFeedback';
+import CongratsModal from '../../components/modals/CongratsModal';
 
 export default function CommunityFeedbackScreen({ navigation }) {
   const [msg, setMsg] = useState('');
   const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [successOpen, setSuccessOpen] = useState(false);
+
+  const isValidEmail = (v) => /.+@.+\..+/.test(String(v || '').trim());
+  const canSubmit = msg.trim().length > 0 && isValidEmail(email) && !submitting;
+
+  const submit = async () => {
+    setError(null);
+    if (!msg.trim()) { setError('Please enter a message.'); return; }
+    if (!isValidEmail(email)) { setError('Please enter a valid email.'); return; }
+    try {
+      setSubmitting(true);
+      await feedbackApi.createFeedback({ message: msg.trim(), email: email.trim() });
+      setSuccessOpen(true);
+      setMsg('');
+      setEmail('');
+    } catch (e) {
+      setError(e?.message || 'Failed to submit feedback');
+    } finally {
+      setSubmitting(false);
+    }
+  };
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -21,9 +46,18 @@ export default function CommunityFeedbackScreen({ navigation }) {
           <Text style={styles.cardTitle}>Share Your Feedback</Text>
           <Text style={styles.label}>Your Message</Text>
           <TextInput value={msg} onChangeText={setMsg} placeholder="Tell us what you think or suggest improvements..." placeholderTextColor={colors.textSecondary} multiline numberOfLines={4} style={[styles.input, { height: 120, textAlignVertical: 'top' }]} />
-          <Text style={styles.label}>Your Email (Optional)</Text>
-          <TextInput value={email} onChangeText={setEmail} placeholder="email@example.com" placeholderTextColor={colors.textSecondary} style={styles.input} />
-          <TouchableOpacity style={[styles.btn, styles.primary]}><Text style={styles.btnTxt}>Submit Feedback</Text></TouchableOpacity>
+          <Text style={styles.label}>Your Email</Text>
+          <TextInput value={email} onChangeText={setEmail} placeholder="email@example.com" placeholderTextColor={colors.textSecondary} style={styles.input} autoCapitalize="none" keyboardType="email-address" />
+          {error ? <Text style={styles.errorTxt}>{error}</Text> : null}
+          {submitting ? (
+            <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={{ color: colors.textSecondary }}>Submitting...</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity style={[styles.btn, styles.primary, !canSubmit && { opacity: 0.6 }]} disabled={!canSubmit} onPress={submit}>
+            <Text style={styles.btnTxt}>{submitting ? 'Submitting...' : 'Submit Feedback'}</Text>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.sectionTitle}>Connect with Our Community</Text>
@@ -32,6 +66,15 @@ export default function CommunityFeedbackScreen({ navigation }) {
         <ActionRow icon={<Share2 size={18} color={colors.white} />} title="Follow on Social Media" onPress={() => Linking.openURL('https://example.com/social')} />
         <ActionRow icon={<MessageCircleQuestion size={18} color={colors.white} />} title="Read FAQs" onPress={() => Linking.openURL('https://example.com/faq')} />
       </KeyboardAwareScrollView>
+      <CongratsModal
+        visible={successOpen}
+        title="Feedback Sent"
+        message="Thank you for helping improve the experience. We appreciate your input!"
+        primaryText="Done"
+        onPrimary={() => { setSuccessOpen(false); navigation.goBack(); }}
+        onRequestClose={() => setSuccessOpen(false)}
+      />
+
     </SafeAreaView>
   );
 }
@@ -65,4 +108,5 @@ const styles = StyleSheet.create({
   rowLeft: { flexDirection: 'row', alignItems: 'center' },
   rowIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#312B42', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   rowTitle: { color: colors.white, fontWeight: '700' },
+  errorTxt: { color: '#FF7A7A', marginTop: 8 },
 });

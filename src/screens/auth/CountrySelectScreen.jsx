@@ -5,7 +5,6 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { colors } from '../../theme/colors';
 import { Globe, Check } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { setCountry } from '../../store/app/appSlice';
 import { completeVerification, setUser } from '../../store/auth/authSlice';
 import { createUser as createZishesUser, updateMe as updateCurrentUser } from '../../services/users';
 import { getAccessToken } from '../../services/tokenManager';
@@ -48,31 +47,25 @@ export default function CountrySelectScreen({ navigation, route }) {
       navigation.goBack();
       return;
     }
-    // Default onboarding flow: create user with selected country
+    // Default onboarding flow: ensure user exists, then update country on backend and store
     try {
-      if (email) {
-        // Ensure we have a token (fallback to tokenManager if needed)
-        let bearer = token;
-        if (!bearer) {
-          try { bearer = await getAccessToken(); } catch {}
-        }
-        console.log('[CountrySelect] Using token for createUser:', bearer);
-        // Try create first time
-        const created = await createZishesUser({ email, address: { country: selected }, token: bearer });
-        if (created) dispatch(setUser(created?.data || created));
-      }
-    } catch (err) {
-      console.warn('[CountrySelect] createUser error:', err?.status, err?.message);
-      // If already exists or conflict, try patching country only
-      if (err?.status === 409 || /duplicate/i.test(err?.message || '')) {
-        try {
-          // Update current user on main API
+      // First, try patching country (works if user already exists)
+      try {
+        const updated = await updateCurrentUser({ address: { country: selected } });
+        if (updated) dispatch(setUser(updated?.data || updated));
+      } catch (err) {
+        // If user doesn't exist yet, create then patch
+        if (email) {
+          let bearer = token;
+          if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
+          await createZishesUser({ email, token: bearer });
           const updated = await updateCurrentUser({ address: { country: selected } });
           if (updated) dispatch(setUser(updated?.data || updated));
-        } catch (_) {}
+        }
       }
+    } catch (err) {
+      console.warn('[CountrySelect] set country error:', err?.status, err?.message);
     } finally {
-      await dispatch(setCountry(selected));
       await dispatch(completeVerification());
     }
   };

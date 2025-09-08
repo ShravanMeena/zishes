@@ -38,8 +38,8 @@ export default function DetailsStep() {
       <FieldLabel>Quantity</FieldLabel>
       <Input placeholder="Number of items" keyboardType="numeric" value={form.qty} onChangeText={(t)=>set('qty', t)} />
 
-      <FieldLabel>Product ID</FieldLabel>
-      <Input placeholder="Product ID" value={form.productId} onChangeText={(t)=>set('productId', t)} />
+      {/* <FieldLabel>Product ID</FieldLabel>
+      <Input placeholder="Product ID" value={form.productId} onChangeText={(t)=>set('productId', t)} /> */}
       {/* Dropdowns */}
       <PickerModal
         visible={showCat}

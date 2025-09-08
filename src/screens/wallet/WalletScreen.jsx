@@ -1,18 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import { Bell } from 'lucide-react-native';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import walletService from '../../services/wallet';
 import CongratsModal from '../../components/modals/CongratsModal';
 import plansService from '../../services/plans';
 import ledgerService from '../../services/ledger';
+import paymentsService from '../../services/payments';
+import { openRazorpayCheckout } from '../../utils/razorpay';
+import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
+import AppModal from '../../components/common/AppModal';
+import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
+import { fetchMyWallet } from '../../store/wallet/walletSlice';
 
 export default function WalletScreen({ navigation }) {
+  const dispatch = useDispatch();
   const token = useSelector((s) => s.auth.token);
+  const country = useSelector((s) => s.auth.user?.address?.country);
   const [wallet, setWallet] = useState({ availableZishCoins: 0, withdrawalBalance: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -26,6 +34,11 @@ export default function WalletScreen({ navigation }) {
   const [ledger, setLedger] = useState([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState(null);
+  const [processingPlanId, setProcessingPlanId] = useState(null);
+  const [regionModal, setRegionModal] = useState(false);
+  const [payProcessing, setPayProcessing] = useState(false);
+  const [payError, setPayError] = useState(null);
+  const [lastPlan, setLastPlan] = useState(null);
 
   const fetchWallet = useCallback(async () => {
     if (!token) {
@@ -151,6 +164,70 @@ export default function WalletScreen({ navigation }) {
     }));
   }, [ledger]);
 
+  const startTopup = useCallback(async (plan) => {
+    try {
+      setLastPlan(plan);
+      if (!country || String(country).toLowerCase() !== 'india') {
+        setRegionModal(true);
+        return;
+      }
+      if (!plan?._id) throw new Error('Invalid plan');
+      setProcessingPlanId(plan._id);
+      setPayProcessing(true);
+      // Fetch public key and create an order
+      const keyRes = await paymentsService.getRazorpayKey();
+      const { keyId } = keyRes || {};
+      if (!keyId) throw new Error('Missing Razorpay key');
+      const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
+      const { order } = orderRes || {};
+      if (!order?.id) throw new Error('Failed to create order');
+
+      const options = {
+        key: keyId,
+        name: 'Zishes',
+        description: 'Coins Topup',
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency || plan.currencyCode || 'INR',
+        prefill: {
+          // email: user?.email,
+          // contact: user?.phone,
+        },
+        theme: { color: '#6C7BFF' },
+        retry: { enabled: true, max_count: 2 },
+        external: { wallets: ['paytm', 'phonepe'] },
+        notes: { planId: plan._id },
+      };
+
+      try {
+        setPayProcessing(false);
+        await openRazorpayCheckout(options);
+        // Backend credits on webhook; refresh wallet optimistically
+        try { dispatch(fetchMyWallet()); } catch {}
+        try {
+          const coins = Number(plan?.coins || 0).toLocaleString();
+          setCongratsTitle('Purchase Successful');
+          setCongratsMsg(coins !== '0' ? `Your ${coins} ZishCoins are on the way!` : 'Coins added successfully.');
+          setCongratsOpen(true);
+        } catch {}
+      } catch (err) {
+        const desc = String(err?.description || err?.message || '').toLowerCase();
+        console.warn('[RZP][TOPUP] error:', JSON.stringify(err));
+        if (desc.includes('cancel')) return;
+        if (err?.code === 'RAZORPAY_SDK_MISSING') {
+          Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
+        } else {
+          setPayError(err?.description || err?.message || 'Payment failed');
+        }
+      }
+    } catch (e) {
+      setPayError(e?.message || 'Could not start topup');
+    } finally {
+      setPayProcessing(false);
+      setProcessingPlanId(null);
+    }
+  }, [country, dispatch]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -230,13 +307,9 @@ export default function WalletScreen({ navigation }) {
               <Text style={styles.packQty}>{Number(p.coins || 0).toLocaleString()} Coins</Text>
               <Text style={styles.packPrice}>{(p.currencyCode || p.baseCurrency || '')} {p.amount}</Text>
               <Button
-                title="Buy Now"
-                onPress={() => {
-                  setSelectedPack(p);
-                  setCongratsTitle('Purchase Successful');
-                  setCongratsMsg(`${Number(p.coins || 0).toLocaleString()} ZishCoins added successfully!`);
-                  setCongratsOpen(true);
-                }}
+                title={processingPlanId === (p._id) ? 'Processing…' : 'Buy Now'}
+                onPress={() => startTopup(p)}
+                disabled={processingPlanId === (p._id)}
                 style={{ marginTop: 10 }}
               />
             </View>
@@ -321,6 +394,17 @@ export default function WalletScreen({ navigation }) {
         onPrimary={() => { setCongratsOpen(false); setSelectedPack(null); }}
         onRequestClose={() => setCongratsOpen(false)}
       />
+      <PaymentsRegionModal visible={regionModal} onClose={() => setRegionModal(false)} />
+      <AppModal
+        visible={!!payError}
+        title="Payment Failed"
+        message={payError || 'Something went wrong while starting payment.'}
+        cancelText="Close"
+        confirmText="Retry"
+        onCancel={() => setPayError(null)}
+        onConfirm={() => { setPayError(null); if (lastPlan) startTopup(lastPlan); }}
+      />
+      <ProcessingPaymentModal visible={payProcessing} />
     </SafeAreaView>
   );
 }
