@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { api } from '../../services/api';
 import { createUser as createZishesUser } from '../../services/users';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { Buffer } from 'buffer';
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_KEY = 'refresh_token';
@@ -65,22 +66,27 @@ export const signup = createAsyncThunk('auth/signup', async ({ email, password }
 export const authenticateWithGoogle = createAsyncThunk('auth/googleSignIn', async (_, { rejectWithValue }) => {
   try {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const userInfo = await GoogleSignin.signIn();
+    const signInResult = await GoogleSignin.signIn();
+    const googlePayload = signInResult?.data ? signInResult.data : signInResult;
+    const googleUser = googlePayload?.user || signInResult?.user || null;
+
     const tokenBundle = Platform.OS === 'android'
       ? await GoogleSignin.getTokens().catch(() => ({}))
       : {};
-      console.log(userInfo,"userInfouserInfouserInfo")
-    let idToken = userInfo?.idToken || tokenBundle?.idToken;
-    let accessToken = tokenBundle?.accessToken || null;
 
-    if (!idToken) {
-      try {
-        const refreshed = await GoogleSignin.getTokens();
-        idToken = refreshed?.idToken || idToken;
-        accessToken = refreshed?.accessToken || accessToken;
-      } catch (tokenErr) {
-        // eslint-disable-next-line no-console
-        console.warn('[Auth] getTokens fallback failed:', tokenErr?.message || tokenErr);
+    let idToken = googlePayload?.idToken || tokenBundle?.idToken;
+    let accessToken = googlePayload?.accessToken || tokenBundle?.accessToken || null;
+
+    if (!idToken || !accessToken) {
+      if (Platform.OS === 'android') {
+        try {
+          const refreshed = await GoogleSignin.getTokens();
+          idToken = refreshed?.idToken || idToken;
+          accessToken = refreshed?.accessToken || accessToken;
+        } catch (tokenErr) {
+          // eslint-disable-next-line no-console
+          console.warn('[Auth] getTokens fallback failed:', tokenErr?.message || tokenErr);
+        }
       }
     }
 
@@ -88,35 +94,139 @@ export const authenticateWithGoogle = createAsyncThunk('auth/googleSignIn', asyn
       throw new Error('Missing Google ID token');
     }
 
+    if (!accessToken) {
+      throw new Error('Missing Google access token');
+    }
+
+    const decodeJwtPayload = (token) => {
+      if (!token) return null;
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      try {
+        const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+        const json = Buffer.from(padded, 'base64').toString('utf8');
+        return JSON.parse(json);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[Auth] Failed to decode Google ID token payload', err?.message || err);
+        return null;
+      }
+    };
+
+    const claims = decodeJwtPayload(idToken) || {};
+    const normalizedUser = {
+      id: googleUser?.id || claims?.sub || null,
+      email: googleUser?.email || claims?.email || null,
+      name: googleUser?.name || claims?.name || [claims?.given_name, claims?.family_name].filter(Boolean).join(' ') || null,
+      givenName: googleUser?.givenName || claims?.given_name || null,
+      familyName: googleUser?.familyName || claims?.family_name || null,
+      photo: googleUser?.photo || null,
+    };
+
+    const clientType = Platform.OS === 'ios' ? 'ios' : 'android';
+    const summarizeToken = (token) => {
+      if (!token || typeof token !== 'string') return null;
+      if (token.length <= 16) return token;
+      return `${token.slice(0, 8)}…${token.slice(-8)}`;
+    };
+
+    const exchangePayload = {
+      idToken,
+      accessToken,
+      clientType,
+      user: {
+        type: 'google',
+        data: {
+          serverAuthCode: googlePayload?.serverAuthCode || signInResult?.serverAuthCode || null,
+          idToken,
+          accessToken,
+          user: normalizedUser,
+        },
+      },
+    };
+
     try {
-      console.log('[Auth] Google sign-in success', JSON.stringify({
-        idToken,
-        accessToken,
-        user: userInfo || null,
+      console.log('[Auth] Google exchange request', JSON.stringify({
+        clientType,
+        idToken: summarizeToken(idToken),
+        accessToken: summarizeToken(accessToken),
+        user: {
+          ...normalizedUser,
+          photo: normalizedUser.photo ? '[set]' : null,
+        },
+      }));
+    } catch {}
+
+    let exchange;
+    try {
+      exchange = await api.googleSignin(exchangePayload);
+    } catch (apiErr) {
+      const status = apiErr?.status || apiErr?.response?.status || null;
+      const data = apiErr?.data || apiErr?.response?.data || null;
+      try {
+        console.warn('[Auth] Google exchange failed', JSON.stringify({
+          status,
+          message: apiErr?.message || null,
+          data,
+        }));
+      } catch {}
+      throw apiErr;
+    }
+
+    const exchangeData = exchange?.data || exchange || {};
+    const backendAccessToken = exchange?.accessToken || exchangeData?.access_token || exchangeData?.accessToken;
+    const backendRefreshToken = exchange?.refreshToken || exchangeData?.refresh_token || exchangeData?.refreshToken;
+    if (!backendAccessToken) {
+      throw new Error('Missing backend access token');
+    }
+
+    const expiry = exchangeData?.expiry || null;
+    const backendUserId = exchangeData?.user_id || exchangeData?.userId || null;
+    const status = exchangeData?.status || null;
+
+    try {
+      console.log('[Auth] Google exchange success', JSON.stringify({
+        clientType,
+        backendUserId,
+        expiry,
+        status,
+        hasAccessToken: !!backendAccessToken,
+        hasRefreshToken: !!backendRefreshToken,
       }));
     } catch (logErr) {
       // eslint-disable-next-line no-console
-      console.warn('[Auth] Failed logging Google sign-in payload', logErr?.message || logErr);
+      console.warn('[Auth] Failed logging Google exchange payload', logErr?.message || logErr);
     }
 
-    await AsyncStorage.setItem(TOKEN_KEY, idToken);
-    await AsyncStorage.removeItem(REFRESH_KEY);
+    await AsyncStorage.setItem(TOKEN_KEY, backendAccessToken);
+    if (backendRefreshToken) await AsyncStorage.setItem(REFRESH_KEY, backendRefreshToken);
+    else await AsyncStorage.removeItem(REFRESH_KEY);
 
     return {
-      token: idToken,
-      refreshToken: null,
+      token: backendAccessToken,
+      refreshToken: backendRefreshToken || null,
       user: {
-        id: userInfo?.user?.id || null,
-        email: userInfo?.user?.email || null,
-        name: userInfo?.user?.name || null,
-        photo: userInfo?.user?.photo || null,
+        id: backendUserId || normalizedUser.id,
+        email: normalizedUser.email || exchangeData?.email || null,
+        name: normalizedUser.name || exchangeData?.name || null,
+        photo: normalizedUser.photo || null,
         provider: 'google',
-        accessToken,
+        status,
+        expiry,
+        accessToken: backendAccessToken,
       },
-      accessToken,
+      accessToken: backendAccessToken,
     };
   } catch (err) {
     let message = err?.message || 'Google sign-in failed';
+    try {
+      console.warn('[Auth] Google sign-in error details', JSON.stringify({
+        message,
+        code: err?.code || null,
+        stack: err?.stack || null,
+      }));
+    } catch {}
     const code = err?.code;
     if (code === statusCodes.SIGN_IN_CANCELLED) message = 'Google sign-in was cancelled';
     else if (code === statusCodes.IN_PROGRESS) message = 'Google sign-in already in progress';

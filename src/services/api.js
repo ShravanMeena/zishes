@@ -51,6 +51,7 @@ async function parseJsonResponse(res) {
 
 async function postJson(path, body, opts = {}) {
   const token = opts?.token;
+  console.log(opts,"tokentokentoken")
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: {
@@ -79,6 +80,7 @@ export const api = {
   signin: ({ email, password }) => postJson('/auth/signin', { email, password }),
   signup: ({ email, password }) => postJson('/auth/signup', { email, password }),
   verify: (params) => getJson('/auth/verify', params || {}),
+  googleSignin: (payload) => postJson('/auth/google/signin', payload || {}),
   googleCallback: () => `${AUTH_ORIGIN}${GOOGLE_CALLBACK_PATH}`,
   // Users (on auth domain)
   createUser: ({ email, address, token }) => postJson('/users', { email, address }, { token }),

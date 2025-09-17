@@ -82,15 +82,13 @@ export default function CountrySelectScreen({ navigation, route }) {
       if (!bearer) throw new Error('Missing auth token');
       // First, try patching country (works if user already exists)
       try {
-        console.log(bearer,"bearerbearerbearer")
-        console.log(selected,"selectedselectedselected")
+   
         const updated = await updateCurrentUser({ address: { country: selected } }, { token: bearer });
-        console.log(updated)
         if (updated) dispatch(setUser(updated?.data || updated));
       } catch (err) {
         // If user doesn't exist yet, create then patch
         if (email && bearer) {
-          await createZishesUser({ email, token: bearer });
+          // await createZishesUser({ email, token: bearer });
           const updated = await updateCurrentUser({ address: { country: selected } }, { token: bearer });
           if (updated) dispatch(setUser(updated?.data || updated));
         }

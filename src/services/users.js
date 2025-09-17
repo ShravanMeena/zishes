@@ -51,6 +51,8 @@ export async function updateMe(patch = {}, opts = {}) {
   if (!patch || Object.keys(patch).length === 0) {
     throw new Error('No valid fields to update');
   }
+
+  console.log(opts,"opts")
   const supplied = opts?.token;
   let bearer = supplied;
   if (!bearer) {
@@ -63,9 +65,20 @@ export async function updateMe(patch = {}, opts = {}) {
     e.status = 401;
     throw e;
   }
-  const data = await request('/users/me', { method: 'PATCH', data: patch, token: bearer });
-  console.log(data)
-  return data;
+
+  try {
+    const data = await request('/users/me', { method: 'PATCH', data: patch, token: bearer });
+    return data;
+  } catch (err) {
+    const status = err?.status || err?.response?.status || null;
+    const serverData = err?.data || err?.response?.data || null;
+    const message = err?.message || serverData?.message || serverData?.error || 'Update failed';
+    try {
+      // eslint-disable-next-line no-console
+      console.warn('[users.updateMe] failed', JSON.stringify({ status, message, data: serverData }));
+    } catch {}
+    throw err;
+  }
 }
 
 export default { createUser, getMe, updateMe };
