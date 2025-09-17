@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachAuthInterceptors } from './http';
+import { getAccessToken } from './tokenManager';
 import { API_BASE } from '../config/api';
 
 const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 15000 }));
@@ -46,11 +47,24 @@ export async function getMe() {
 }
 
 // PATCH /api/v1/users/me
-export async function updateMe(patch = {}) {
-  if (!patch || (Object.keys(patch).length === 0)) {
+export async function updateMe(patch = {}, opts = {}) {
+  if (!patch || Object.keys(patch).length === 0) {
     throw new Error('No valid fields to update');
   }
-  const data = await request('/users/me', { method: 'PATCH', data: patch });
+  const supplied = opts?.token;
+  let bearer = supplied;
+  if (!bearer) {
+    try {
+      bearer = await getAccessToken();
+    } catch {}
+  }
+  if (!bearer) {
+    const e = new Error('Missing auth token');
+    e.status = 401;
+    throw e;
+  }
+  const data = await request('/users/me', { method: 'PATCH', data: patch, token: bearer });
+  console.log(data)
   return data;
 }
 

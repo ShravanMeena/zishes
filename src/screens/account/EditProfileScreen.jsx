@@ -14,9 +14,10 @@ import users from '../../services/users';
 import { uploadImage } from '../../services/uploads';
 import ImagePickerSheet from '../../components/common/ImagePickerSheet';
 import useCameraPermission from '../../hooks/useCameraPermission';
+import { getAccessToken } from '../../services/tokenManager';
 
 export default function EditProfileScreen({ navigation, route }) {
-  const { user } = useSelector((s) => s.auth);
+  const { user, token } = useSelector((s) => s.auth || {});
   const dispatch = useDispatch();
   const [name, setName] = useState(user?.username || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -53,7 +54,10 @@ export default function EditProfileScreen({ navigation, route }) {
         navigation.goBack();
         return;
       }
-      const updated = await users.updateMe(patch);
+      let bearer = token;
+      if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
+      if (!bearer) throw new Error('Missing auth token');
+      const updated = await users.updateMe(patch, { token: bearer });
       const doc = updated?.data || updated;
       if (doc) {
         dispatch(setUser(doc));
@@ -93,7 +97,10 @@ export default function EditProfileScreen({ navigation, route }) {
         const uploaded = await uploadImage(asset);
         const imageUrl = uploaded?.url;
         if (imageUrl) {
-          const updated = await users.updateMe({ avatar: imageUrl });
+          let bearer = token;
+          if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
+          if (!bearer) throw new Error('Missing auth token');
+          const updated = await users.updateMe({ avatar: imageUrl }, { token: bearer });
           const doc = updated?.data || updated;
           if (doc) dispatch(setUser(doc));
           setAvatarUri(imageUrl);

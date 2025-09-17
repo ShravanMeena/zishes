@@ -5,6 +5,7 @@ import { navigate } from '../navigation/navigationRef';
 import store from '../store';
 import { fetchMyWallet } from '../store/wallet/walletSlice';
 import users from '../services/users';
+import { getAccessToken } from '../services/tokenManager';
 
 // Use a fresh, high-importance channel so heads-up notifications show reliably
 const CHANNEL_ID = 'zishes_general_high';
@@ -73,7 +74,9 @@ export async function setupNotificationHandlers() {
           device: Platform.OS,
           devicePlatform: (Platform.OS || '').toUpperCase(),
         };
-        const res = await users.updateMe(payload);
+        const bearer = await getAccessToken();
+        if (!bearer) return;
+        const res = await users.updateMe(payload, { token: bearer });
         // eslint-disable-next-line no-console
         console.log('[Push] onTokenRefresh updated backend:', JSON.stringify(res));
       } catch (e) {
@@ -108,7 +111,9 @@ export async function enablePushAfterLogin() {
         device: Platform.OS,
         devicePlatform: (Platform.OS || '').toUpperCase(),
       };
-      const res = await users.updateMe(payload);
+      const bearer = await getAccessToken();
+      if (!bearer) return;
+      const res = await users.updateMe(payload, { token: bearer });
       // eslint-disable-next-line no-console
       console.log('[Push] Updated FCM on backend:', JSON.stringify(res));
     } catch (e) {

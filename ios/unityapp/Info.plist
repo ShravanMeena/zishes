@@ -130,12 +130,23 @@
 				<string>razorpay</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.882224850123-ns3924j48sg494aevqo05u1iehtl1ikc</string>
+			</array>
+		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>882224850123-ns3924j48sg494aevqo05u1iehtl1ikc.apps.googleusercontent.com</string>
 
 	<!-- Allow opening UPI and wallet apps from Razorpay (UPI Intent on iOS) -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
-	
+		<string>google</string>
+		<string>com.googleusercontent.apps.882224850123-ns3924j48sg494aevqo05u1iehtl1ikc</string>
 	</array>
 </dict>
 </plist>

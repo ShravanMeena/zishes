@@ -2,4 +2,5 @@
     <string name="app_name">zishes</string>
     <string name="game_view_content_description">Game view</string>
     <string name="default_notification_channel_id">default</string>
+    <string name="default_web_client_id">882224850123-lugva9u6mm3bnhvb9jmjqnq30a7i9pcg.apps.googleusercontent.com</string>
 </resources>

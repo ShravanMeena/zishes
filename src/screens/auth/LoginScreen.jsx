@@ -4,14 +4,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Platform, KeyboardAvoidingView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useDispatch, useSelector } from 'react-redux';
-import { login } from "../../store/auth/authSlice";
+import { authenticateWithGoogle, login } from "../../store/auth/authSlice";
 import { colors } from "../../theme/colors";
 import { ChevronLeft, Eye, EyeOff, Chrome, Apple } from 'lucide-react-native';
 import Button from "../../components/ui/Button";
 
 export default function LoginScreen({ navigation }) {
   const dispatch = useDispatch();
-  const { status, error } = useSelector((s) => s.auth);
+  const { status, error, currentAuthMethod } = useSelector((s) => s.auth);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
@@ -20,6 +20,16 @@ export default function LoginScreen({ navigation }) {
   const onSubmit = () => {
     dispatch(login({ email, password }));
   };
+
+  const onGoogleSignIn = () => {
+    if (status === 'loading' && currentAuthMethod && currentAuthMethod !== 'google') {
+      return;
+    }
+    dispatch(authenticateWithGoogle());
+  };
+
+  const isPasswordLoading = status === 'loading' && currentAuthMethod === 'password';
+  const isGoogleLoading = status === 'loading' && currentAuthMethod === 'google';
 
   return (
     <SafeAreaView style={styles.container} edges={['top','bottom']}>
@@ -74,8 +84,9 @@ export default function LoginScreen({ navigation }) {
 
         {error ? <Text style={styles.error}>{String(error)}</Text> : null}
         <Button
-          title={status === 'loading' ? 'Signing in...' : 'Sign In'}
-          loading={status === 'loading'}
+          title={isPasswordLoading ? 'Signing in...' : 'Sign In'}
+          loading={isPasswordLoading}
+          disabled={isGoogleLoading}
           onPress={onSubmit}
           style={{ marginTop: 16, marginBottom: 16 }}
         />
@@ -86,7 +97,14 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.line} />
         </View>
 
-        <Button variant="outline" title="Continue with Google" left={<Chrome size={18} color={colors.white} />} />
+        <Button
+          variant="outline"
+          title="Continue with Google"
+          left={<Chrome size={18} color={colors.white} />}
+          onPress={onGoogleSignIn}
+          loading={isGoogleLoading}
+          disabled={isPasswordLoading}
+        />
         <Button variant="outline" title="Continue with Apple" left={<Apple size={18} color={colors.white} />} style={{ marginTop: 10 }} />
       </View>
       </KeyboardAwareScrollView>

@@ -6,6 +6,7 @@ import store from './src/store';
 import RootNavigator from "./src/navigation/RootNavigator";
 import { setupNotificationHandlers, enablePushAfterLogin } from './src/notifications';
 import { useSelector } from 'react-redux';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 function AppContent() {
   const { token } = useSelector((s) => s.auth);
@@ -25,6 +26,14 @@ function AppContent() {
 }
 
 export default function App() {
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: '882224850123-lugva9u6mm3bnhvb9jmjqnq30a7i9pcg.apps.googleusercontent.com',
+      iosClientId: '882224850123-ns3924j48sg494aevqo05u1iehtl1ikc.apps.googleusercontent.com',
+      offlineAccess: true,
+    });
+  }, []);
+
   return (
     <Provider store={store}>
       <SafeAreaProvider>

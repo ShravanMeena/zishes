@@ -77,17 +77,21 @@ export default function CountrySelectScreen({ navigation, route }) {
     }
     // Default onboarding flow: ensure user exists, then update country on backend and store
     try {
+      let bearer = token;
+      if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
+      if (!bearer) throw new Error('Missing auth token');
       // First, try patching country (works if user already exists)
       try {
-        const updated = await updateCurrentUser({ address: { country: selected } });
+        console.log(bearer,"bearerbearerbearer")
+        console.log(selected,"selectedselectedselected")
+        const updated = await updateCurrentUser({ address: { country: selected } }, { token: bearer });
+        console.log(updated)
         if (updated) dispatch(setUser(updated?.data || updated));
       } catch (err) {
         // If user doesn't exist yet, create then patch
-        if (email) {
-          let bearer = token;
-          if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
+        if (email && bearer) {
           await createZishesUser({ email, token: bearer });
-          const updated = await updateCurrentUser({ address: { country: selected } });
+          const updated = await updateCurrentUser({ address: { country: selected } }, { token: bearer });
           if (updated) dispatch(setUser(updated?.data || updated));
         }
       }
@@ -108,40 +112,40 @@ export default function CountrySelectScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
-      <KeyboardAwareScrollView enableOnAndroid keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120 }}>
-        <View style={styles.header}><Text style={styles.headerTitle}>Select Your Country</Text></View>
-        <View style={{ padding: 20 }}>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search for a country..."
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-          />
-          <Text style={{ color: colors.textSecondary, marginVertical: 8 }}>Tap to choose your country of play.</Text>
-          <TouchableOpacity onPress={detect} style={[styles.detectBtn, detecting && { opacity: 0.7 }]}> 
-            {detecting ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={[styles.detectText, { marginLeft: 8 }]}>Detecting…</Text>
-              </View>
-            ) : (
-              <Text style={styles.detectText}>Use current location</Text>
+      <View style={styles.header}><Text style={styles.headerTitle}>Select Your Country</Text></View>
+      <FlatList
+        data={list}
+        renderItem={renderItem}
+        keyExtractor={(it) => it}
+        numColumns={2}
+        columnWrapperStyle={{ justifyContent: 'space-between', marginBottom: 10 }}
+        contentContainerStyle={{ paddingVertical: 12, paddingBottom: 120, paddingHorizontal: 20 }}
+        ListHeaderComponent={(
+          <View style={{ marginBottom: 16 }}>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search for a country..."
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+            />
+            <Text style={{ color: colors.textSecondary, marginVertical: 8 }}>Tap to choose your country of play.</Text>
+            <TouchableOpacity onPress={detect} style={[styles.detectBtn, detecting && { opacity: 0.7 }]}> 
+              {detecting ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={colors.accent} />
+                  <Text style={[styles.detectText, { marginLeft: 8 }]}>Detecting…</Text>
+                </View>
+              ) : (
+                <Text style={styles.detectText}>Use current location</Text>
+              )}
+            </TouchableOpacity>
+            {!!detectedLabel && (
+              <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Detected: {detectedLabel}</Text>
             )}
-          </TouchableOpacity>
-          {!!detectedLabel && (
-            <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Detected: {detectedLabel}</Text>
-          )}
-          <FlatList
-            data={list}
-            renderItem={renderItem}
-            keyExtractor={(it) => it}
-            numColumns={2}
-            columnWrapperStyle={{ justifyContent: 'space-between', marginBottom: 10 }}
-            contentContainerStyle={{ paddingVertical: 12, paddingBottom: 0 }}
-          />
-        </View>
-      </KeyboardAwareScrollView>
+          </View>
+        )}
+      />
       <View style={styles.bottomBar}>
         <Button title="Continue" onPress={onContinue} disabled={!hasSelection} />
       </View>

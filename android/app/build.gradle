@@ -105,10 +105,20 @@ android {
     }
 }
 
+repositories {
+    flatDir {
+        dirs "${project(':unityLibrary').projectDir}/libs"
+    }
+    google()
+    mavenCentral()
+    maven { url 'https://storage.googleapis.com/notifee-sdk/maven' }
+}
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:flipper-integration")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

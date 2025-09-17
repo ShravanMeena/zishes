@@ -3,6 +3,7 @@
 #import <React/RCTBundleURLProvider.h>
 // Ensure Firebase default app is configured on iOS
 #import <FirebaseCore/FirebaseCore.h>
+#import <GoogleSignIn/GoogleSignIn.h>
 
 @implementation AppDelegate
 
@@ -19,6 +20,13 @@
   }
 
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
+}
+
+- (BOOL)application:(UIApplication *)application
+            openURL:(NSURL *)url
+            options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options
+{
+  return [GIDSignIn.sharedInstance handleURL:url];
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

@@ -191,6 +191,7 @@ export default function HomeScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         />
       )}
+
       <ShareSheet
         visible={!!shareItem}
         onClose={() => setShareItem(null)}

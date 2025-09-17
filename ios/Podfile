@@ -1,3 +1,7 @@
+# Ensure CocoaPods runs with UTF-8 locale to avoid encoding errors in unicode_normalize
+ENV['LANG'] = 'en_US.UTF-8'
+ENV['LC_ALL'] = 'en_US.UTF-8'
+
 # Resolve react_native_pods.rb with node to allow for hoisting
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
