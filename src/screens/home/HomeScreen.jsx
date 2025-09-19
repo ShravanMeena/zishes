@@ -1,8 +1,8 @@
 // src/screens/HomeScreen.jsx
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, RefreshControl, DeviceEventEmitter, Image } from "react-native";
+import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, RefreshControl, DeviceEventEmitter, Image, Alert } from "react-native";
 import { useFocusEffect } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from "../../theme/colors";
 import CategoryChips from "../../components/common/CategoryChips";
 import GameCard from "../../components/cards/GameCard";
@@ -26,6 +26,7 @@ import tournaments from "../../services/tournaments";
 import { fetchMyWallet } from "../../store/wallet/walletSlice";
 import users from '../../services/users';
 import { setUser } from '../../store/auth/authSlice';
+import UnityScreenOld from "../../../UnityScreenOld";
 
 export default function HomeScreen({ navigation }) {
   const { query, setQuery, selected, setSelected, categories, items, refreshing, refresh, loaded, applyFilters } = useHome();
@@ -47,6 +48,10 @@ export default function HomeScreen({ navigation }) {
   const [alreadyMsg, setAlreadyMsg] = useState('');
   const [joining, setJoining] = useState(false);
   const now = useNow(1000);
+  const insets = useSafeAreaInsets();
+
+  const tabBarOffset = 58 + insets.bottom;
+  const listBottomPadding = tabBarOffset + 24;
 
   const fetchWallet = useCallback(async () => {
     if (!token) return;
@@ -172,7 +177,7 @@ export default function HomeScreen({ navigation }) {
           data={items}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingVertical: 12, flexGrow: 1 }}
+          contentContainerStyle={{ paddingVertical: 12, flexGrow: 1, paddingBottom: listBottomPadding }}
           ListEmptyComponent={<EmptyState title="No results found" description="Try adjusting your search or filters." />}
           showsVerticalScrollIndicator={false}
           initialNumToRender={6}
@@ -187,7 +192,7 @@ export default function HomeScreen({ navigation }) {
           data={[1,2,3,4,5,6]}
           keyExtractor={(i)=>String(i)}
           renderItem={() => <GameCardSkeleton />}
-          contentContainerStyle={{ paddingVertical: 12 }}
+          contentContainerStyle={{ paddingVertical: 12, paddingBottom: listBottomPadding }}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -242,7 +247,11 @@ export default function HomeScreen({ navigation }) {
             try { dispatch(fetchMyWallet()); } catch {}
             try { await refresh(); } catch {}
             setRulesItem(null);
-            navigation.navigate('UnityGame', { scene: it.scene || 'Game1', tournamentId: tId, productId: it?.id || it?._id });
+            if(!it.raw.game.tabcode){
+              Alert.alert("No Game Found")
+              return
+            }
+            navigation.navigate('UnityGame', { scene: it.raw.game.tabcode, tournamentId: tId, productId: it?.id || it?._id });
           } catch (e) {
             setSoldOutMsg(e?.message || 'Unable to verify availability');
             setSoldOutOpen(true);

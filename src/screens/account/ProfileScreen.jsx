@@ -107,7 +107,11 @@ export default function ProfileScreen({ navigation }) {
           <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="My Listings" onPress={() => navigation.navigate('MyListings')} />
           <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="Drafts" onPress={() => navigation.navigate('Drafts')} />
           <MenuRow icon={<Gift size={18} color={colors.accent} />} title="Tournaments Played" onPress={() => navigation.navigate('TournamentsWon')} />
-          <MenuRow icon={<ClipboardList size={18} color={colors.accent} />} title="Receipts" />
+          <MenuRow
+            icon={<ClipboardList size={18} color={colors.accent} />}
+            title="Receipts"
+            onPress={() => navigation.navigate('Receipts')}
+          />
           <MenuRow icon={<Bell size={18} color={colors.accent} />} title="Notifications" badge="5" onPress={() => navigation.navigate('Home', { screen: 'Notifications' })} />
           <MenuRow icon={<Settings size={18} color={colors.accent} />} title="Settings" onPress={() => navigation.navigate('Settings')} />
         </View>

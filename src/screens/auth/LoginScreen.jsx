@@ -30,7 +30,7 @@ export default function LoginScreen({ navigation }) {
 
   const isPasswordLoading = status === 'loading' && currentAuthMethod === 'password';
   const isGoogleLoading = status === 'loading' && currentAuthMethod === 'google';
-  console.log(error,"errorerror")
+  
   return (
     <SafeAreaView style={styles.container} edges={['top','bottom']}>
       <KeyboardAwareScrollView

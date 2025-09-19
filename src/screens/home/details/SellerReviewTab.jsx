@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors } from '../../../theme/colors';
 import reviewsApi from '../../../services/reviews';
 
@@ -12,7 +12,6 @@ export default function SellerReviewTab({ item }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [options, setOptions] = useState([]);
 
   const load = async () => {
@@ -35,18 +34,13 @@ export default function SellerReviewTab({ item }) {
 
   useEffect(() => { load(); }, [sellerId]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try { await load(); } finally { setRefreshing(false); }
-  };
-
   const avg = useMemo(() => {
     if (!list.length) return 0;
     const s = list.reduce((a, r) => a + Number(r.rating || 0), 0);
     return Math.round((s / list.length) * 10) / 10;
   }, [list]);
 
-  const renderItem = ({ item: r }) => (
+  const renderReview = (r) => (
     <View style={styles.card}>
       <View style={styles.rowBetween}>
         <Stars rating={Number(r.rating || 0)} />
@@ -77,14 +71,17 @@ export default function SellerReviewTab({ item }) {
             <Stars rating={avg} />
             <Text style={styles.countTxt}>{list.length} review{list.length === 1 ? '' : 's'}</Text>
           </View>
-          <FlatList
-            data={list}
-            keyExtractor={(r) => r._id}
-            renderItem={renderItem}
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-            contentContainerStyle={{ paddingBottom: 12 }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.white} />}
-          />
+          <View style={styles.listWrap}>
+            {list.length ? (
+              list.map((review, idx) => (
+                <View key={review._id || idx} style={{ marginBottom: idx === list.length - 1 ? 0 : 10 }}>
+                  {renderReview(review)}
+                </View>
+              ))
+            ) : (
+              <Text style={{ color: colors.textSecondary }}>No reviews yet.</Text>
+            )}
+          </View>
         </>
       )}
     </View>
@@ -115,5 +112,5 @@ const styles = StyleSheet.create({
   summary: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   avgTxt: { color: colors.white, fontWeight: '900', fontSize: 18 },
   countTxt: { color: colors.textSecondary },
+  listWrap: { paddingBottom: 12 },
 });
-

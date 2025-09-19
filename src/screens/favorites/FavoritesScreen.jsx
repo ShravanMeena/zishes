@@ -137,7 +137,11 @@ export default function FavoritesScreen({ navigation }) {
             try { dispatch(fetchMyWallet()); } catch {}
             try { DeviceEventEmitter.emit('home:refresh'); } catch {}
             setRulesItem(null);
-            navigation.navigate('Home', { screen: 'UnityGame', params: { scene: it.scene || 'Game1', tournamentId: tId, productId: it?.id || it?._id } });
+              if(!it.raw.game.tabcode){
+                          Alert.alert("No Game Found")
+                          return
+                        }
+            navigation.navigate('Home', { screen: 'UnityGame', params: { scene:  it.raw.game.tabcode || 'Game1', tournamentId: tId, productId: it?.id || it?._id } });
           } catch (e) {
             setSoldOutMsg(e?.message || 'Unable to verify availability');
             setSoldOutOpen(true);

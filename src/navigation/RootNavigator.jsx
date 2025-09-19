@@ -6,7 +6,6 @@ import linking from './linking';
 import { useDispatch, useSelector } from 'react-redux';
 import AppTabs from "./AppTabs";
 import AuthStack from "./AuthStack";
-import VerifyStack from "./VerifyStack";
 import Splash from "../components/Splash";
 import { bootstrapAuth, setUser } from "../store/auth/authSlice";
 import { bootstrapApp } from "../store/app/appSlice";
@@ -15,7 +14,7 @@ import users from '../services/users';
 
 export default function RootNavigator() {
   const dispatch = useDispatch();
-  const { token, bootstrapped: authBoot, needsVerification, user } = useSelector((s) => s.auth);
+  const { token, bootstrapped: authBoot, user } = useSelector((s) => s.auth);
   const { bootstrapped: appBoot, onboardingSeen } = useSelector((s) => s.app);
 
   useEffect(() => {
@@ -45,14 +44,12 @@ export default function RootNavigator() {
   return (
     <NavigationContainer ref={navigationRef} linking={linking}>
       {token
-        ? (needsVerification
-            ? <VerifyStack />
-            : (
-              // Avoid flashing Country screen before user is loaded.
-              user == null
-                ? <AppTabs />
-                : (!user?.address?.country ? <CountryRequiredGateway /> : <AppTabs />)
-            ))
+        ? (
+            // Avoid flashing Country screen before user is loaded.
+            user == null
+              ? <AppTabs />
+              : (!user?.address?.country ? <CountryRequiredGateway /> : <AppTabs />)
+          )
         : (onboardingSeen ? <AuthStack /> : <OnboardingGateway />)}
     </NavigationContainer>
   );

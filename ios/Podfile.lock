@@ -162,7 +162,54 @@ PODS:
   - hermes-engine (0.73.6):
     - hermes-engine/Pre-built (= 0.73.6)
   - hermes-engine/Pre-built (0.73.6)
+  - HyperKYC (0.17.0):
+    - HyperKYC/Core (= 0.17.0)
+  - HyperKYC/Core (0.17.0):
+    - HyperSnapSDK (= 4.16.0)
+    - "MaterialComponents/TextControls+OutlinedTextAreas"
+    - "MaterialComponents/TextControls+OutlinedTextFields"
+  - HyperSnapSDK (4.16.0):
+    - HyperSnapSDK/Core (= 4.16.0)
+  - HyperSnapSDK/Core (4.16.0)
   - libevent (2.1.12)
+  - MaterialComponents/AnimationTiming (124.2.0)
+  - MaterialComponents/Availability (124.2.0)
+  - MaterialComponents/private/Math (124.2.0)
+  - "MaterialComponents/private/TextControlsPrivate+BaseStyle (124.2.0)":
+    - MaterialComponents/AnimationTiming
+    - MaterialComponents/private/Math
+    - "MaterialComponents/private/TextControlsPrivate+Shared"
+  - "MaterialComponents/private/TextControlsPrivate+OutlinedStyle (124.2.0)":
+    - MaterialComponents/AnimationTiming
+    - MaterialComponents/Availability
+    - MaterialComponents/private/Math
+    - "MaterialComponents/private/TextControlsPrivate+Shared"
+  - "MaterialComponents/private/TextControlsPrivate+Shared (124.2.0)":
+    - MaterialComponents/AnimationTiming
+    - MaterialComponents/private/Math
+    - "MaterialComponents/TextControls+Enums"
+  - "MaterialComponents/private/TextControlsPrivate+TextFields (124.2.0)":
+    - MaterialComponents/private/Math
+    - "MaterialComponents/private/TextControlsPrivate+Shared"
+  - "MaterialComponents/TextControls+BaseTextAreas (124.2.0)":
+    - "MaterialComponents/private/TextControlsPrivate+BaseStyle"
+    - "MaterialComponents/private/TextControlsPrivate+Shared"
+    - MDFInternationalization
+  - "MaterialComponents/TextControls+BaseTextFields (124.2.0)":
+    - "MaterialComponents/private/TextControlsPrivate+BaseStyle"
+    - "MaterialComponents/private/TextControlsPrivate+Shared"
+    - "MaterialComponents/private/TextControlsPrivate+TextFields"
+    - MDFInternationalization
+  - "MaterialComponents/TextControls+Enums (124.2.0)"
+  - "MaterialComponents/TextControls+OutlinedTextAreas (124.2.0)":
+    - MaterialComponents/Availability
+    - "MaterialComponents/private/TextControlsPrivate+OutlinedStyle"
+    - "MaterialComponents/TextControls+BaseTextAreas"
+  - "MaterialComponents/TextControls+OutlinedTextFields (124.2.0)":
+    - MaterialComponents/Availability
+    - "MaterialComponents/private/TextControlsPrivate+OutlinedStyle"
+    - "MaterialComponents/TextControls+BaseTextFields"
+  - MDFInternationalization (3.0.0)
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
     - nanopb/encode (= 3.30910.0)
@@ -1042,6 +1089,9 @@ PODS:
   - React-Mapbuffer (0.73.6):
     - glog
     - React-debug
+  - react-native-hyperkyc-sdk (0.17.1):
+    - HyperKYC (= 0.17.0)
+    - React-Core
   - react-native-image-picker (8.2.1):
     - glog
     - RCT-Folly (= 2022.05.16.00)
@@ -1315,6 +1365,7 @@ DEPENDENCIES:
   - React-jsinspector (from `../node_modules/react-native/ReactCommon/jsinspector-modern`)
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
+  - react-native-hyperkyc-sdk (from `../node_modules/react-native-hyperkyc-sdk`)
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - react-native-pager-view (from `../node_modules/react-native-pager-view`)
   - react-native-razorpay (from `../node_modules/react-native-razorpay`)
@@ -1375,7 +1426,11 @@ SPEC REPOS:
     - GoogleUtilities
     - GTMAppAuth
     - GTMSessionFetcher
+    - HyperKYC
+    - HyperSnapSDK
     - libevent
+    - MaterialComponents
+    - MDFInternationalization
     - nanopb
     - OpenSSL-Universal
     - PromisesObjC
@@ -1440,6 +1495,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/logger"
   React-Mapbuffer:
     :path: "../node_modules/react-native/ReactCommon"
+  react-native-hyperkyc-sdk:
+    :path: "../node_modules/react-native-hyperkyc-sdk"
   react-native-image-picker:
     :path: "../node_modules/react-native-image-picker"
   react-native-pager-view:
@@ -1540,7 +1597,11 @@ SPEC CHECKSUMS:
   GTMAppAuth: 217a876b249c3c585a54fd6f73e6b58c4f5c4238
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   hermes-engine: 9cecf9953a681df7556b8cc9c74905de8f3293c0
+  HyperKYC: cad5a8da8bfe1a6673bd90ef8f086608c788764b
+  HyperSnapSDK: cd53408b8fb42d8d5cf029192ba6728565b8a595
   libevent: 4049cae6c81cdb3654a443be001fb9bdceff7913
+  MaterialComponents: 1a9b2d9d45b1601ae544de85089adc4c464306d4
+  MDFInternationalization: d697c55307816222a55685c4ccb1044ffb030c12
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   OpenSSL-Universal: ebc357f1e6bc71fa463ccb2fe676756aff50e88c
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
@@ -1566,6 +1627,7 @@ SPEC CHECKSUMS:
   React-jsinspector: 85583ef014ce53d731a98c66a0e24496f7a83066
   React-logger: 55764cd993880c6f887505854581c9faf68feff2
   React-Mapbuffer: 15dfcfeb4428d8799cce75e7fe85b18b706029e0
+  react-native-hyperkyc-sdk: d8415d357d8f018c1e74be1ca89fb4f2dd11d5c7
   react-native-image-picker: bb3a66064010886b9472200945841e2cf79e1b52
   react-native-pager-view: add8f27feec5ba27e8ff01480dbc4c8da86a9333
   react-native-razorpay: ab51e7be3d906f49b26198d978fc6f163e846d30

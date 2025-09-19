@@ -6,6 +6,7 @@ import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import { Bell } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
 import walletService from '../../services/wallet';
 import CongratsModal from '../../components/modals/CongratsModal';
 import plansService from '../../services/plans';
@@ -86,6 +87,15 @@ export default function WalletScreen({ navigation }) {
     fetchPlans();
   }, [fetchPlans]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchWallet();
+      fetchPlans();
+      fetchLedger();
+      fetchWithdrawals();
+    }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals])
+  );
+
   const fetchLedger = useCallback(async () => {
     if (!token) return;
     try {
@@ -98,7 +108,8 @@ export default function WalletScreen({ navigation }) {
         const bt = new Date(b?.createdAt || 0).getTime();
         return bt - at;
       });
-      setLedger(sorted);
+      const latestTen = sorted.slice(0, 6);
+      setLedger(latestTen);
     } catch (e) {
       setLedgerError(e?.message || 'Failed to fetch ledger');
       setLedger([]);
@@ -236,6 +247,7 @@ export default function WalletScreen({ navigation }) {
         await RazorpayCheckout.open(options);
         // Backend credits on webhook; refresh wallet optimistically
         try { dispatch(fetchMyWallet()); } catch {}
+        try { await fetchWallet(); } catch {}
         try {
           const coins = Number(plan?.coins || 0).toLocaleString();
           setCongratsTitle('Purchase Successful');

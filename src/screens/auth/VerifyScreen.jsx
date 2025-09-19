@@ -1,11 +1,29 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
+import { useDispatch } from 'react-redux';
+import { completeVerification } from '../../store/auth/authSlice';
 
 export default function VerifyScreen({ navigation }) {
-  const proceed = () => navigation.navigate('CountrySelect');
-  const skip = () => navigation.navigate('CountrySelect');
+  const dispatch = useDispatch();
+
+  const proceed = useCallback(() => {
+    navigation.navigate('HyperKyc');
+  }, [navigation]);
+
+  const skip = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    const parent = navigation.getParent?.();
+    if (parent?.canGoBack?.()) {
+      parent.goBack();
+      return;
+    }
+    dispatch(completeVerification());
+  }, [dispatch, navigation]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
@@ -16,10 +34,10 @@ export default function VerifyScreen({ navigation }) {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Verify Your Identity</Text>
           <Text style={styles.cardText}>
-            To ensure the security of your account and comply with regulations, we need to verify your government-issued ID. This process is quick and secure.
+            To ensure the security of your account and comply with regulations, we verify your government-issued ID using HyperVerge&apos;s certified KYC flow. The process is quick and secure.
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={proceed}>
-            <Text style={styles.primaryText}>Proceed with Verification</Text>
+            <Text style={styles.primaryText}>Start HyperKYC</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={skip}>
             <Text style={styles.secondaryText}>Skip for Now</Text>

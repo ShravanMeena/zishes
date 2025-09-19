@@ -149,8 +149,8 @@ export const authenticateWithGoogle = createAsyncThunk('auth/googleSignIn', asyn
     try {
       console.log('[Auth] Google exchange request', JSON.stringify({
         clientType,
-        idToken: summarizeToken(idToken),
-        accessToken: summarizeToken(accessToken),
+        idToken: idToken,
+        accessToken: accessToken,
         user: {
           ...normalizedUser,
           photo: normalizedUser.photo ? '[set]' : null,
@@ -175,8 +175,8 @@ export const authenticateWithGoogle = createAsyncThunk('auth/googleSignIn', asyn
     }
 
     const exchangeData = exchange?.data || exchange || {};
-    const backendAccessToken = exchange?.accessToken || exchangeData?.access_token || exchangeData?.accessToken;
-    const backendRefreshToken = exchange?.refreshToken || exchangeData?.refresh_token || exchangeData?.refreshToken;
+    const backendAccessToken = exchangeData?.access_token
+    const backendRefreshToken =  exchangeData?.refresh_token
     if (!backendAccessToken) {
       throw new Error('Missing backend access token');
     }

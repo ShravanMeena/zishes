@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, BackHandler, Alert } from "react-native";
 import UnityView from "@azesmway/react-native-unity";
 
-export default function UnityScreen() {
+export default function UnityScreenOld() {
   const unityRef = useRef(null);
 
   const [showUnity, setShowUnity] = useState(false);

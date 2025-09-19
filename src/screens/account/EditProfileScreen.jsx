@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Image, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -9,14 +9,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout, setUser } from '../../store/auth/authSlice';
 import useGalleryPermission from '../../hooks/useGalleryPermission';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import { setCountry as setCountryGlobal } from '../../store/app/appSlice';
 import users from '../../services/users';
 import { uploadImage } from '../../services/uploads';
 import ImagePickerSheet from '../../components/common/ImagePickerSheet';
 import useCameraPermission from '../../hooks/useCameraPermission';
 import { getAccessToken } from '../../services/tokenManager';
+import { useFocusEffect } from '@react-navigation/native';
 
-export default function EditProfileScreen({ navigation, route }) {
+export default function EditProfileScreen({ navigation }) {
   const { user, token } = useSelector((s) => s.auth || {});
   const dispatch = useDispatch();
   const [name, setName] = useState(user?.username || '');
@@ -28,20 +28,19 @@ export default function EditProfileScreen({ navigation, route }) {
   const ensureCamera = useCameraPermission();
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  useEffect(() => {
-    const sub = navigation.addListener('focus', () => {
+  useFocusEffect(
+    React.useCallback(() => {
       // Keep form in sync with store without re-calling getMe on every focus
       const doc = user || {};
       setName(doc?.username || '');
       setEmail(doc?.email || '');
       setAvatarUri(doc?.avatar || doc?.avatarUrl || doc?.image || null);
-      // Apply selectedCountry if passed back from picker
-      const picked = route?.params?.selectedCountry;
-      if (picked) setCountry(picked);
-      else setCountry(doc?.address?.country || '');
-    });
-    return sub;
-  }, [navigation, user, route?.params?.selectedCountry]);
+
+      const fallbackCountry = doc?.address?.country || '';
+      console.log('[EditProfile] using stored country', fallbackCountry);
+      setCountry(fallbackCountry);
+    }, [user])
+  );
 
   const save = async () => {
     try {
@@ -49,7 +48,10 @@ export default function EditProfileScreen({ navigation, route }) {
       const patch = {};
       if (name && name !== user?.username) patch.username = name;
       const currentCountry = user?.address?.country || '';
-      if (country && country !== currentCountry) patch.address = { ...(user?.address || {}), country };
+      if (country && country !== currentCountry) {
+        console.log('[EditProfile] updating country', { previous: currentCountry, next: country });
+        patch.address = { ...(user?.address || {}), country };
+      }
       if (Object.keys(patch).length === 0) {
         navigation.goBack();
         return;
@@ -57,6 +59,7 @@ export default function EditProfileScreen({ navigation, route }) {
       let bearer = token;
       if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
       if (!bearer) throw new Error('Missing auth token');
+      console.log('[EditProfile] update payload', patch);
       const updated = await users.updateMe(patch, { token: bearer });
       const doc = updated?.data || updated;
       if (doc) {
@@ -100,6 +103,7 @@ export default function EditProfileScreen({ navigation, route }) {
           let bearer = token;
           if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
           if (!bearer) throw new Error('Missing auth token');
+          console.log('[EditProfile] update payload (avatar)', { avatar: imageUrl });
           const updated = await users.updateMe({ avatar: imageUrl }, { token: bearer });
           const doc = updated?.data || updated;
           if (doc) dispatch(setUser(doc));

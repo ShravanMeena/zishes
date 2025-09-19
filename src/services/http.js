@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getAccessToken, refreshAccessToken } from './tokenManager';
+import { clearTokens, getAccessToken, refreshAccessToken } from './tokenManager';
 
 let isRefreshing = false;
 let pendingQueue = [];
@@ -40,6 +40,11 @@ export function attachAuthInterceptors(client) {
       }
 
       originalRequest._retry = true;
+      const hadAuthHeader = !!(originalRequest.headers && (originalRequest.headers.Authorization || originalRequest.headers.authorization));
+
+      if (!hadAuthHeader) {
+        return Promise.reject(error);
+      }
 
       if (isRefreshing) {
         try {
@@ -50,6 +55,7 @@ export function attachAuthInterceptors(client) {
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return client.request(originalRequest);
         } catch (err) {
+          await clearTokens();
           return Promise.reject(err);
         }
       }
@@ -63,6 +69,7 @@ export function attachAuthInterceptors(client) {
         return client.request(originalRequest);
       } catch (refreshErr) {
         processQueue(refreshErr, null);
+        await clearTokens();
         return Promise.reject(refreshErr);
       } finally {
         isRefreshing = false;
@@ -74,4 +81,3 @@ export function attachAuthInterceptors(client) {
 }
 
 export default attachAuthInterceptors;
-

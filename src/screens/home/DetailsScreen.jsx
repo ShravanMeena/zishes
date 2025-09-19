@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, FlatList, TouchableOpacity, useWindowDimensions, RefreshControl, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, FlatList, TouchableOpacity, useWindowDimensions, RefreshControl, DeviceEventEmitter, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TabView, TabBar } from 'react-native-tab-view';
 import { useDispatch, useSelector } from 'react-redux';
@@ -116,7 +116,11 @@ export default function DetailsScreen({ route, navigation }) {
       try { dispatch(fetchMyWallet()); } catch {}
       try { DeviceEventEmitter.emit('home:refresh'); } catch {}
       setRulesOpen(false);
-      navigation.navigate('UnityGame', { scene: item.scene || 'Game1', tournamentId: tId, productId: item?.id || item?._id });
+      if(!item.raw.game.tabcode){
+        Alert.alert("No Game Found!")
+        return
+      }
+      navigation.navigate('UnityGame', { scene: item.raw.game.tabcode || 'Game1', tournamentId: tId, productId: item?.id || item?._id });
     } catch (e) {
       setRulesOpen(false);
       setSoldOutMsg(e?.message || 'Unable to verify availability');

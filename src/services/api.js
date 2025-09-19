@@ -1,6 +1,6 @@
 // Auth API client (auth domain). Handles /auth/* and /users endpoints
 // const BASE_URL = 'https://auth.traferr-prod.com/api/v1';
-const BASE_URL = 'https://widely-intense-albacore.ngrok-free.app/api/v1';
+const BASE_URL = 'https://8d76afb84d74.ngrok-free.app/api/v1';
 const AUTH_ORIGIN = BASE_URL.replace(/\/?api\/?v1\/?$/, '');
 const GOOGLE_CALLBACK_PATH = '/auth/callback/google';
 
@@ -51,7 +51,7 @@ async function parseJsonResponse(res) {
 
 async function postJson(path, body, opts = {}) {
   const token = opts?.token;
-  console.log(opts,"tokentokentoken")
+
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: {

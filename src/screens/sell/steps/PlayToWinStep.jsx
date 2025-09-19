@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../../theme/colors';
 import LinearGradient from 'react-native-linear-gradient';
@@ -10,10 +10,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updatePlay } from '../../../store/listingDraft/listingDraftSlice';
 import { updatePolicies } from '../../../store/listingDraft/listingDraftSlice';
 import gamesApi from '../../../services/games';
+import { getEntrySuggestion } from '../../../services/products';
 
 export default function PlayToWinStep() {
   const dispatch = useDispatch();
   const form = useSelector((s) => s.listingDraft.play);
+  const token = useSelector((s) => s.auth.token);
   const set = (k, v) => dispatch(updatePlay({ [k]: v }));
 
   const gameOptions = useMemo(() => [
@@ -28,6 +30,13 @@ export default function PlayToWinStep() {
   const [games, setGames] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(false);
   const [gamesError, setGamesError] = useState(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState('');
+  const [suggestion, setSuggestion] = useState(null);
+  const [playsTouched, setPlaysTouched] = useState(false);
+  const playsTouchedRef = useRef(false);
+
+  useEffect(() => { playsTouchedRef.current = playsTouched; }, [playsTouched]);
 
   useEffect(() => {
     let alive = true;
@@ -47,6 +56,49 @@ export default function PlayToWinStep() {
     load();
     return () => { alive = false; };
   }, []);
+
+  useEffect(() => {
+    const price = parseFloat(form.expectedPrice);
+    const fee = parseFloat(form.pricePerPlay);
+    const currentSeats = Number(form.playsCount);
+    if (!price || price <= 0 || !fee || fee <= 0) {
+      setSuggestion(null);
+      setSuggestionError('');
+      setSuggestionLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSuggestionError('');
+    setSuggestionLoading(true);
+
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const res = await getEntrySuggestion({ price, entryFee: fee }, token, { guest: !token });
+          if (cancelled) return;
+          setSuggestion(res);
+          if (!playsTouchedRef.current && res?.recommended?.seats != null) {
+            const recommended = Number(res.recommended.seats);
+            if (!Number.isNaN(recommended) && recommended > 0 && recommended !== currentSeats) {
+              dispatch(updatePlay({ playsCount: String(recommended) }));
+            }
+          }
+        } catch (err) {
+          if (cancelled) return;
+          setSuggestion(null);
+          let message = err?.message || 'Unable to fetch entry suggestion.';
+          if (err?.status === 401) message = 'Please sign in again to view entry suggestions.';
+          if (err?.status === 422) message = err?.data?.message || 'Check your price and entry fee values.';
+          setSuggestionError(message);
+        } finally {
+          if (!cancelled) setSuggestionLoading(false);
+        }
+      })();
+    }, 420);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [form.expectedPrice, form.pricePerPlay, token, dispatch]);
 
   return (
     <KeyboardAwareScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }} enableOnAndroid extraScrollHeight={20}>
@@ -88,9 +140,19 @@ export default function PlayToWinStep() {
           placeholder="2500"
           keyboardType="numeric"
           value={form.playsCount}
-          onChangeText={(t) => set('playsCount', t)}
+          onChangeText={(t) => { setPlaysTouched(true); set('playsCount', t); }}
         />
         <FieldHint>Define the total available play-to-win entries.</FieldHint>
+        <SuggestionSummary
+          loading={suggestionLoading}
+          error={suggestionError}
+          suggestion={suggestion}
+          onApplySeats={(seats) => {
+            if (!seats) return;
+            dispatch(updatePlay({ playsCount: String(seats) }));
+            setPlaysTouched(false);
+          }}
+        />
 
         <FieldLabel>Listing End Date <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
         <Select value={form.endDate} placeholder="Select a date" onPress={() => setShowDate(true)} />
@@ -198,7 +260,93 @@ const styles = StyleSheet.create({
   checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: colors.primary, backgroundColor: 'transparent' },
   checkboxOn: { backgroundColor: colors.primary },
   rowTitle: { color: colors.white, fontWeight: '800' },
+  suggestionCard: { backgroundColor: '#1E2128', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 16, marginTop: 10 },
+  suggestionTitle: { color: colors.white, fontWeight: '800', fontSize: 16 },
+  suggestionSubtitle: { color: colors.textSecondary, marginTop: 4, marginBottom: 10 },
+  suggestionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  suggestionLabel: { color: colors.textSecondary, fontWeight: '600' },
+  suggestionValue: { color: colors.white, fontWeight: '800', fontSize: 18 },
+  suggestionButton: { marginTop: 14, borderRadius: 12, backgroundColor: colors.primary, paddingVertical: 12, alignItems: 'center' },
+  suggestionButtonTxt: { color: colors.white, fontWeight: '800' },
+  suggestionDivider: { height: 1, backgroundColor: '#2E3440', marginVertical: 12 },
+  suggestionError: { color: '#FF9C9C', marginTop: 8 },
+  suggestionBadge: { alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#2F3140', marginTop: 6 },
+  suggestionBadgeTxt: { color: colors.accent, fontWeight: '700', fontSize: 12 },
 });
+
+function SuggestionSummary({ loading, error, suggestion, onApplySeats }) {
+  if (!loading && !error && !suggestion) return null;
+
+  const fmtNumber = (n) => {
+    if (n == null || isNaN(Number(n))) return '—';
+    return Number(n).toLocaleString('en-IN');
+  };
+  const fmtCurrency = (n) => {
+    if (n == null || isNaN(Number(n))) return '—';
+    return `₹ ${Number(n).toLocaleString('en-IN')}`;
+  };
+
+  const recommendedSeats = suggestion?.recommended?.seats;
+  const recommendedCoverage = suggestion?.recommended?.coverageAmount;
+  const rationale = suggestion?.recommended?.rationale;
+  const exactMatch = suggestion?.exactMatch;
+
+  return (
+    <View style={styles.suggestionCard}>
+      <Text style={styles.suggestionTitle}>Entry Seat Suggestions</Text>
+      {loading ? (
+        <View style={{ alignItems: 'center', marginTop: 12 }}><ActivityIndicator color={colors.accent} /></View>
+      ) : error ? (
+        <Text style={styles.suggestionError}>{error}</Text>
+      ) : (
+        <>
+          <Text style={styles.suggestionSubtitle}>
+            {exactMatch ? 'Exact match recommendation' : (rationale || 'Optimized to maximize coverage without overshooting')}
+          </Text>
+          <View style={styles.suggestionRow}>
+            <View>
+              <Text style={styles.suggestionLabel}>Recommended Seats</Text>
+              <Text style={styles.suggestionValue}>{fmtNumber(recommendedSeats)}</Text>
+            </View>
+            <View>
+              <Text style={styles.suggestionLabel}>Coverage</Text>
+              <Text style={styles.suggestionValue}>{fmtCurrency(recommendedCoverage)}</Text>
+            </View>
+          </View>
+          <View style={styles.suggestionBadge}>
+            <Text style={styles.suggestionBadgeTxt}>
+              Total Coins Needed: {fmtNumber(suggestion?.totalCoinsToCover)}
+            </Text>
+          </View>
+          <View style={styles.suggestionDivider} />
+          <View style={{ gap: 8 }}>
+            <Text style={styles.suggestionLabel}>Cover the full price</Text>
+            <Text style={styles.suggestionValue}>
+              {fmtNumber(suggestion?.minSeatsToCover)} seats · {fmtCurrency(suggestion?.minSeatsCoverageAmount)}
+            </Text>
+          </View>
+          <View style={{ marginTop: 12, gap: 8 }}>
+            <Text style={styles.suggestionLabel}>Stay under the price</Text>
+            <Text style={styles.suggestionValue}>
+              {fmtNumber(suggestion?.maxSeatsNotExceed)} seats · {fmtCurrency(suggestion?.maxSeatsCoverageAmount)}
+            </Text>
+          </View>
+          {suggestion?.shortfallAmount > 0 ? (
+            <Text style={[styles.suggestionLabel, { marginTop: 12 }]}>Shortfall: {fmtCurrency(suggestion.shortfallAmount)}</Text>
+          ) : null}
+          {suggestion?.overageAmount > 0 ? (
+            <Text style={[styles.suggestionLabel, { marginTop: 4 }]}>Overage: {fmtCurrency(suggestion.overageAmount)}</Text>
+          ) : null}
+          {recommendedSeats ? (
+            <TouchableOpacity style={styles.suggestionButton} onPress={() => onApplySeats(recommendedSeats)}>
+              <Text style={styles.suggestionButtonTxt}>Use {fmtNumber(recommendedSeats)} Seats</Text>
+            </TouchableOpacity>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+}
 
 function EarlyTermination({ expectedPrice, playsTotal }) {
   const thresholds = [0.75, 0.8, 0.9, 1.0];

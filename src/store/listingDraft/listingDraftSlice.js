@@ -2,6 +2,8 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { uploadImage } from '../../services/uploads';
 import { createProductWithTournament } from '../../services/products';
+import users from '../../services/users';
+import { setUser } from '../auth/authSlice';
 import { saveNewDraft } from './draftsStorage';
 
 const DRAFT_KEY = 'listing_draft_v1';
@@ -268,9 +270,6 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
   if (!play.game) return rejectWithValue('Please select a game.');
   // All terms must be acknowledged
   const requiredTermsTrue = [
-    policies.enableEarlyTerminationAck,
-    policies.listingExtensionAck,
-    policies.platinumOnlyAck,
     policies.listing,
     policies.dispute,
     policies.antifraud,
@@ -337,9 +336,9 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     delivery: mapDelivery(delivery.method),
 
     terms: {
-      enableEarlyTerminationAck: !!policies.enableEarlyTerminationAck,
+      enableEarlyTerminationAck: !!(policies.enableEarlyTerminationAck || play.earlyTerminationEnabled),
       listingExtensionAck: !!policies.listingExtensionAck,
-      platinumOnlyAck: !!policies.platinumOnlyAck,
+      platinumOnlyAck: !!(policies.platinumOnlyAck || play.platinumOnly),
       acceptListingStandards: !!policies.listing,
       disputePolicy: !!policies.dispute,
       antiFraud: !!policies.antifraud,
@@ -347,11 +346,18 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     },
   };
 
+  try { console.log('[publishListing] payload', JSON.stringify(payload)); } catch (_) {}
+
   try {
     dispatch(setSubmitStage('creating'));
     // n-1 uploads done, now last step
     step = total - 1; update();
     const res = await createProductWithTournament(payload, token);
+    try {
+      const me = await users.getMe();
+      const doc = me?.data || me;
+      if (doc) dispatch(setUser(doc));
+    } catch (_) {}
     // Clear draft on success
     await dispatch(clearDraftStorage());
     dispatch(setSubmitProgress(1));

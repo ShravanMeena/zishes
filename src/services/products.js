@@ -4,14 +4,16 @@ import { API_BASE } from '../config/api';
 
 const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 15000 }));
 
-async function request(path, { method = 'GET', params, data, token } = {}) {
+async function request(path, { method = 'GET', params, data, token, headers } = {}) {
   try {
+    const allHeaders = { ...(headers || {}) };
+    if (token) allHeaders.Authorization = `Bearer ${token}`;
     const res = await client.request({
       url: path,
       method,
       data,
       params,
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      headers: Object.keys(allHeaders).length ? allHeaders : undefined,
     });
     return res.data;
   } catch (err) {
@@ -189,6 +191,26 @@ export async function getProductById(id, token) {
   if (!id) throw new Error('Missing product id');
   // Auth required
   const data = await request(`/products/${id}`, { token });
+  return data;
+}
+
+export async function getEntrySuggestion(body = {}, token, opts = {}) {
+  const { price, entryFee, currency = 'INR' } = body;
+  const payload = {
+    price: Number(price),
+    entryFee: Number(entryFee),
+    currency,
+  };
+  const headers = {};
+  if ((!token && opts.allowGuest !== false) || opts.guest === true) {
+    headers.guest = 'true';
+  }
+  const data = await request('/products/entry-suggestion', {
+    method: 'POST',
+    data: payload,
+    token,
+    headers,
+  });
   return data;
 }
 

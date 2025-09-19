@@ -15,6 +15,7 @@ dependencyResolutionManagement {
         maven { url("$rootDir/../node_modules/jsc-android/dist") }
         maven { url 'https://storage.googleapis.com/notifee-sdk/maven' }
         maven { url "$rootDir/../node_modules/@notifee/react-native/android/libs" }
+        maven { url "https://s3.ap-south-1.amazonaws.com/hvsdk/android/releases" }
     }
 }
 

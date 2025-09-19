@@ -12,6 +12,8 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
 		1509B3DACD84C65C5B5602BB /* libPods-unityapp-unityappTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DACA0C2A15F5C6F3612B1CCC /* libPods-unityapp-unityappTests.a */; };
+		5C4A2B5E2AE3B3D400D998A1 /* UnityFramework.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C4A2B5D2AE3B3D400D998A1 /* UnityFramework.framework */; };
+		5C4A2B5F2AE3B3D400D998A1 /* UnityFramework.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5C4A2B5D2AE3B3D400D998A1 /* UnityFramework.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		74B485BF2E6B2F730087A847 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 74B485BE2E6B2F730087A847 /* GoogleService-Info.plist */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B40C268A53A0EC08ABFE3AD1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 562C3C81C4B58BB33709746F /* PrivacyInfo.xcprivacy */; };
@@ -28,6 +30,20 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		5C4A2B602AE3B3D400D998A1 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				5C4A2B5F2AE3B3D400D998A1 /* UnityFramework.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		00E356EE1AD99517003FC87E /* unityappTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = unityappTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		00E356F11AD99517003FC87E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -40,6 +56,7 @@
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = unityapp/main.m; sourceTree = "<group>"; };
 		554DF54656C18C12E92ADFEE /* libPods-unityapp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-unityapp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		562C3C81C4B58BB33709746F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = unityapp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		5C4A2B5D2AE3B3D400D998A1 /* UnityFramework.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UnityFramework.framework; path = ../unity/builds/ios/UnityFramework.framework; sourceTree = "<group>"; };
 		6DF0E80597279F17D82A9E75 /* Pods-unityapp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-unityapp.debug.xcconfig"; path = "Target Support Files/Pods-unityapp/Pods-unityapp.debug.xcconfig"; sourceTree = "<group>"; };
 		74B485BE2E6B2F730087A847 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		74B485C02E6B38E20087A847 /* unityapp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = unityapp.entitlements; path = unityapp/unityapp.entitlements; sourceTree = "<group>"; };
@@ -65,6 +82,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D7ED074B13C728BF557108D3 /* libPods-unityapp.a in Frameworks */,
+				5C4A2B5E2AE3B3D400D998A1 /* UnityFramework.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,6 +128,7 @@
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				554DF54656C18C12E92ADFEE /* libPods-unityapp.a */,
 				DACA0C2A15F5C6F3612B1CCC /* libPods-unityapp-unityappTests.a */,
+				5C4A2B5D2AE3B3D400D998A1 /* UnityFramework.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -189,6 +208,7 @@
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
+				5C4A2B602AE3B3D400D998A1 /* Embed Frameworks */,
 				7CAB390B69B70AD786B829E3 /* [CP] Embed Pods Frameworks */,
 				51A32C07DB44C2C1ADFAC93C /* [CP] Copy Pods Resources */,
 				A0EAA7CF3F2D769D38792E21 /* [CP-User] [RNFB] Core Configuration */,
@@ -493,6 +513,14 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F3X3ND4466;
 				ENABLE_BITCODE = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../unity/builds/ios",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../unity/builds/ios/UnityFramework.framework/Headers",
+				);
 				INFOPLIST_FILE = unityapp/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -522,6 +550,14 @@
 				CODE_SIGN_ENTITLEMENTS = unityapp/unityapp.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F3X3ND4466;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../unity/builds/ios",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../unity/builds/ios/UnityFramework.framework/Headers",
+				);
 				INFOPLIST_FILE = unityapp/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (

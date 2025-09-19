@@ -11,6 +11,8 @@ import TournamentsWonScreen from "../screens/profile/TournamentsWonScreen";
 import EditProfileScreen from "../screens/account/EditProfileScreen";
 import AcknowledgeReceiptScreen from "../screens/profile/AcknowledgeReceiptScreen";
 import WebsiteTermsScreen from "../screens/misc/WebsiteTermsScreen";
+import HyperKycScreen from "../screens/auth/HyperKycScreen";
+import CountrySelectScreen from "../screens/auth/CountrySelectScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +30,8 @@ export default function AppStack() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="AcknowledgeReceipt" component={AcknowledgeReceiptScreen} />
       <Stack.Screen name="WebsiteTerms" component={WebsiteTermsScreen} />
+      <Stack.Screen name="HyperKyc" component={HyperKycScreen} />
+      <Stack.Screen name="CountrySelect" component={CountrySelectScreen} />
       <Stack.Screen
         name="UnityGame"
         component={UnityScreen}

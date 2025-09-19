@@ -1,11 +1,16 @@
-import React, { useRef, useEffect, useState } from "react";
-import { View, BackHandler } from "react-native";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { View, BackHandler, StyleSheet } from "react-native";
 import UnityView from "@azesmway/react-native-unity";
-import GameResultModal from "../../components/GameResultModal";
+import GameResultModal from "../components/GameResultModal";
 
-export default function UnityScreen({ navigation, route }) {
+export default function UnityOverlay({
+  visible,
+  scene,
+  tournamentId,
+  productId,
+  onClose,
+}) {
   const unityRef = useRef(null);
-  const { scene, tournamentId, productId } = route.params;
   const [showUnity, setShowUnity] = useState(false);
   const [unityReady, setUnityReady] = useState(true);
   const [pendingScene, setPendingScene] = useState(scene || null);
@@ -13,15 +18,38 @@ export default function UnityScreen({ navigation, route }) {
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState(null);
 
-  useEffect(() => {
-    setPendingScene(scene || null);
-    setShowUnity(true);
+  const closeUnity = useCallback(() => {
+    try { unityRef.current?.unloadUnity?.(); } catch {}
+    setShowUnity(false);
+    setPendingScene(null);
     setSent(false);
-    setShowResult(false);
-    setResult(null);
-  }, [scene]);
+    if (onClose) onClose();
+  }, [onClose]);
 
   useEffect(() => {
+    if (visible && scene) {
+      setPendingScene(scene);
+      setShowUnity(true);
+      setSent(false);
+      setShowResult(false);
+      setResult(null);
+    } else {
+      setShowUnity(false);
+      setSent(false);
+    }
+  }, [visible, scene]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      closeUnity();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible, closeUnity]);
+
+  useEffect(() => {
+    if (!visible) return;
     if (!showUnity) return;
     if (!unityReady) return;
     if (!pendingScene) return;
@@ -36,45 +64,28 @@ export default function UnityScreen({ navigation, route }) {
     } catch (err) {
       console.warn("Failed to post openGame", err);
     }
-  }, [showUnity, unityReady, pendingScene, sent]);
+  }, [visible, showUnity, unityReady, pendingScene, sent]);
 
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      closeUnity();
-      return true;
-    });
-    return () => sub.remove();
-  }, []);
-
-  const closeUnity = (shouldNavigateBack = true) => {
-    try { unityRef.current?.unloadUnity?.(); } catch {}
-    setShowUnity(false);
-    setPendingScene(null);
-    setSent(false);
-    if (shouldNavigateBack) {
-      navigation.goBack();
-    }
-  };
-
-  const openResult = (payload) => {
+  const openResult = useCallback((payload) => {
     try { unityRef.current?.unloadUnity?.(); } catch {}
     setShowUnity(false);
     setSent(false);
     setResult(payload || {});
     setShowResult(true);
-  };
+  }, []);
 
-  const dismissResult = (thenClose = false) => {
+  const dismissResult = useCallback((thenClose = false) => {
     setShowResult(false);
     if (thenClose) {
-      // small delay to let the modal play its exit animation
       setTimeout(() => closeUnity(), 240);
     } else {
       setPendingScene(scene || pendingScene);
       setShowUnity(true);
       setSent(false);
     }
-  };
+  }, [closeUnity, pendingScene, scene]);
+
+  if (!visible) return null;
 
   const score = typeof result?.score === "number" ? result.score : Number(result?.score) || 0;
   const title =
@@ -89,30 +100,26 @@ export default function UnityScreen({ navigation, route }) {
       : "All Done!";
 
   return (
-    <View style={{ flex:1, backgroundColor:"#000" }}>
+    <View style={styles.overlay}>
       {showUnity ? (
         <UnityView
           ref={unityRef}
-          style={{ flex:1 }}
+          style={styles.fill}
           fullScreen
           androidKeepPlayerMounted={false}
           onUnityMessage={(e) => {
             const rawMessage = e?.nativeEvent?.message;
-            console.log(rawMessage, "unityRawMessage");
             try {
               const msg =
                 typeof rawMessage === "string" && rawMessage.trim().length
                   ? JSON.parse(rawMessage)
                   : rawMessage;
-              console.log(msg, "msgmsgmsgmsgmsgmsg");
               if (msg.action === "unityReady") {
                 setUnityReady(true);
                 setSent(false);
               }
-              if (msg.action === "Data") {
-                if (msg.scene) {
-                  openResult(msg);
-                }
+              if (msg.action === "Data" && msg.scene) {
+                openResult(msg);
               }
               if (msg.action === "closeUnity") {
                 closeUnity();
@@ -139,3 +146,14 @@ export default function UnityScreen({ navigation, route }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000",
+    zIndex: 999,
+  },
+  fill: {
+    flex: 1,
+  },
+});

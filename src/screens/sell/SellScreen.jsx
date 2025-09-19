@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, TextInput, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
@@ -12,7 +12,8 @@ import { CheckCircle2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { loadDraft, saveDraftFromStore, clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute } from '../../store/listingDraft/listingDraftSlice';
 import { publishListing } from '../../store/listingDraft/listingDraftSlice';
-import { BackHandler, Alert } from 'react-native';
+import { BackHandler } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 
 import PhotosStep from './steps/PhotosStep';
 import DetailsStep from './steps/DetailsStep';
@@ -20,11 +21,12 @@ import PlayToWinStep from './steps/PlayToWinStep';
 import DeliveryStep from './steps/DeliveryStep';
 import PoliciesStep from './steps/PoliciesStep';
 import ReviewStep from './steps/ReviewStep';
-import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
+import { TabView, SceneMap } from 'react-native-tab-view';
 import PagerView from 'react-native-pager-view';
 
 export default function SellScreen({ navigation, route }) {
   const dispatch = useDispatch();
+  const isFocused = useIsFocused();
   const loaded = useSelector((s) => s.listingDraft.loaded);
   const isDirty = useSelector((s) => s.listingDraft.isDirty);
   const submitting = useSelector((s) => s.listingDraft.submitting);
@@ -33,6 +35,8 @@ export default function SellScreen({ navigation, route }) {
   const submitError = useSelector((s) => s.listingDraft.submitError);
   const pendingLeaveToRoute = useSelector((s) => s.listingDraft.ui.pendingLeaveToRoute);
   const details = useSelector((s) => s.listingDraft.details);
+  const user = useSelector((s) => s.auth.user);
+  const needsVerification = useSelector((s) => s.auth.needsVerification);
 
   const steps = useMemo(
     () => [
@@ -56,6 +60,7 @@ export default function SellScreen({ navigation, route }) {
   // const [congratsOpen, setCongratsOpen] = useState(false);
   const [hideSubmitModal, setHideSubmitModal] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [dialog, setDialog] = useState(null);
   const routes = steps;
   const progress = (index + 1) / steps.length;
 
@@ -66,18 +71,79 @@ export default function SellScreen({ navigation, route }) {
   };
 
   const activeKey = routes[index]?.key;
-  const title = activeKey === 'details' ? 'Sell Item - Step 2: Details' : 'Create Listing';
+  const title = useMemo(() => {
+    switch (activeKey) {
+      case 'photos':
+        return 'Create Listing · Photos';
+      case 'details':
+        return 'Create Listing · Details';
+      case 'play':
+        return 'Create Listing · Play-to-Win';
+      case 'delivery':
+        return 'Create Listing · Delivery';
+      case 'policies':
+        return 'Create Listing · Policies';
+      case 'review':
+        return "Let's Zish It";
+      default:
+        return 'Create Listing';
+    }
+  }, [activeKey]);
   const isReview = activeKey === 'review';
+
+  const isVerified = useMemo(() => {
+    const status = (user?.kycStatus || user?.verificationStatus || user?.kyc?.status || '').toLowerCase();
+    const statusApproved = status === 'approved' || status === 'completed' || status === 'verified';
+    return statusApproved || !!user?.kycCompletedAt || !!user?.kycCompleted || user?.verified === true;
+  }, [user]);
+
+  const requiresKyc = !isVerified || needsVerification;
+
+  const startKycFlow = useCallback(async () => {
+    try {
+      await dispatch(saveDraftFromStore()).unwrap();
+    } catch (_) {
+      // ignore save errors, still attempt navigation
+    }
+    navigation.navigate('Home', { screen: 'HyperKyc' });
+  }, [dispatch, navigation]);
 
   const onPrimary = async () => {
     if (isReview) {
       if (submitting) return;
-      try { await dispatch(publishListing()).unwrap(); }
-      catch (_) { /* handled via modal state */ }
+      if (requiresKyc) {
+        goTo('policies');
+        setDialog({
+          title: 'Verification Required',
+          message: 'Please complete your KYC verification before publishing this listing.',
+          primary: { label: 'Start KYC', action: () => startKycFlow() },
+          secondary: { label: 'Later' },
+        });
+        return;
+      }
+      try {
+        await dispatch(publishListing()).unwrap();
+      } catch (err) {
+        const message = typeof err === 'string' ? err : err?.message || 'Please review your listing and try again.';
+
+        const lower = message.toLowerCase();
+        if (lower.includes('photo')) goTo('photos');
+        else if (lower.includes('description') || lower.includes('name') || lower.includes('quantity')) goTo('details');
+        else if (lower.includes('gameplay') || lower.includes('end date') || lower.includes('game') || lower.includes('price per')) goTo('play');
+        else if (lower.includes('terms')) goTo('policies');
+
+        setDialog({
+          title: 'Cannot publish yet',
+          message,
+          primary: { label: 'OK' },
+        });
+      }
     } else {
       goNext();
     }
   };
+
+  const closeDialog = useCallback(() => setDialog(null), []);
 
   // Initialize: reset by default; prefill only if draftData is provided
   useEffect(() => {
@@ -107,13 +173,20 @@ export default function SellScreen({ navigation, route }) {
 
   // If tab bar requested leave to a route
   useEffect(() => {
+    if (!isFocused) return;
     if (pendingLeaveToRoute) {
       setLeaveAfterAction(pendingLeaveToRoute);
       setForceAskName(!details?.name);
       setNameInput(details?.name || '');
       setSavePromptOpen(true);
     }
-  }, [pendingLeaveToRoute, details?.name]);
+  }, [pendingLeaveToRoute, details?.name, isFocused]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setSavePromptOpen(false);
+    }
+  }, [isFocused]);
 
   const handleAfterLeave = (target) => {
     if (!target) return;
@@ -197,6 +270,28 @@ export default function SellScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.tabChipsWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScroll}
+        >
+          {routes.map((route, idx) => {
+            const focused = index === idx;
+            return (
+              <TouchableOpacity
+                key={route.key}
+                style={[styles.tabChip, focused && styles.tabChipActive]}
+                onPress={() => setIndex(idx)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.tabChipText, focused && styles.tabChipTextActive]}>{route.title}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {/* Tabs using react-native-tab-view */}
       <TabView
         navigationState={{ index, routes }}
@@ -207,20 +302,7 @@ export default function SellScreen({ navigation, route }) {
           <PagerView {...pagerProps} keyboardDismissMode="none" />
         )}
         renderScene={renderScene}
-        renderTabBar={(props) => (
-          <TabBar
-            {...props}
-            scrollEnabled
-            style={{ backgroundColor: 'transparent' }}
-            contentContainerStyle={styles.tabsRow}
-            // No active bottom border/indicator as requested
-            indicatorStyle={{ backgroundColor: 'transparent', height: 0 }}
-            tabStyle={{ width: 'auto' }}
-            renderLabel={({ route, focused }) => (
-              <Text style={[styles.tabTxt, focused && styles.tabTxtActive]}>{route.title}</Text>
-            )}
-          />
-        )}
+        renderTabBar={() => null}
       />
 
       {/* Progress under tabs */}
@@ -286,8 +368,38 @@ export default function SellScreen({ navigation, route }) {
         primaryText={submitStage === 'success' ? 'Go to My Listings' : undefined}
       />
 
+      <BottomSheet visible={!!dialog} onClose={closeDialog} full={false}>
+        <View style={{ padding: 8 }}>
+          <Text style={styles.dialogTitle}>{dialog?.title || ''}</Text>
+          <Text style={styles.dialogMessage}>{dialog?.message || ''}</Text>
+          <View style={{ flexDirection: dialog?.secondary ? 'row' : 'column', marginTop: 18, gap: 12 }}>
+            {dialog?.secondary ? (
+              <Button
+                title={dialog.secondary.label || 'Cancel'}
+                variant="outline"
+                fullWidth={false}
+                onPress={() => {
+                  closeDialog();
+                  dialog?.secondary?.action?.();
+                }}
+                style={{ flex: 1 }}
+              />
+            ) : null}
+            <Button
+              title={dialog?.primary?.label || 'OK'}
+              fullWidth={false}
+              onPress={() => {
+                closeDialog();
+                dialog?.primary?.action?.();
+              }}
+              style={{ flex: dialog?.secondary ? 1 : undefined }}
+            />
+          </View>
+        </View>
+      </BottomSheet>
+
       {/* Save/Leave Prompt */}
-      <BottomSheet visible={savePromptOpen} onClose={() => { setSavePromptOpen(false); dispatch(setPendingLeaveRoute(null)); }} full={false}>
+      <BottomSheet visible={isFocused && savePromptOpen} onClose={() => { setSavePromptOpen(false); dispatch(setPendingLeaveRoute(null)); }} full={false}>
         <View style={{ padding: 4 }}>
           <Text style={{ color: colors.white, fontWeight: '800', fontSize: 18, textAlign: 'center' }}>Save your progress?</Text>
           <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
@@ -339,10 +451,33 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
   header: { height: 56, alignItems: 'center', justifyContent: 'space-between', flexDirection: 'row', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#22252C' },
   headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
-  tabsRow: { paddingHorizontal: 12, paddingVertical: 6, gap: 12, alignItems: 'center' },
-  tabItem: { paddingVertical: 6, paddingHorizontal: 6 },
-  tabTxt: { color: colors.textSecondary, fontWeight: '700', fontSize: 14 },
-  tabTxtActive: { color: colors.primary },
+  tabChipsWrapper: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+  tabScroll: {
+    paddingRight: 20,
+    alignItems: 'center',
+  },
+  tabChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: '#1E2128',
+    borderWidth: 1,
+    borderColor: '#343B49',
+    marginRight: 8,
+  },
+  tabChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  tabChipText: { color: colors.textSecondary, fontWeight: '700', fontSize: 14 },
+  tabChipTextActive: { color: colors.white },
+  dialogTitle: { color: colors.white, fontWeight: '900', fontSize: 18, textAlign: 'center' },
+  dialogMessage: { color: colors.textSecondary, textAlign: 'center', marginTop: 8 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: '#22252C' },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, gap: 12, backgroundColor: colors.black, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#22252C', flexDirection: 'row' },
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },

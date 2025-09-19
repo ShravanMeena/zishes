@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../theme/colors';
 import { Globe, Check } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { completeVerification, setUser } from '../../store/auth/authSlice';
+import { setCountry as setAppCountry } from '../../store/app/appSlice';
 import { createUser as createZishesUser, updateMe as updateCurrentUser } from '../../services/users';
 import { getAccessToken } from '../../services/tokenManager';
 import Button from '../../components/ui/Button';
@@ -66,35 +67,64 @@ export default function CountrySelectScreen({ navigation, route }) {
     }
   };
 
+  const persistCountry = async (countryName) => {
+    let bearer = token;
+    if (!bearer) {
+      try {
+        bearer = await getAccessToken();
+      } catch {}
+    }
+    if (!bearer) throw new Error('Missing auth token');
+
+    const payload = { address: { country: countryName } };
+    console.log('[CountrySelect] update payload', payload);
+
+    const pushUpdate = async () => {
+      const updated = await updateCurrentUser(payload, { token: bearer });
+      if (updated) {
+        dispatch(setUser(updated?.data || updated));
+        await dispatch(setAppCountry(countryName));
+      }
+    };
+
+    try {
+      await pushUpdate();
+    } catch (err) {
+      if (email && bearer) {
+        try {
+          await pushUpdate();
+        } catch (inner) {
+          throw inner;
+        }
+      } else {
+        throw err;
+      }
+    }
+  };
+
   const onContinue = async () => {
     if (!selected) return;
-    // If opened in picker mode, update EditProfile params and go back
-    if (route?.params?.mode === 'pick') {
-      // Merge params into existing EditProfile if present in stack
-      navigation.navigate({ name: 'EditProfile', params: { selectedCountry: selected }, merge: true });
-      navigation.goBack();
+
+    const isPickerMode = route?.params?.mode === 'pick';
+
+    if (isPickerMode) {
+      let updated = false;
+      try {
+        await persistCountry(selected);
+        updated = true;
+      } catch (err) {
+        console.warn('[CountrySelect] picker update failed:', err?.message || err);
+      }
+      if (updated) {
+        navigation.popToTop();
+      }
       return;
     }
-    // Default onboarding flow: ensure user exists, then update country on backend and store
+
     try {
-      let bearer = token;
-      if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
-      if (!bearer) throw new Error('Missing auth token');
-      // First, try patching country (works if user already exists)
-      try {
-   
-        const updated = await updateCurrentUser({ address: { country: selected } }, { token: bearer });
-        if (updated) dispatch(setUser(updated?.data || updated));
-      } catch (err) {
-        // If user doesn't exist yet, create then patch
-        if (email && bearer) {
-          // await createZishesUser({ email, token: bearer });
-          const updated = await updateCurrentUser({ address: { country: selected } }, { token: bearer });
-          if (updated) dispatch(setUser(updated?.data || updated));
-        }
-      }
+      await persistCountry(selected);
     } catch (err) {
-      console.warn('[CountrySelect] set country error:', err?.status, err?.message);
+      console.warn('[CountrySelect] set country error:', err?.status, err?.message || err);
     } finally {
       await dispatch(completeVerification());
     }
