@@ -79,7 +79,12 @@ export default function MyListingsScreen({ navigation }) {
     const progressPct = Math.round(safeProgress(item) * 100);
     const supportUrl = 'mailto:support@zishes.com';
     const onSupport = () => {
-      navigation.navigate('Home', { screen: 'ReportIssue', params: { context: 'listing', listingId: item.id } });
+      navigation.navigate('ReportIssue', {
+        context: 'listing',
+        listingId: item.id,
+        headerTitle: 'Listing Support',
+        presetCategory: 'Listing',
+      });
     };
     const onEmailSupport = () => { Linking.openURL(supportUrl).catch(() => {}); };
 

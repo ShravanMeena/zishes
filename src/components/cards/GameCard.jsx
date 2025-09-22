@@ -14,6 +14,7 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
   const tourStatus = item?.tournamentStatus || item?.tournament?.status || item?.raw?.tournament?.status;
   const statusEnded = tourStatus === 'OVER' || tourStatus === 'UNFILLED';
   const showEndedUI = !!statusEnded;
+  const completionPercent = Number.isFinite(progress) ? Math.round(progress * 100) : 0;
 
   return (
     <View style={styles.card}>
@@ -45,9 +46,7 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
             <Text style={styles.coinText}>{item.coinPerPlay} Zishcoin</Text>
           </View>
 
-          <Text style={styles.progressLabel}>
-            {item.playsCompleted} / {item.playsTotal} game play completed
-          </Text>
+          <Text style={styles.progressLabel}>{completionPercent}% completed</Text>
           <ProgressBar value={progress} />
 
           {item.badge ? (

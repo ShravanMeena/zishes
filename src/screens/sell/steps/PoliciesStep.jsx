@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Dimensions } from 'react-native';
 import { colors } from '../../../theme/colors';
 import { CheckCircle2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -45,6 +45,8 @@ export default function PoliciesStep() {
       <Text style={styles.readMore}>Read More</Text>
     </TouchableOpacity>
   );
+
+  const sheetHeight = useMemo(() => Math.round(Dimensions.get('window').height * 0.82), []);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }}>
@@ -93,7 +95,7 @@ export default function PoliciesStep() {
         </TouchableOpacity>
       </View>
 
-      <BottomSheet visible={!!policySheet} onClose={closePolicy} full={false} maxRatio={0.9} showClose>
+      <BottomSheet visible={!!policySheet} onClose={closePolicy} height={sheetHeight} full={false} maxRatio={0.9} showClose>
         <View style={styles.sheetWrap}>
           <Text style={styles.sheetTitle}>{policySheet?.title || 'Policy'}</Text>
           <View style={styles.sheetDivider} />

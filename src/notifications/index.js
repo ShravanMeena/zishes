@@ -251,3 +251,5 @@ function isValidHttpUrl(value) {
     return false;
   }
 }
+
+export { configureInAppMessaging, triggerOfferForCountry } from './inAppMessaging';

@@ -9,6 +9,7 @@ import ChangePasswordScreen from '../screens/account/ChangePasswordScreen';
 import PaymentMethodsManageScreen from '../screens/account/PaymentMethodsManageScreen';
 import DefaultWithdrawalScreen from '../screens/account/DefaultWithdrawalScreen';
 import ReportIssueScreen from '../screens/account/ReportIssueScreen';
+import IssueHistoryScreen from '../screens/account/IssueHistoryScreen';
 import CommunityFeedbackScreen from '../screens/account/CommunityFeedbackScreen';
 import SellerReviewScreen from '../screens/profile/SellerReviewScreen';
 import ManageAccountScreen from '../screens/account/ManageAccountScreen';
@@ -36,6 +37,7 @@ export default function ProfileStack() {
       <Stack.Screen name="PaymentMethodsManage" component={PaymentMethodsManageScreen} />
       <Stack.Screen name="DefaultWithdrawal" component={DefaultWithdrawalScreen} />
       <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
+      <Stack.Screen name="IssueHistory" component={IssueHistoryScreen} />
       <Stack.Screen name="CommunityFeedback" component={CommunityFeedbackScreen} />
       <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
       <Stack.Screen name="SellerReview" component={SellerReviewScreen} />

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Image, ActivityIndicator, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,9 +12,11 @@ import { uploadImage } from '../../services/uploads';
 import issues from '../../services/issues';
 import CongratsModal from '../../components/modals/CongratsModal';
 
-export default function ReportIssueScreen({ navigation }) {
+export default function ReportIssueScreen({ navigation, route }) {
+  const headerTitle = route?.params?.headerTitle || 'Support';
+  const presetCategory = route?.params?.presetCategory;
   const [desc, setDesc] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(presetCategory || '');
   const [showCat, setShowCat] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const ensureGallery = useGalleryPermission();
@@ -27,6 +29,10 @@ export default function ReportIssueScreen({ navigation }) {
   const [successOpen, setSuccessOpen] = useState(false);
 
   const MAX_ATTACHMENTS = 5;
+
+  useEffect(() => {
+    if (presetCategory) setCategory(presetCategory);
+  }, [presetCategory]);
 
   const handlePickerResult = (assets = []) => {
     const usable = assets.filter((a) => a?.uri);
@@ -134,8 +140,10 @@ export default function ReportIssueScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Report an Issue</Text>
-        <View style={{ width: 32 }} />
+        <Text style={styles.headerTitle}>{headerTitle}</Text>
+        <TouchableOpacity style={styles.historyBtn} onPress={() => navigation.navigate('IssueHistory')}>
+          <Text style={styles.historyTxt}>My Reports</Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }} keyboardShouldPersistTaps="handled" enableOnAndroid extraScrollHeight={20}>
@@ -259,6 +267,8 @@ const styles = StyleSheet.create({
   header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#22252C' },
   headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
+  historyBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
+  historyTxt: { color: colors.accent, fontWeight: '700', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6 },
 
   card: { backgroundColor: '#2B2F39', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 16, marginBottom: 14 },
   cardTitle: { color: colors.white, fontWeight: '900', fontSize: 20, marginBottom: 8 },

@@ -166,6 +166,16 @@ export default function WalletScreen({ navigation }) {
   }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals]);
 
   const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
+
+  const openMembershipTier = useCallback(() => {
+    const parentNav = navigation.getParent?.();
+    const targetParams = { screen: 'MembershipTier' };
+    if (parentNav?.navigate) {
+      parentNav.navigate('Profile', targetParams);
+    } else {
+      navigation.navigate('Profile', targetParams);
+    }
+  }, [navigation]);
   const topupPlans = useMemo(() => (plans || []).filter(p => p?.planType === 'TOPUP'), [plans]);
 
   const history = useMemo(() => {
@@ -299,7 +309,7 @@ export default function WalletScreen({ navigation }) {
             activeOpacity={0.9}
             onPress={() => {
               if (isIndia) navigation.navigate('BuyCoins');
-              else navigation.navigate('MembershipTier');
+              else openMembershipTier();
             }}
             style={{ flex: 1 }}
           >
@@ -349,7 +359,7 @@ export default function WalletScreen({ navigation }) {
           <Text style={{ color: '#FF7A7A', paddingHorizontal: 12, marginTop: 8 }}>{error}</Text>
         )}
 
-        {isIndia ? (
+        {!isIndia ? (
           <>
             <Text style={styles.sectionTitle}>Buy ZishCoin</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12 }}>
@@ -391,7 +401,7 @@ export default function WalletScreen({ navigation }) {
               <Text style={styles.membershipTitle}>Unlock Membership Perks</Text>
             </View>
             <Text style={styles.membershipBody}>Access exclusive benefits and faster support with our membership tiers. Top-ups will be available in your region soon.</Text>
-            <Button title="View Memberships" onPress={() => navigation.navigate('MembershipTier')} style={styles.membershipButton} />
+            <Button title="View Memberships" onPress={openMembershipTier} style={styles.membershipButton} />
           </View>
         )}
 

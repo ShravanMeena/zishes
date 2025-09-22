@@ -31,6 +31,16 @@ export default function BuyCoinsScreen({ navigation }) {
   const [lastPlan, setLastPlan] = useState(null);
   const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
 
+  const openMembershipTier = useCallback(() => {
+    const parentNav = navigation.getParent?.();
+    const targetParams = { screen: 'MembershipTier' };
+    if (parentNav?.navigate) {
+      parentNav.navigate('Profile', targetParams);
+    } else {
+      navigation.navigate('Profile', targetParams);
+    }
+  }, [navigation]);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -132,7 +142,7 @@ export default function BuyCoinsScreen({ navigation }) {
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <Text style={{ color: colors.white, fontWeight: '700', fontSize: 18, textAlign: 'center' }}>Coin top-ups are not available in your region yet.</Text>
           <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 12 }}>Check out membership subscriptions to unlock more benefits while we work on expanding support.</Text>
-          <TouchableOpacity style={[styles.bottomBtn, styles.buyBtn, { marginTop: 20 }]} onPress={() => navigation.replace('MembershipTier')}>
+          <TouchableOpacity style={[styles.bottomBtn, styles.buyBtn, { marginTop: 20 }]} onPress={openMembershipTier}>
             <Text style={styles.buyTxt}>View Memberships</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.bottomBtn, styles.cancelBtn, { marginTop: 12, width: '60%' }]} onPress={() => navigation.goBack()}>
