@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
-import { Bell } from 'lucide-react-native';
+import { Bell, Sparkles } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
 import walletService from '../../services/wallet';
@@ -137,10 +137,13 @@ export default function WalletScreen({ navigation }) {
         const currency = p?.currencyCode || p?.currency || 'INR';
         const amount = amountNum > 0 ? `${currency} ${amountNum.toLocaleString()}` : `${currency} —`;
         const rawStatus = String(p?.withdrawalStatus || p?.payoutStatus || p?.status || p?.tournamentStatus || 'pending').toUpperCase();
+        const verificationStatus = String(p?.fulfillment?.verificationStatus || '').toUpperCase();
         let status = 'pending';
-        if (['APPROVED','PAID','SUCCESS','COMPLETED'].includes(rawStatus)) status = 'approved';
+        if (verificationStatus === 'VERIFIED') status = 'verified';
+        else if (['APPROVED','PAID','SUCCESS','COMPLETED'].includes(rawStatus)) status = 'approved';
         else if (['REJECTED','FAILED','DECLINED','CANCELLED'].includes(rawStatus)) status = 'rejected';
-        return { id, title, amount, status, image, raw: p };
+        const withdrawAmount = Number(p?.fulfillment?.walletCredit?.amount ?? 0);
+        return { id, title, amount, status, image, raw: p, withdrawAmount };
       });
       setWithdrawals(mapped);
     } catch (e) {
@@ -162,6 +165,7 @@ export default function WalletScreen({ navigation }) {
     }
   }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals]);
 
+  const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
   const topupPlans = useMemo(() => (plans || []).filter(p => p?.planType === 'TOPUP'), [plans]);
 
   const history = useMemo(() => {
@@ -255,22 +259,24 @@ export default function WalletScreen({ navigation }) {
           setCongratsOpen(true);
         } catch {}
       } catch (err) {
-        const desc = String(err?.description || err?.message || '').toLowerCase();
+        const rawMessage = err?.description || err?.message || '';
+        const desc = String(rawMessage).toLowerCase();
         console.warn('[RZP][TOPUP] error:', JSON.stringify(err));
         if (desc.includes('cancel')) return;
         if (err?.code === 'RAZORPAY_SDK_MISSING') {
           Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
         } else {
-          setPayError(err?.description || err?.message || 'Payment failed');
+          setPayError('We could not complete your payment. Please retry.');
         }
       }
     } catch (e) {
-      setPayError(e?.message || 'Could not start topup');
+      console.warn('[RZP][TOPUP] start error:', e);
+      setPayError('We could not start the payment. Please retry.');
     } finally {
       setPayProcessing(false);
       setProcessingPlanId(null);
     }
-  }, [country, dispatch]);
+  }, [dispatch, fetchWallet, isIndia]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -289,7 +295,14 @@ export default function WalletScreen({ navigation }) {
       >
         {/* Balances Row */}
         <View style={styles.row2}>
-          <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('BuyCoins')} style={{ flex: 1 }}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => {
+              if (isIndia) navigation.navigate('BuyCoins');
+              else navigation.navigate('MembershipTier');
+            }}
+            style={{ flex: 1 }}
+          >
           <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} start={{x:0,y:0}} end={{x:1,y:1}} style={[styles.balanceCard, { marginRight: 8 }] }>
             <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
             <Text style={styles.balanceTitle}>ZishCoin Balance</Text>
@@ -304,6 +317,9 @@ export default function WalletScreen({ navigation }) {
                 <Text style={styles.balanceQty}>{wallet.availableZishCoins.toLocaleString()}</Text>
                 <Text style={styles.balanceUnit}>Coins</Text>
                 <Text style={styles.balanceCaption}>Use for gameplay and entries only. Non-withdrawable.</Text>
+                {!isIndia ? (
+                  <Text style={[styles.balanceCaption, { marginTop: 6 }]}>Coin top-ups are rolling out region-wise. Explore memberships for additional perks.</Text>
+                ) : null}
               </>
             )}
           </LinearGradient>
@@ -333,39 +349,51 @@ export default function WalletScreen({ navigation }) {
           <Text style={{ color: '#FF7A7A', paddingHorizontal: 12, marginTop: 8 }}>{error}</Text>
         )}
 
-        {/* Buy ZishCoin (TOPUP plans) */}
-        <Text style={styles.sectionTitle}>Buy ZishCoin</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12 }}>
-          {(plansLoading && (!topupPlans || topupPlans.length === 0)) ? (
-            [1,2,3].map((i) => (
-              <View key={`sk-${i}`} style={[styles.packCard, i>1 && { marginLeft: 12 }]}> 
-                <View style={[styles.skelLineSm, { width: 36, height: 36, borderRadius: 18, alignSelf: 'center' }]} />
-                <View style={[styles.skelLineSm, { marginTop: 8, width: '70%', alignSelf: 'center' }]} />
-                <View style={[styles.skelLineXs, { marginTop: 6, width: '50%', alignSelf: 'center' }]} />
-                <View style={[styles.skelLineXs, { marginTop: 10, width: '80%', alignSelf: 'center' }]} />
-              </View>
-            ))
-          ) : (topupPlans && topupPlans.length ? topupPlans : []).map((p, i) => (
-            <View key={p._id || i} style={[styles.packCard, i>0 && { marginLeft: 12 }]}>
-              <View style={styles.packBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
-              <Text style={styles.packQty}>{Number(p.coins || 0).toLocaleString()} Coins</Text>
-              <Text style={styles.packPrice}>{(p.currencyCode || p.baseCurrency || '')} {p.amount}</Text>
-              <Button
-                title={processingPlanId === (p._id) ? 'Processing…' : 'Buy Now'}
-                onPress={() => startTopup(p)}
-                disabled={processingPlanId === (p._id)}
-                style={{ marginTop: 10 }}
-              />
+        {isIndia ? (
+          <>
+            <Text style={styles.sectionTitle}>Buy ZishCoin</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12 }}>
+              {(plansLoading && (!topupPlans || topupPlans.length === 0)) ? (
+                [1,2,3].map((i) => (
+                  <View key={`sk-${i}`} style={[styles.packCard, i>1 && { marginLeft: 12 }]}> 
+                    <View style={[styles.skelLineSm, { width: 36, height: 36, borderRadius: 18, alignSelf: 'center' }]} />
+                    <View style={[styles.skelLineSm, { marginTop: 8, width: '70%', alignSelf: 'center' }]} />
+                    <View style={[styles.skelLineXs, { marginTop: 6, width: '50%', alignSelf: 'center' }]} />
+                    <View style={[styles.skelLineXs, { marginTop: 10, width: '80%', alignSelf: 'center' }]} />
+                  </View>
+                ))
+              ) : (topupPlans && topupPlans.length ? topupPlans : []).map((p, i) => (
+                <View key={p._id || i} style={[styles.packCard, i>0 && { marginLeft: 12 }]}>
+                  <View style={styles.packBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
+                  <Text style={styles.packQty}>{Number(p.coins || 0).toLocaleString()} Coins</Text>
+                  <Text style={styles.packPrice}>{(p.currencyCode || p.baseCurrency || '')} {p.amount}</Text>
+                  <Button
+                    title={processingPlanId === (p._id) ? 'Processing…' : 'Buy Now'}
+                    onPress={() => startTopup(p)}
+                    disabled={processingPlanId === (p._id)}
+                    style={{ marginTop: 10 }}
+                  />
+                </View>
+              ))}
+              {(!plansLoading && (!topupPlans || topupPlans.length === 0)) && (
+                <View style={[styles.packCard]}>
+                  <View style={styles.packBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
+                  <Text style={styles.packQty}>No packs</Text>
+                  <Text style={styles.packPrice}>Try again later</Text>
+                </View>
+              )}
+            </ScrollView>
+          </>
+        ) : (
+          <View style={styles.membershipCard}> 
+            <View style={styles.membershipHeader}>
+              <Sparkles size={20} color={colors.accent} />
+              <Text style={styles.membershipTitle}>Unlock Membership Perks</Text>
             </View>
-          ))}
-          {(!plansLoading && (!topupPlans || topupPlans.length === 0)) && (
-            <View style={[styles.packCard]}>
-              <View style={styles.packBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
-              <Text style={styles.packQty}>No packs</Text>
-              <Text style={styles.packPrice}>Try again later</Text>
-            </View>
-          )}
-        </ScrollView>
+            <Text style={styles.membershipBody}>Access exclusive benefits and faster support with our membership tiers. Top-ups will be available in your region soon.</Text>
+            <Button title="View Memberships" onPress={() => navigation.navigate('MembershipTier')} style={styles.membershipButton} />
+          </View>
+        )}
 
         {/* Withdrawals (Seller only) */}
         <Text style={styles.sectionTitle}>Withdrawals (Seller only)</Text>
@@ -384,28 +412,46 @@ export default function WalletScreen({ navigation }) {
               </View>
             ))
           ) : (withdrawals && withdrawals.length > 0) ? (
-            withdrawals.map((w, idx) => {
-              const over = String(w?.raw?.tournament?.status || w?.raw?.tournamentStatus || '').toUpperCase() === 'OVER';
-              const rc = w?.raw?.fulfillment?.receiverConfirmation || {};
-              const receiverApproved = !!(rc?.confirmedAt || rc?.confirmed || (rc?.status && String(rc.status).toUpperCase() === 'CONFIRMED'));
-              return (
-                <View key={w.id} style={[styles.withdrawRow, idx>0 && styles.rowDivider]}>
-                  <Image source={{ uri: w.image }} style={styles.thumb} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.withdrawTitle} numberOfLines={2}>{w.title}</Text>
-                    <Text style={styles.withdrawAmount}>{w.amount}</Text>
-                    {over && !receiverApproved ? (
-                      <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Waiting for winner to approve receipt.</Text>
-                    ) : null}
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <StatusChip status={w.status} />
-                    {over ? (
+          withdrawals.map((w, idx) => {
+            const over = String(w?.raw?.tournament?.status || w?.raw?.tournamentStatus || '').toUpperCase() === 'OVER';
+            const rc = w?.raw?.fulfillment?.receiverConfirmation || {};
+            const receiverApproved = !!(rc?.confirmedAt || rc?.confirmed || (rc?.status && String(rc.status).toUpperCase() === 'CONFIRMED'));
+            const verificationStatus = String(w?.raw?.fulfillment?.verificationStatus || '').toUpperCase();
+            const isVerified = verificationStatus === 'VERIFIED';
+            const approvalStatus = String(w?.raw?.approvalStatus || '').toUpperCase();
+            const rejectionReason = w?.raw?.rejectionReason;
+            return (
+              <View key={w.id} style={[styles.withdrawRow, idx>0 && styles.rowDivider]}>
+                <Image source={{ uri: w.image }} style={styles.thumb} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.withdrawTitle} numberOfLines={2}>{w.title}</Text>
+                  <Text style={styles.withdrawAmount}>{w.amount}</Text>
+                  {approvalStatus && approvalStatus !== 'APPROVED' ? (
+                    <Text style={{ color: approvalStatus === 'REJECTED' ? '#FF7A7A' : colors.textSecondary, marginTop: 4 }}>
+                      {approvalStatus === 'REJECTED'
+                        ? `Listing rejected${rejectionReason ? `: ${rejectionReason}` : '. Please contact support.'}`
+                        : 'Listing pending approval. Withdrawals unlock once it is approved.'}
+                    </Text>
+                  ) : null}
+                  {over && !receiverApproved ? (
+                    <Text style={{ color: colors.textSecondary, marginTop: 4 }}>Waiting for winner to approve receipt.</Text>
+                  ) : null}
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <StatusChip status={isVerified ? 'verified' : w.status} />
+                  {isVerified ? (
+                    <TouchableOpacity
+                      style={[styles.smallBtn, { backgroundColor: '#16a085', marginTop: 6 }]}
+                      onPress={() => navigation.navigate('Withdraw', { maxAmount: wallet.withdrawalBalance, productId: w.id })}
+                    >
+                      <Text style={styles.smallBtnText}>Withdraw</Text>
+                    </TouchableOpacity>
+                  ) : over ? (
                       <TouchableOpacity style={[styles.smallBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('UploadProof', { item: { id: w.id, _id: w.id, raw: w.raw, title: w.title, image: w.image } })}>
                         <Text style={styles.smallBtnText}>Upload Proof</Text>
                       </TouchableOpacity>
                     ) : null}
-                  </View>
+                </View>
                 </View>
               );
             })
@@ -464,7 +510,7 @@ export default function WalletScreen({ navigation }) {
       <AppModal
         visible={!!payError}
         title="Payment Failed"
-        message={payError || 'Something went wrong while starting payment.'}
+        message={payError || 'We could not process your payment. Please try again.'}
         cancelText="Close"
         confirmText="Retry"
         onCancel={() => setPayError(null)}
@@ -480,6 +526,7 @@ function StatusChip({ status }) {
     pending: { text: 'Pending', bg: '#E2B93B' },
     approved: { text: 'Approved', bg: '#2E7D32' },
     rejected: { text: 'Rejected', bg: '#C65B5B' },
+    verified: { text: 'Verified', bg: '#2E7D32' },
   };
   const s = map[status] || map.pending;
   return (
@@ -524,6 +571,12 @@ const styles = StyleSheet.create({
   packBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#3A2B52', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 6 },
   packQty: { color: colors.white, fontWeight: '700', textAlign: 'center', marginTop: 4 },
   packPrice: { color: colors.textSecondary, textAlign: 'center', marginTop: 2 },
+
+  membershipCard: { backgroundColor: '#262A3C', borderRadius: 18, borderWidth: 1, borderColor: '#3C4360', marginHorizontal: 12, marginTop: 16, padding: 18 },
+  membershipHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  membershipTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
+  membershipBody: { color: colors.textSecondary, marginTop: 10, lineHeight: 20 },
+  membershipButton: { marginTop: 16 },
 
   panel: { backgroundColor: '#2B2F39', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 12, marginHorizontal: 12, marginTop: 10 },
   withdrawRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },

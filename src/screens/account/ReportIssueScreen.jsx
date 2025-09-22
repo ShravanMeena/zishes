@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Image, ActivityIndicator, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
@@ -26,18 +26,68 @@ export default function ReportIssueScreen({ navigation }) {
   const [progress, setProgress] = useState(0); // 0..1
   const [successOpen, setSuccessOpen] = useState(false);
 
+  const MAX_ATTACHMENTS = 5;
+
+  const handlePickerResult = (assets = []) => {
+    const usable = assets.filter((a) => a?.uri);
+    if (!usable.length) return;
+    setAttachments((prev) => {
+      const remaining = MAX_ATTACHMENTS - prev.length;
+      if (remaining <= 0) {
+        Alert.alert('Attachment limit reached', `You can attach up to ${MAX_ATTACHMENTS} images per report.`);
+        return prev;
+      }
+      const next = usable.slice(0, remaining).map((a) => ({ uri: a.uri }));
+      return [...prev, ...next];
+    });
+  };
+
   const addAttachments = async () => { setPickerOpen(true); };
   const pickFromGallery = async () => {
     const ok = await ensureGallery();
     if (!ok) return;
-    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0 });
-    if (res?.assets?.length) setAttachments((p) => [...p, ...res.assets.map((a) => ({ uri: a.uri }))]);
+    const remaining = MAX_ATTACHMENTS - attachments.length;
+    if (remaining <= 0) {
+      Alert.alert('Attachment limit reached', `You can attach up to ${MAX_ATTACHMENTS} images per report.`);
+      return;
+    }
+    try {
+      const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: remaining, quality: 0.85 });
+      if (res?.errorCode) {
+        if (res.errorCode === 'permission') {
+          Alert.alert('Permission needed', 'Photos access is required to attach screenshots.');
+        }
+        return;
+      }
+      if (res?.assets?.length) handlePickerResult(res.assets);
+    } catch (e) {
+      Alert.alert('Unable to open gallery', e?.message || 'Please try again.');
+    }
   };
   const pickFromCamera = async () => {
     const ok = await ensureCamera();
     if (!ok) return;
-    const res = await launchCamera({ mediaType: 'photo', quality: 0.9, cameraType: 'back', saveToPhotos: true });
-    if (res?.assets?.length) setAttachments((p) => [...p, ...res.assets.map((a) => ({ uri: a.uri }))]);
+    const remaining = MAX_ATTACHMENTS - attachments.length;
+    if (remaining <= 0) {
+      Alert.alert('Attachment limit reached', `You can attach up to ${MAX_ATTACHMENTS} images per report.`);
+      return;
+    }
+    try {
+      const res = await launchCamera({ mediaType: 'photo', quality: 0.85, cameraType: 'back', saveToPhotos: true });
+      if (res?.errorCode) {
+        if (res.errorCode === 'permission') {
+          Alert.alert('Permission needed', 'Camera access is required to capture photos.');
+        }
+        return;
+      }
+      if (res?.assets?.length) handlePickerResult(res.assets);
+    } catch (e) {
+      Alert.alert('Unable to open camera', e?.message || 'Please try again.');
+    }
+  };
+
+  const removeAttachmentAt = (idx) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const submit = async () => {
@@ -133,7 +183,10 @@ export default function ReportIssueScreen({ navigation }) {
           {attachments.length ? (
             <View style={styles.attachGrid}>
               {attachments.map((a, i) => (
-                <Image key={`${a.uri}-${i}`} source={{ uri: a.uri }} style={styles.thumb} />
+                <TouchableOpacity key={`${a.uri}-${i}`} onPress={() => removeAttachmentAt(i)} activeOpacity={0.85} style={styles.attachmentWrap}>
+                  <Image source={{ uri: a.uri }} style={styles.thumb} />
+                  <Text style={styles.removeHint}>Remove</Text>
+                </TouchableOpacity>
               ))}
             </View>
           ) : null}
@@ -215,8 +268,10 @@ const styles = StyleSheet.create({
   selectTxt: { fontWeight: '600' },
   attachBtn: { borderWidth: 1, borderColor: '#6A55D9', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, backgroundColor: '#2B2F39' },
   attachTxt: { color: colors.white, fontWeight: '800' },
-  attachGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  attachGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
+  attachmentWrap: { alignItems: 'center' },
   thumb: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#333' },
+  removeHint: { color: colors.textSecondary, fontSize: 11, textAlign: 'center', marginTop: 4 },
   hint: { color: colors.textSecondary, marginTop: 10 },
   errorTxt: { color: '#FF7A7A', marginTop: 8 },
 

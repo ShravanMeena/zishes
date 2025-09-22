@@ -2,7 +2,7 @@
 // Change here to point all backend services to a new origin
 
 // export const BACKEND_ORIGIN = 'https://kvc6x8vh-3000.inc1.devtunnels.ms';
-export const BACKEND_ORIGIN = 'https://empire-nato-into-syracuse.trycloudflare.com';
+export const BACKEND_ORIGIN = 'https://api.zishes.com';
 export const API_BASE = `${BACKEND_ORIGIN}/api/v1`;
 
 // If the auth domain also needs to be centralized later, we can add:

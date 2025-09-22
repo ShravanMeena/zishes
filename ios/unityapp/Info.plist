@@ -83,8 +83,6 @@
 			</dict>
 		</dict>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We use your location once to detect your country and set the right payment region.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We save images you select or capture for your listings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

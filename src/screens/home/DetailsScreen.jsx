@@ -220,12 +220,6 @@ export default function DetailsScreen({ route, navigation }) {
     return () => { alive = false; };
   }, [initialItem?.id, token]);
 
-  const priceText = useMemo(() => {
-    if (item?.price === null || item?.price === undefined) return '{price}';
-    // Show as INR without assuming subunits; keep simple formatting
-    try { return `₹${Number(item.price).toLocaleString('en-IN')}`; } catch { return `₹${item.price}`; }
-  }, [item]);
-
   const endText = useMemo(() => {
     // Prefer endedAt; fallback to endsAt if present
     const ts = item?.endedAt ? Date.parse(item.endedAt) : (typeof item?.endsAt === 'number' ? item.endsAt : null);
@@ -332,12 +326,9 @@ export default function DetailsScreen({ route, navigation }) {
         {/* Info Card */}
         <View style={styles.card}>
           <Text style={styles.title}>{item?.title || '{text}'}</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Price:</Text>
-            <Text style={styles.priceValue}>{priceText}</Text>
-            <View style={{ flex: 1 }} />
+          <View style={styles.feeRow}>
             <Text style={styles.feeLabel}>Per Play Fee:</Text>
-            <Text style={styles.feeValue}> {item?.coinPerPlay ?? '{price}'} ZC</Text>
+            <Text style={styles.feeValue}>{item?.coinPerPlay ?? '{price}'} ZC</Text>
           </View>
         </View>
 
@@ -440,11 +431,9 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: colors.accent },
   card: { backgroundColor: '#2B2F39', borderRadius: 16, padding: 16, marginHorizontal: 16, marginTop: 12, borderWidth: 1, borderColor: '#343B49' },
   title: { color: colors.white, fontWeight: '800', fontSize: 20 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  priceLabel: { color: colors.white, fontWeight: '600' },
-  priceValue: { color: colors.accent, fontWeight: '800', marginLeft: 6, fontSize: 18 },
-  feeLabel: { color: colors.white, fontWeight: '600' },
-  feeValue: { color: '#27c07d', fontWeight: '800' },
+  feeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  feeLabel: { color: colors.textSecondary, fontWeight: '600' },
+  feeValue: { color: '#27c07d', fontWeight: '800', marginLeft: 6, fontSize: 18 },
   statusCard: { backgroundColor: '#2B2F39', borderRadius: 16, padding: 16, marginHorizontal: 16, marginTop: 12, borderWidth: 1, borderColor: '#343B49' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusTitle: { color: colors.white, fontWeight: '700' },

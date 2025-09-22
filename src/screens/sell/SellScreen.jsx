@@ -10,7 +10,7 @@ import BottomSheet from '../../components/common/BottomSheet';
 import SubmissionModal from '../../components/modals/SubmissionModal';
 import { CheckCircle2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadDraft, saveDraftFromStore, clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute } from '../../store/listingDraft/listingDraftSlice';
+import { loadDraft, clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute } from '../../store/listingDraft/listingDraftSlice';
 import { publishListing } from '../../store/listingDraft/listingDraftSlice';
 import { BackHandler } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
@@ -35,8 +35,6 @@ export default function SellScreen({ navigation, route }) {
   const submitError = useSelector((s) => s.listingDraft.submitError);
   const pendingLeaveToRoute = useSelector((s) => s.listingDraft.ui.pendingLeaveToRoute);
   const details = useSelector((s) => s.listingDraft.details);
-  const user = useSelector((s) => s.auth.user);
-  const needsVerification = useSelector((s) => s.auth.needsVerification);
 
   const steps = useMemo(
     () => [
@@ -91,36 +89,9 @@ export default function SellScreen({ navigation, route }) {
   }, [activeKey]);
   const isReview = activeKey === 'review';
 
-  const isVerified = useMemo(() => {
-    const status = (user?.kycStatus || user?.verificationStatus || user?.kyc?.status || '').toLowerCase();
-    const statusApproved = status === 'approved' || status === 'completed' || status === 'verified';
-    return statusApproved || !!user?.kycCompletedAt || !!user?.kycCompleted || user?.verified === true;
-  }, [user]);
-
-  const requiresKyc = !isVerified || needsVerification;
-
-  const startKycFlow = useCallback(async () => {
-    try {
-      await dispatch(saveDraftFromStore()).unwrap();
-    } catch (_) {
-      // ignore save errors, still attempt navigation
-    }
-    navigation.navigate('Home', { screen: 'HyperKyc' });
-  }, [dispatch, navigation]);
-
   const onPrimary = async () => {
     if (isReview) {
       if (submitting) return;
-      if (requiresKyc) {
-        goTo('policies');
-        setDialog({
-          title: 'Verification Required',
-          message: 'Please complete your KYC verification before publishing this listing.',
-          primary: { label: 'Start KYC', action: () => startKycFlow() },
-          secondary: { label: 'Later' },
-        });
-        return;
-      }
       try {
         await dispatch(publishListing()).unwrap();
       } catch (err) {

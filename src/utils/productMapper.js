@@ -26,6 +26,10 @@ export function mapProductToCard(p) {
     gameTypeIcon: game?.thumbnail || PLACEHOLDER_ICON,
     // Per play fee comes from tournament.entryFee (Zish coin). Use placeholder if missing.
     coinPerPlay: (t && t.entryFee !== undefined && t.entryFee !== null) ? Number(t.entryFee) : '{price}',
+    // Moderation / approval metadata
+    approvalStatus: p?.approvalStatus || null,
+    approvalUpdatedAt: p?.approvalUpdatedAt || null,
+    rejectionReason: p?.rejectionReason || null,
     // Keep raw for details if needed
     raw: p,
   };

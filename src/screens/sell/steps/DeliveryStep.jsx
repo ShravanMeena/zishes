@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboard } from 'react-native';
 import { colors } from '../../../theme/colors';
 import { Store, Truck, TruckIcon, Mail, Check } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -25,11 +25,14 @@ export default function DeliveryStep() {
       >
         <Text style={styles.fieldLabel}>Pickup Instructions</Text>
         <TextInput
-          placeholder="e.g., 'Available after 5 PM, call before'"
+          placeholder="Share pickup instructions (e.g., Available after 5 PM, call before)"
           placeholderTextColor={colors.textSecondary}
           value={pickupNote}
           onChangeText={setPickupNote}
           style={styles.input}
+          blurOnSubmit
+          returnKeyType="done"
+          onSubmitEditing={() => Keyboard.dismiss()}
         />
       </OptionCard>
 

@@ -87,18 +87,6 @@ export default function UnityOverlay({
 
   if (!visible) return null;
 
-  const score = typeof result?.score === "number" ? result.score : Number(result?.score) || 0;
-  const title =
-    score >= 90
-      ? "Legendary!"
-      : score >= 70
-      ? "Amazing!"
-      : score >= 50
-      ? "Great Job!"
-      : score > 0
-      ? "Nice Try!"
-      : "All Done!";
-
   return (
     <View style={styles.overlay}>
       {showUnity ? (

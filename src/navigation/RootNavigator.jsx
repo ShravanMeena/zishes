@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { navigationRef } from './navigationRef';
@@ -16,6 +16,7 @@ export default function RootNavigator() {
   const dispatch = useDispatch();
   const { token, bootstrapped: authBoot, user } = useSelector((s) => s.auth);
   const { bootstrapped: appBoot, onboardingSeen } = useSelector((s) => s.app);
+  const [profileHydrated, setProfileHydrated] = useState(false);
 
   useEffect(() => {
     dispatch(bootstrapAuth());
@@ -26,29 +27,55 @@ export default function RootNavigator() {
   // Load user profile (for address.country) when authenticated
   useEffect(() => {
     let cancelled = false;
-    const run = async () => {
-      if (token && !user) {
-        try {
-          const me = await users.getMe();
-          const doc = me?.data || me;
-          if (!cancelled && doc) dispatch(setUser(doc));
-        } catch (_) {}
+    const hydrate = async () => {
+      if (!token) {
+        if (!cancelled) {
+          setProfileHydrated(true);
+        }
+        return;
+      }
+
+      if (user?.address?.country) {
+        if (!cancelled) {
+          setProfileHydrated(true);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setProfileHydrated(false);
+      }
+
+      try {
+        const me = await users.getMe();
+        const doc = me?.data || me;
+        if (!cancelled && doc) dispatch(setUser(doc));
+      } catch (_) {
+        // Allow navigation even if profile fetch fails
+      } finally {
+        if (!cancelled) {
+          setProfileHydrated(true);
+        }
       }
     };
-    run();
+
+    hydrate();
+
     return () => { cancelled = true; };
-  }, [token, user, dispatch]);
+  }, [token, user?.address?.country, dispatch]);
 
   if (!authBoot || !appBoot) return <Splash />;
+
+  if (token && !profileHydrated) {
+    return <Splash />;
+  }
 
   return (
     <NavigationContainer ref={navigationRef} linking={linking}>
       {token
         ? (
             // Avoid flashing Country screen before user is loaded.
-            user == null
-              ? <AppTabs />
-              : (!user?.address?.country ? <CountryRequiredGateway /> : <AppTabs />)
+            (!user?.address?.country ? <CountryRequiredGateway /> : <AppTabs />)
           )
         : (onboardingSeen ? <AuthStack /> : <OnboardingGateway />)}
     </NavigationContainer>

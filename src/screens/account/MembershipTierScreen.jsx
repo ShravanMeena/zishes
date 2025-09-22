@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { ChevronLeft, CheckCircle2 } from 'lucide-react-native';
+import { ChevronLeft, CheckCircle2, Sparkles } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Button from '../../components/ui/Button';
 import CongratsModal from '../../components/modals/CongratsModal';
@@ -36,6 +36,7 @@ export default function MembershipTierScreen({ navigation }) {
       setLoading(true);
       const res = await plansService.listPlans({});
       const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      console.log(JSON.stringify(list,null,2))
       setPlans(list.filter(p => p?.planType === 'SUBSCRIPTION'));
     } catch (e) {
       setPlans([]);
@@ -139,10 +140,33 @@ export default function MembershipTierScreen({ navigation }) {
           <View style={styles.cardDark}><Text style={{ color: colors.textSecondary }}>No membership plans available.</Text></View>
         ) : (
           plans.map((pl, idx) => (
-            <View key={pl._id || idx} style={[styles.cardDark, idx>0 && { marginTop: 16 }]}> 
+            <View
+              key={pl._id || idx}
+              style={[
+                styles.cardDark,
+                idx > 0 && { marginTop: 16 },
+                pl.highlight && styles.cardHighlight,
+              ]}
+            >
+              {pl.highlight ? (
+                <View style={styles.highlightBadge}>
+                  <Sparkles size={14} color={colors.white} />
+                  <Text style={styles.highlightTxt}>Recommended</Text>
+                </View>
+              ) : null}
               <Text style={[styles.tierTitle]}>{(pl.billingPeriod ? `${(pl.billingInterval || 1)} ${pl.billingPeriod}` : 'Membership')}</Text>
-              <Text style={styles.price}>{(pl.currencyCode || pl.baseCurrency || '')} {pl.amount}</Text>
+              <Text style={styles.price}>{(pl.currencySymbol || pl.currencyCode || pl.baseCurrency || '')} {pl.amount}</Text>
               <Text style={styles.credits}>{Number(pl.coins || 0).toLocaleString()} ZC credits</Text>
+              {Array.isArray(pl.perks) && pl.perks.length ? (
+                <View style={styles.perksWrap}>
+                  {pl.perks.map((perk, perkIdx) => (
+                    <View key={`${pl._id}-perk-${perkIdx}`} style={styles.featureRow}>
+                      <CheckCircle2 size={16} color={colors.accent} />
+                      <Text style={styles.featureTxt}>{perk}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
               <Button
                 title={processingPlanId === (pl._id) ? 'Processing…' : 'Subscribe Now'}
                 onPress={() => startSubscribe(pl)}
@@ -198,6 +222,10 @@ const styles = StyleSheet.create({
   credits: { color: colors.textSecondary, textAlign: 'center', marginTop: 4, marginBottom: 12 },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 4 },
   featureTxt: { color: colors.white, fontWeight: '600' },
+  perksWrap: { marginTop: 12 },
+  cardHighlight: { borderColor: colors.accent, backgroundColor: '#32264A', shadowColor: colors.accent, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  highlightBadge: { position: 'absolute', top: -12, alignSelf: 'center', backgroundColor: colors.accent, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  highlightTxt: { color: colors.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
   badge: { position: 'absolute', top: -12, alignSelf: 'center', backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, overflow: 'hidden' },
   badgeTxt: { color: colors.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
   note: { color: colors.textSecondary, textAlign: 'center', marginTop: 16 },

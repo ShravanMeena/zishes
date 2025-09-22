@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Linking, Share, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, Clock } from 'lucide-react-native';
@@ -11,16 +11,12 @@ import MyListingsSkeleton from '../../components/skeletons/MyListingsSkeleton';
 
 export default function MyListingsScreen({ navigation }) {
   const token = useSelector((s) => s.auth.token);
+  const withdrawalBalance = useSelector((s) => s.wallet.withdrawalBalance);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editItem, setEditItem] = useState(null);
-  const [editName, setEditName] = useState('');
-  const [editDesc, setEditDesc] = useState('');
-  const [editQty, setEditQty] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [checkingId, setCheckingId] = useState(null);
 
   const load = async () => {
     if (!token) { setItems([]); return; }
@@ -43,72 +39,136 @@ export default function MyListingsScreen({ navigation }) {
     try { await load(); } finally { setRefreshing(false); }
   };
 
-  const openEdit = openEditFactory({ setEditOpen, setEditItem, setEditName, setEditDesc, setEditQty });
-  const saveEdits = async () => {
-    if (!editItem) return;
+  const handleShare = async (item) => {
+    const url = item?.raw?.shareUrl || `https://zishes.com/item/${item.id}`;
     try {
-      setSaving(true);
-      const patch = { name: editName, description: editDesc };
-      const qtyNum = parseInt(editQty, 10);
-      if (!isNaN(qtyNum)) patch.quantity = qtyNum;
-      await products.updateProduct(editItem.id, patch, token);
-      setEditOpen(false);
-      await load();
-    } catch (e) {
-      // Basic inline error display by keeping modal open and showing a hint could be added
-      setEditOpen(false);
-    } finally {
-      setSaving(false);
+      await Share.share({
+        message: `Check out ${item.title} on Zishes: ${url}`,
+        url,
+      });
+    } catch (_) {
+      // ignore share cancellation/errors
     }
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Home', { screen: 'Details', params: { item } })} style={styles.card}>
-      <Image source={{ uri: item.image }} style={styles.thumb} />
-      <View style={{ flex: 1 }}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Chip label={statusLabel(item)} type={isCompleted(item) ? 'danger' : 'info'} />
-            <TouchableOpacity onPress={() => openEdit(item)}>
-              <Chip label="Edit" type="accent" style={{ marginLeft: 8 }} />
-            </TouchableOpacity>
-          </View>
-        </View>
+  const handleEdit = async (item) => {
+    if (!token) {
+      Alert.alert('Sign in required', 'Please log in again to edit this listing.');
+      return;
+    }
+    try {
+      setCheckingId(item.id);
+      const fresh = await products.getProductById(item.id, token);
+      const freshStatus = String(fresh?.approvalStatus || '').toUpperCase();
+      if (freshStatus === 'APPROVED') {
+        Alert.alert('Already approved', 'Approved listings can no longer be edited. Share it with buyers instead.');
+        await load();
+        return;
+      }
+      const draftData = buildDraftFromProduct(fresh);
+      navigation.navigate('Sell', { draftData, editingProductId: fresh?._id || fresh?.id });
+    } catch (err) {
+      Alert.alert('Unable to edit listing', err?.message || 'Please try again in a moment.');
+    } finally {
+      setCheckingId(null);
+    }
+  };
 
-        <View style={styles.rowBetween}>
-          <Text style={styles.price}>{formatINR(item?.raw?.price)}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Clock size={14} color={colors.textSecondary} />
-            <Text style={styles.time}>{'  '}{timeLeft(item)}</Text>
-          </View>
-        </View>
+  const renderItem = ({ item }) => {
+    const approval = deriveApprovalState(item);
+    const progressPct = Math.round(safeProgress(item) * 100);
+    const supportUrl = 'mailto:support@zishes.com';
+    const onSupport = () => {
+      navigation.navigate('Home', { screen: 'ReportIssue', params: { context: 'listing', listingId: item.id } });
+    };
+    const onEmailSupport = () => { Linking.openURL(supportUrl).catch(() => {}); };
 
-        <Text style={styles.progressTxt}>{`${item.playsCompleted}/${item.playsTotal} Gameplays`}</Text>
-        <ProgressBar value={safeProgress(item)} />
-
-        <View style={[styles.rowBetween, { marginTop: 10 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* Only show Upload Proof when tournament is OVER */}
-            {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
-              <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })}>
-                <Chip label="Upload Proof" type="accent" />
-              </TouchableOpacity>
-            ) : null}
+    return (
+      <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Home', { screen: 'Details', params: { item } })} style={styles.card}>
+        <Image source={{ uri: item.image }} style={styles.thumb} />
+        <View style={{ flex: 1 }}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {approval.badgeLabel ? <Chip label={approval.badgeLabel} type={approval.badgeType} /> : null}
+              {approval.status === 'APPROVED'
+                ? (
+                    <>
+                      <TouchableOpacity onPress={() => handleShare(item)}>
+                        <Chip label="Share" type="accent" style={{ marginLeft: 8 }} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={onSupport}>
+                        <Chip label="Need Help" type="info" style={{ marginLeft: 8 }} />
+                      </TouchableOpacity>
+                    </>
+                  )
+                : (
+                    <TouchableOpacity onPress={() => handleEdit(item)} disabled={checkingId === item.id}>
+                      <Chip label={checkingId === item.id ? 'Opening…' : 'Edit'} type="accent" style={{ marginLeft: 8, opacity: checkingId === item.id ? 0.7 : 1 }} />
+                    </TouchableOpacity>
+                  )}
+            </View>
           </View>
+
+          {approval.notice ? (
+            <View style={[styles.approvalNotice, styles[`approvalNotice${approval.notice.tone}`]]}>
+              <Text style={styles.approvalTitle}>{approval.notice.title}</Text>
+              {approval.notice.detail ? <Text style={styles.approvalDetail}>{approval.notice.detail}</Text> : null}
+              {approval.notice.tone === 'Rejected' ? (
+                <View style={styles.noticeActions}>
+                  <TouchableOpacity onPress={() => handleEdit(item)} disabled={checkingId === item.id} style={[styles.noticeBtn, styles.noticeBtnPrimary, checkingId === item.id && { opacity: 0.7 }]}>
+                    <Text style={styles.noticeBtnPrimaryTxt}>{checkingId === item.id ? 'Opening…' : 'Edit & Resubmit'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={onEmailSupport} style={[styles.noticeBtn, styles.noticeBtnGhost, { marginLeft: 8 }]}>
+                    <Text style={styles.noticeBtnGhostTxt}>Contact Support</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          <View style={styles.rowBetween}>
+            <Text style={styles.price}>{formatINR(item?.raw?.price)}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Clock size={14} color={colors.textSecondary} />
+              <Text style={styles.time}>{'  '}{timeLeft(item)}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.progressTxt}>{`${progressPct}% seats filled`}</Text>
+          <ProgressBar value={safeProgress(item)} />
+
+          <View style={[styles.rowBetween, { marginTop: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
+                <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })}>
+                  <Chip label="Upload Proof" type="accent" />
+                </TouchableOpacity>
+              ) : null}
+              {String(item?.raw?.fulfillment?.verificationStatus || '').toUpperCase() === 'VERIFIED' ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    navigation.navigate('Wallet', { screen: 'Withdraw', params: { maxAmount: withdrawalBalance, productId: item.id } });
+                  }}
+                >
+                  <Chip label="Withdraw" type="success" style={{ marginLeft: 8 }} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+          {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
+            (() => {
+              const rc = item?.raw?.fulfillment?.receiverConfirmation || {};
+              const receiverApproved = !!(rc?.confirmedAt || rc?.confirmed || (rc?.status && String(rc.status).toUpperCase() === 'CONFIRMED'));
+              return !receiverApproved ? (
+                <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Waiting for winner to approve receipt.</Text>
+              ) : null;
+            })()
+          ) : null}
         </View>
-        {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
-          (() => {
-            const rc = item?.raw?.fulfillment?.receiverConfirmation || {};
-            const receiverApproved = !!(rc?.confirmedAt || rc?.confirmed || (rc?.status && String(rc.status).toUpperCase() === 'CONFIRMED'));
-            return !receiverApproved ? (
-              <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Waiting for winner to approve receipt.</Text>
-            ) : null;
-          })()
-        ) : null}
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
@@ -143,33 +203,6 @@ export default function MyListingsScreen({ navigation }) {
         />
       )}
 
-      {/* Edit modal */}
-      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
-        <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={() => setEditOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Listing</Text>
-            {editItem ? (
-              <Text style={styles.modalHint}>{isActive(editItem) ? 'Game and pricing can’t be edited after activation.' : 'You can edit all details before activation.'}</Text>
-            ) : null}
-
-            <Text style={styles.label}>Name</Text>
-            <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Item name" placeholderTextColor="#778" />
-
-            <Text style={styles.label}>Description</Text>
-            <TextInput style={[styles.input, { height: 92, textAlignVertical: 'top' }]} value={editDesc} onChangeText={setEditDesc} placeholder="Describe your item" placeholderTextColor="#778" multiline />
-
-            <Text style={styles.label}>Quantity</Text>
-            <TextInput style={styles.input} value={editQty} onChangeText={setEditQty} keyboardType="numeric" placeholder="0" placeholderTextColor="#778" />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
-              <TouchableOpacity onPress={() => setEditOpen(false)} style={[styles.btn, styles.btnGhost]}><Text style={styles.btnGhostTxt}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity onPress={saveEdits} disabled={saving} style={[styles.btn, styles.btnPrimary, saving && { opacity: 0.7 }]}>
-                <Text style={styles.btnPrimaryTxt}>{saving ? 'Saving…' : 'Save'}</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -180,6 +213,7 @@ function Chip({ label, type = 'default', style }) {
     info: { bg: '#3B82F6', color: colors.white },
     accent: { bg: colors.primary, color: colors.white },
     danger: { bg: '#E57373', color: colors.white },
+    success: { bg: '#16a085', color: colors.white },
   };
   const s = map[type] || map.default;
   return (
@@ -203,17 +237,23 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
   chipTxt: { fontWeight: '700' },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
-  modalCard: { width: '90%', backgroundColor: '#1E2128', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 16 },
-  modalTitle: { color: colors.white, fontWeight: '900', fontSize: 18 },
-  modalHint: { color: colors.textSecondary, marginTop: 6 },
-  label: { color: colors.white, marginTop: 12, marginBottom: 6, fontWeight: '600' },
-  input: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: colors.white },
-  btn: { height: 44, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
-  btnGhost: { borderWidth: 1, borderColor: '#3A4051' },
-  btnGhostTxt: { color: colors.white, fontWeight: '800' },
-  btnPrimary: { backgroundColor: colors.primary },
-  btnPrimaryTxt: { color: colors.white, fontWeight: '800' },
+  approvalNotice: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+  },
+  approvalNoticePending: { borderColor: '#3A4051', backgroundColor: '#252a3b' },
+  approvalNoticeApproved: { borderColor: '#275842', backgroundColor: '#1c3028' },
+  approvalNoticeRejected: { borderColor: '#64323a', backgroundColor: '#3b1f24' },
+  approvalTitle: { color: colors.white, fontWeight: '800' },
+  approvalDetail: { color: colors.textSecondary, marginTop: 6 },
+  noticeActions: { flexDirection: 'row', marginTop: 12 },
+  noticeBtn: { flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  noticeBtnPrimary: { backgroundColor: colors.primary },
+  noticeBtnPrimaryTxt: { color: colors.white, fontWeight: '800' },
+  noticeBtnGhost: { borderWidth: 1, borderColor: '#4c576e' },
+  noticeBtnGhostTxt: { color: colors.textSecondary, fontWeight: '700' },
 });
 
 // Helpers
@@ -221,11 +261,122 @@ function isCompleted(item) {
   const s = (item?.tournamentStatus || '').toUpperCase();
   return s === 'OVER' || s === 'UNFILLED';
 }
-function isActive(item) {
-  const s = (item?.tournamentStatus || '').toUpperCase();
-  return s === 'OPEN' || s === 'IN_PROGRESS';
+function deriveApprovalState(item) {
+  const fallbackLabel = isCompleted(item) ? 'Completed' : 'Active';
+  const fallbackType = isCompleted(item) ? 'danger' : 'info';
+
+  const raw = (item?.approvalStatus || '').trim();
+  if (!raw) {
+    return { status: null, badgeLabel: fallbackLabel, badgeType: fallbackType, notice: null };
+  }
+
+  const status = raw.toUpperCase();
+
+  if (status === 'PENDING') {
+    return {
+      status,
+      badgeLabel: 'Pending Review',
+      badgeType: 'info',
+      notice: {
+        tone: 'Pending',
+        title: 'We are reviewing your product.',
+        detail: 'Hang tight — approvals typically complete within a some time.',
+      },
+    };
+  }
+
+  if (status === 'APPROVED') {
+    return {
+      status,
+      badgeLabel: 'Approved',
+      badgeType: 'success',
+      notice: {
+        tone: 'Approved',
+        title: 'Listing approved! You are good to go.',
+        detail: 'Your product is live. Share it with players to fill those seats faster.',
+      },
+    };
+  }
+
+  if (status === 'REJECTED') {
+    const reason = (item?.rejectionReason || '').trim();
+    return {
+      status,
+      badgeLabel: 'Rejected',
+      badgeType: 'danger',
+      notice: {
+        tone: 'Rejected',
+        title: 'We could not approve this listing.',
+        detail: reason ? `Reason: ${reason}` : 'Please review the policies, adjust the details, and submit again.',
+      },
+    };
+  }
+
+  const pretty = raw
+    .split('_')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0) + segment.slice(1).toLowerCase())
+    .join(' ');
+  return { status, badgeLabel: pretty || fallbackLabel, badgeType: fallbackType, notice: null };
 }
-function statusLabel(item) { return isCompleted(item) ? 'Completed' : 'Active'; }
+
+function buildDraftFromProduct(product) {
+  if (!product) return null;
+  const tournament = product?.tournament || {};
+  const game = product?.game || tournament?.game || {};
+  const delivery = product?.delivery || {};
+  const policies = product?.policies || {};
+  const images = Array.isArray(product?.images) ? product.images.filter(Boolean) : [];
+
+  const toDateInput = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+  };
+
+  return {
+    loaded: true,
+    isDirty: false,
+    photos: images.map((uri) => ({ uri })),
+    details: {
+      name: product?.name || '',
+      description: product?.description || '',
+      category: product?.category || '',
+      condition: product?.condition || '',
+      qty: product?.quantity != null ? String(product.quantity) : '',
+      productId: product?._id || product?.id || '',
+    },
+    play: {
+      expectedPrice: product?.price != null ? String(product.price) : '',
+      pricePerPlay: tournament?.entryFee != null ? String(tournament.entryFee) : '',
+      playsCount: tournament?.expectedPlayers != null
+        ? String(tournament.expectedPlayers)
+        : (tournament?.totalSeats != null ? String(tournament.totalSeats) : ''),
+      endDate: toDateInput(tournament?.endsAt || tournament?.endDate || tournament?.endedAt || tournament?.closeAt),
+      game: game?._id || game?.id || '',
+      gameName: game?.name || '',
+      earlyTerminationEnabled: !!tournament?.earlyTerminationEnabled,
+      earlyTerminationThresholdPct: tournament?.earlyTerminationThresholdPct != null
+        ? Number(tournament.earlyTerminationThresholdPct)
+        : 80,
+      platinumOnly: !!tournament?.platinumOnly,
+    },
+    delivery: {
+      method: delivery?.method || 'pickup',
+      pickupNote: delivery?.pickupNote || '',
+    },
+    policies: {
+      listing: policies?.listing === undefined ? true : !!policies.listing,
+      dispute: policies?.dispute === undefined ? true : !!policies.dispute,
+      antifraud: policies?.antifraud === undefined ? true : !!policies.antifraud,
+      agreeAll: policies?.agreeAll === undefined ? true : !!policies.agreeAll,
+      enableEarlyTerminationAck: true,
+      listingExtensionAck: true,
+      platinumOnlyAck: true,
+    },
+  };
+}
 
 function safeProgress(item) {
   const total = Number(item?.playsTotal || 0);
@@ -254,15 +405,4 @@ function timeLeft(item) {
   if (days > 0) return `${days} day${days>1?'s':''} ${hours} hour${hours!==1?'s':''}`;
   const minutes = Math.floor((diffMs - totalHours * 3600000) / 60000);
   return `${hours} hour${hours!==1?'s':''} ${minutes} min`;
-}
-
-function openEditFactory(setters) {
-  return (item) => {
-    const { setEditOpen, setEditItem, setEditName, setEditDesc, setEditQty } = setters;
-    setEditItem(item);
-    setEditName(item?.title || '');
-    setEditDesc(item?.raw?.description || '');
-    setEditQty(String(item?.raw?.quantity ?? ''));
-    setEditOpen(true);
-  };
 }

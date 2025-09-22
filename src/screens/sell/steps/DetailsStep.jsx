@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../../theme/colors';
 import { ChevronDown } from 'lucide-react-native';
@@ -24,10 +24,17 @@ export default function DetailsStep() {
       extraScrollHeight={20}
     >
       <FieldLabel>Item Name</FieldLabel>
-      <Input placeholder="E.g., Vintage Gaming Console" value={form.name} onChangeText={(t)=>set('name', t)} />
+      <Input placeholder="Enter listing title (e.g., Vintage Gaming Console)" value={form.name} onChangeText={(t)=>set('name', t)} />
 
       <FieldLabel>Item Description</FieldLabel>
-      <Input multiline numberOfLines={4} style={{ height: 120, textAlignVertical: 'top' }} placeholder="Describe your item in detail, including condition, features, and any accessories." value={form.description} onChangeText={(t)=>set('description', t)} />
+      <Input
+        multiline
+        numberOfLines={4}
+        style={{ height: 120, textAlignVertical: 'top' }}
+        placeholder="Describe the item's condition, features, and included accessories."
+        value={form.description}
+        onChangeText={(t)=>set('description', t)}
+      />
 
       <FieldLabel>Category</FieldLabel>
       <Select placeholder="Select a category" value={form.category} onPress={() => setShowCat(true)} />
@@ -36,7 +43,12 @@ export default function DetailsStep() {
       <Select placeholder="Select a condition" value={form.condition} onPress={() => setShowCond(true)} />
 
       <FieldLabel>Quantity</FieldLabel>
-      <Input placeholder="Number of items" keyboardType="numeric" value={form.qty} onChangeText={(t)=>set('qty', t)} />
+      <Input
+        placeholder="Enter total quantity"
+        keyboardType="numeric"
+        value={form.qty}
+        onChangeText={(t)=>set('qty', t)}
+      />
 
       {/* <FieldLabel>Product ID</FieldLabel>
       <Input placeholder="Product ID" value={form.productId} onChangeText={(t)=>set('productId', t)} /> */}
@@ -63,8 +75,19 @@ function FieldLabel({ children }) {
   return <Text style={styles.label}>{children}</Text>;
 }
 
-function Input(props) {
-  return <TextInput {...props} blurOnSubmit={false} placeholderTextColor={colors.textSecondary} style={[styles.input, props.style]} />;
+function Input({ style, multiline, onSubmitEditing, returnKeyType, ...rest }) {
+  const handleSubmit = onSubmitEditing || (!multiline ? () => Keyboard.dismiss() : undefined);
+  return (
+    <TextInput
+      {...rest}
+      multiline={multiline}
+      placeholderTextColor={colors.textSecondary}
+      style={[styles.input, style]}
+      blurOnSubmit={!multiline}
+      returnKeyType={returnKeyType || (multiline ? 'default' : 'done')}
+      onSubmitEditing={handleSubmit}
+    />
+  );
 }
 
 function Select({ placeholder, value, onPress }) {

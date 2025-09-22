@@ -29,6 +29,7 @@ export default function BuyCoinsScreen({ navigation }) {
   const [payProcessing, setPayProcessing] = useState(false);
   const [payError, setPayError] = useState(null);
   const [lastPlan, setLastPlan] = useState(null);
+  const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
 
   useEffect(() => {
     let alive = true;
@@ -59,7 +60,7 @@ export default function BuyCoinsScreen({ navigation }) {
   const startTopup = useCallback(async () => {
     try {
       if (!selected) return;
-      if (!country || String(country).toLowerCase() !== 'india') {
+      if (!isIndia) {
         setRegionModal(true);
         return;
       }
@@ -101,22 +102,46 @@ export default function BuyCoinsScreen({ navigation }) {
         try { dispatch(fetchMyWallet()); } catch {}
         try { setCongratsOpen(true); } catch {}
       } catch (err) {
-        const desc = String(err?.description || err?.message || '').toLowerCase();
+        const rawMessage = err?.description || err?.message || '';
+        const desc = String(rawMessage).toLowerCase();
         console.warn('[RZP][TOPUP-BUY] error:', JSON.stringify(err));
         if (desc.includes('cancel')) return;
         if (err?.code === 'RAZORPAY_SDK_MISSING') {
           Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
         } else {
-          setPayError(err?.description || err?.message || 'Payment failed');
+          setPayError('We could not complete your payment. Please retry.');
         }
       }
     } catch (e) {
-      setPayError(e?.message || 'Could not start topup');
+      console.warn('[RZP][TOPUP-BUY] start error:', e);
+      setPayError('We could not start the payment. Please retry.');
     } finally {
       setProcessing(false);
       setPayProcessing(false);
     }
-  }, [country, selected, plans, dispatch]);
+  }, [dispatch, isIndia, plans, selected]);
+
+  if (!isIndia) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
+          <Text style={styles.headerTitle}>Buy Coins</Text>
+          <View style={{ width: 32 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Text style={{ color: colors.white, fontWeight: '700', fontSize: 18, textAlign: 'center' }}>Coin top-ups are not available in your region yet.</Text>
+          <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 12 }}>Check out membership subscriptions to unlock more benefits while we work on expanding support.</Text>
+          <TouchableOpacity style={[styles.bottomBtn, styles.buyBtn, { marginTop: 20 }]} onPress={() => navigation.replace('MembershipTier')}>
+            <Text style={styles.buyTxt}>View Memberships</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.bottomBtn, styles.cancelBtn, { marginTop: 12, width: '60%' }]} onPress={() => navigation.goBack()}>
+            <Text style={styles.cancelTxt}>Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -189,7 +214,7 @@ export default function BuyCoinsScreen({ navigation }) {
       <AppModal
         visible={!!payError}
         title="Payment Failed"
-        message={payError || 'Something went wrong while starting payment.'}
+        message={payError || 'We could not process your payment. Please try again.'}
         cancelText="Close"
         confirmText="Retry"
         onCancel={() => setPayError(null)}

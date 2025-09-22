@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../../theme/colors';
 import LinearGradient from 'react-native-linear-gradient';
-import { ChevronDown } from 'lucide-react-native';
+import { ChevronDown, Check } from 'lucide-react-native';
 import ProgressBar from '../../../components/common/ProgressBar';
 import DatePickerModal, { formatDateYYYYMMDD } from '../../../components/ui/DatePickerModal';
 import { useDispatch, useSelector } from 'react-redux';
@@ -110,7 +110,7 @@ export default function PlayToWinStep() {
 
         <FieldLabel>Expected Selling Price <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
         <Input
-          placeholder="25000  INR"
+          placeholder="Enter expected selling price (INR)"
           keyboardType="numeric"
           value={form.expectedPrice}
           onChangeText={(t) => set('expectedPrice', t)}
@@ -125,24 +125,27 @@ export default function PlayToWinStep() {
             </LinearGradient>
           </View>
           <TextInput
-            placeholder="10"
+            placeholder="Enter price per play (ZishCoin)"
             placeholderTextColor={colors.textSecondary}
             keyboardType="numeric"
             value={form.pricePerPlay}
             onChangeText={(t) => set('pricePerPlay', t)}
             style={[styles.input, { flex: 1 }]}
+            blurOnSubmit
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
         </View>
         <FieldHint>Cost for a single gameplay</FieldHint>
 
-        <FieldLabel>Number of Game plays</FieldLabel>
+        <FieldLabel>Number of Game Plays</FieldLabel>
         <Input
-          placeholder="2500"
+          placeholder="Auto-calculated from pricing"
           keyboardType="numeric"
           value={form.playsCount}
-          onChangeText={(t) => { setPlaysTouched(true); set('playsCount', t); }}
+          editable={false}
         />
-        <FieldHint>Define the total available play-to-win entries.</FieldHint>
+        <FieldHint>The seat count adjusts automatically based on your price and entry fee.</FieldHint>
         <SuggestionSummary
           loading={suggestionLoading}
           error={suggestionError}
@@ -191,7 +194,20 @@ export default function PlayToWinStep() {
 
 function FieldLabel({ children }) { return <Text style={styles.label}>{children}</Text>; }
 function FieldHint({ children, style }) { return <Text style={[styles.hint, style]}>{children}</Text>; }
-function Input(props) { return <TextInput {...props} placeholderTextColor={colors.textSecondary} style={styles.input} />; }
+function Input({ style, multiline, onSubmitEditing, returnKeyType, ...rest }) {
+  const handleSubmit = onSubmitEditing || (!multiline ? () => Keyboard.dismiss() : undefined);
+  return (
+    <TextInput
+      {...rest}
+      multiline={multiline}
+      placeholderTextColor={colors.textSecondary}
+      style={[styles.input, style]}
+      blurOnSubmit={!multiline}
+      returnKeyType={returnKeyType || (multiline ? 'default' : 'done')}
+      onSubmitEditing={handleSubmit}
+    />
+  );
+}
 
 function Select({ placeholder, value, onPress }) {
   return (
@@ -250,15 +266,23 @@ const styles = StyleSheet.create({
   optionTxt: { color: colors.white, fontWeight: '600' },
 
   subTitle: { color: colors.white, fontSize: 20, fontWeight: '800' },
-  pillRow: { flexDirection: 'row', marginBottom: 8 },
-  pill: { alignSelf: 'flex-start', backgroundColor: '#1E2128', borderWidth: 1, borderColor: '#3A4051', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12 },
-  pillTxt: { color: colors.white, fontWeight: '800' },
-  pctRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  pctBtn: { paddingVertical: 8, paddingHorizontal: 4 },
-  pctTxt: { color: colors.textSecondary, fontWeight: '700' },
-  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
-  checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: colors.primary, backgroundColor: 'transparent' },
-  checkboxOn: { backgroundColor: colors.primary },
+  earlyCard: { backgroundColor: '#2B2F39', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#343B49', marginTop: 14 },
+  earlyDesc: { color: colors.textSecondary, marginTop: 8 },
+  earlySummaryRow: { flexDirection: 'row', marginTop: 14 },
+  earlySummaryBox: { flex: 1, backgroundColor: '#1F2230', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12 },
+  earlySummaryBoxSpacer: { marginRight: 12 },
+  metricLabel: { color: colors.textSecondary, fontSize: 12, textTransform: 'uppercase', fontWeight: '700' },
+  metricValue: { color: colors.white, fontWeight: '800', fontSize: 16, marginTop: 4 },
+  thresholdRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
+  thresholdBtn: { flex: 1, borderRadius: 20, borderWidth: 1, borderColor: '#3A4051', paddingVertical: 8, marginHorizontal: 4, alignItems: 'center', backgroundColor: '#1F2230' },
+  thresholdBtnActive: { backgroundColor: '#342a4a', borderColor: colors.primary },
+  thresholdTxt: { color: colors.textSecondary, fontWeight: '700' },
+  thresholdTxtActive: { color: colors.white },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },
+  toggleCheckbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 12, backgroundColor: 'transparent' },
+  toggleCheckboxOn: { backgroundColor: colors.primary },
+  toggleLabel: { flex: 1, color: colors.white, fontWeight: '700' },
+  toggleHint: { color: colors.textSecondary, marginTop: 6, marginLeft: 36 },
   rowTitle: { color: colors.white, fontWeight: '800' },
   suggestionCard: { backgroundColor: '#1E2128', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 16, marginTop: 10 },
   suggestionTitle: { color: colors.white, fontWeight: '800', fontSize: 16 },
@@ -349,62 +373,89 @@ function SuggestionSummary({ loading, error, suggestion, onApplySeats }) {
 }
 
 function EarlyTermination({ expectedPrice, playsTotal }) {
-  const thresholds = [0.75, 0.8, 0.9, 1.0];
+  const thresholds = [0.6, 0.7, 0.8, 0.9, 1.0];
   const dispatch = useDispatch();
   const { earlyTerminationEnabled, earlyTerminationThresholdPct, platinumOnly } = useSelector((s) => s.listingDraft.play);
   const { listingExtensionAck } = useSelector((s) => s.listingDraft.policies);
+  const userCountry = useSelector((s) => s.auth?.user?.address?.country || '');
+
   const pctValue = Number(earlyTerminationThresholdPct || 80) / 100;
-  const idx = Math.max(0, thresholds.findIndex((t) => Math.round(t * 100) === Math.round(pctValue * 100)));
+  const selectedThreshold = thresholds.find((t) => Math.round(t * 100) === Math.round(pctValue * 100)) ?? 0.8;
+  const thresholdPct = Math.round(selectedThreshold * 100);
+  const triggerAmount = Math.max(0, Math.round((expectedPrice || 0) * selectedThreshold));
+  const seatsNeeded = Math.max(0, Math.ceil((playsTotal || 0) * selectedThreshold));
+  const showPlatinumOnly = String(userCountry).trim().toLowerCase() === 'india';
 
-  const pct = thresholds[idx] ?? 0.8;
-  const earlyPrice = Math.round((expectedPrice || 0) * pct);
-  const entriesNeeded = Math.ceil(playsTotal * pct);
+  const fmtNumber = (n) => {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return '0';
+    return num.toLocaleString('en-IN');
+  };
 
-  const fmt = (n) => (isNaN(n) ? '0' : n.toLocaleString('en-IN'));
+  const renderCheckbox = (checked) => (
+    <View style={[styles.toggleCheckbox, checked && styles.toggleCheckboxOn]}>
+      {checked ? <Check size={14} color={colors.white} strokeWidth={3} /> : null}
+    </View>
+  );
 
   return (
-    <View style={[styles.card, { marginTop: 14 }]}> 
+    <View style={styles.earlyCard}> 
       <Text style={styles.subTitle}>Early Termination Option</Text>
+      <Text style={styles.earlyDesc}>
+        Close the tournament early once you have covered enough entries. Winners are declared instantly and no further plays are accepted.
+      </Text>
 
-      <Text style={[styles.label, { marginTop: 12 }]}>End Early Option <Text style={{ color: '#ff8181' }}>*</Text></Text>
-      <View style={styles.pillRow}>
-        <View style={styles.pill}><Text style={styles.pillTxt}>{fmt(earlyPrice)} INR</Text></View>
+      <View style={styles.earlySummaryRow}>
+        <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
+          <Text style={styles.metricLabel}>Threshold</Text>
+          <Text style={styles.metricValue}>{thresholdPct}% seats</Text>
+        </View>
+        <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
+          <Text style={styles.metricLabel}>Trigger Amount</Text>
+          <Text style={styles.metricValue}>{fmtNumber(triggerAmount)} INR</Text>
+        </View>
+        <View style={styles.earlySummaryBox}>
+          <Text style={styles.metricLabel}>Seats Needed</Text>
+          <Text style={styles.metricValue}>{fmtNumber(seatsNeeded)}</Text>
+        </View>
       </View>
 
-      <ProgressBar value={pct} height={10} />
-      <View style={styles.pctRow}>
-        {thresholds.map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={styles.pctBtn}
-            onPress={() => dispatch(updatePlay({ earlyTerminationThresholdPct: Math.round(t * 100) }))}
-          >
-            <Text style={[styles.pctTxt, Math.round(t * 100) === Math.round(pct * 100) && { color: colors.primary, fontWeight: '800' }]}>{Math.round(t * 100)}%</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={{ marginTop: 14 }}>
+        <ProgressBar value={selectedThreshold} height={10} />
+      </View>
+      <View style={styles.thresholdRow}>
+        {thresholds.map((t) => {
+          const pct = Math.round(t * 100);
+          const active = pct === thresholdPct;
+          return (
+            <TouchableOpacity
+              key={t}
+              style={[styles.thresholdBtn, active && styles.thresholdBtnActive]}
+              onPress={() => dispatch(updatePlay({ earlyTerminationThresholdPct: pct }))}
+            >
+              <Text style={[styles.thresholdTxt, active && styles.thresholdTxtActive]}>{pct}%</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      <Text style={styles.hint}>You can close this tournament once at least <Text style={{ color: colors.primary, fontWeight: '800' }}>{Math.round(pct * 100)}%</Text> of entries are filled.</Text>
-      <Text style={styles.hint}>Current entries: 0 / {playsTotal} → Early termination available after <Text style={{ color: colors.accent, fontWeight: '800' }}>{entriesNeeded}</Text> entries.</Text>
-      <Text style={styles.hint}>Closing early declares a winner immediately and no further entries are accepted.</Text>
+      <TouchableOpacity style={styles.toggleRow} onPress={() => dispatch(updatePlay({ earlyTerminationEnabled: !earlyTerminationEnabled }))}>
+        {renderCheckbox(earlyTerminationEnabled)}
+        <Text style={styles.toggleLabel}>Enable early termination for this tournament</Text>
+      </TouchableOpacity>
+      <Text style={styles.toggleHint}>We will monitor progress and let you wrap early once the threshold is crossed.</Text>
 
-      <TouchableOpacity style={styles.checkRow} onPress={() => dispatch(updatePlay({ earlyTerminationEnabled: !earlyTerminationEnabled }))}>
-        <View style={[styles.checkbox, earlyTerminationEnabled && styles.checkboxOn]} />
-        <Text style={styles.checkTxt}>Enable early termination option for this tournament</Text>
+      <TouchableOpacity style={styles.toggleRow} onPress={() => dispatch(updatePolicies({ listingExtensionAck: !listingExtensionAck }))}>
+        {renderCheckbox(listingExtensionAck)}
+        <Text style={styles.toggleLabel}>I understand I can extend this listing only twice if plays are not met.</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.checkRow, { marginTop: 10 }]} onPress={() => dispatch(updatePolicies({ listingExtensionAck: !listingExtensionAck }))}>
-        <View style={[styles.checkbox, listingExtensionAck && styles.checkboxOn]} />
-        <Text style={styles.hint}>I acknowledge that i will be allowed to extend the listing only <Text style={{ color: '#ff4d4d', fontWeight: '800' }}>TWICE</Text> in case above gameplays are not achieved.</Text>
-      </TouchableOpacity>
-
-      <View style={[styles.card, { marginTop: 16 }]}> 
-        <TouchableOpacity style={styles.checkRow} onPress={() => dispatch(updatePlay({ platinumOnly: !platinumOnly }))}>
-          <View style={[styles.checkbox, platinumOnly && styles.checkboxOn]} />
-          <Text style={[styles.label, { marginTop: 0 }]}>Make this a <Text style={{ fontWeight: '900' }}>Platinum</Text> Membership Listing ONLY</Text>
+      {showPlatinumOnly ? (
+        <TouchableOpacity style={styles.toggleRow} onPress={() => dispatch(updatePlay({ platinumOnly: !platinumOnly }))}>
+          {renderCheckbox(platinumOnly)}
+          <Text style={styles.toggleLabel}>Allow only Platinum members to join this tournament.</Text>
         </TouchableOpacity>
-        <Text style={[styles.hint, { marginLeft: 36 }]}>( Only Platinum members will be allowed to participate )</Text>
-      </View>
+      ) : null}
     </View>
   );
 }

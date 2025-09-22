@@ -9,15 +9,19 @@ export default function useGalleryPermission() {
     if (Platform.OS === 'android') {
       try {
         const sdk = Platform.Version;
-        const perm = sdk >= 33
-          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
-          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+        const perms = sdk >= 33
+          ? [PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES]
+          : [
+              PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+              PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+            ].filter(Boolean);
 
-        const status = await PermissionsAndroid.request(perm);
+        const results = await PermissionsAndroid.requestMultiple(perms);
+        const granted = Object.values(results || {}).some((r) => r === PermissionsAndroid.RESULTS.GRANTED);
+        if (granted) return true;
 
-        if (status === PermissionsAndroid.RESULTS.GRANTED) return true;
-
-        if (status === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+        const neverAsk = Object.values(results || {}).some((r) => r === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+        if (neverAsk) {
           Alert.alert(
             'Permission Required',
             'Please enable Photos permission in Settings to add images to your listing.',
@@ -39,4 +43,3 @@ export default function useGalleryPermission() {
 
   return ensure;
 }
-

@@ -1,17 +1,14 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Platform, PermissionsAndroid, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../theme/colors';
-import { Globe, Check } from 'lucide-react-native';
+import { Globe, Check, ChevronLeft } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { completeVerification, setUser } from '../../store/auth/authSlice';
 import { setCountry as setAppCountry } from '../../store/app/appSlice';
-import { createUser as createZishesUser, updateMe as updateCurrentUser } from '../../services/users';
+import { updateMe as updateCurrentUser } from '../../services/users';
 import { getAccessToken } from '../../services/tokenManager';
 import Button from '../../components/ui/Button';
-import useLocationPermission from '../../hooks/useLocationPermission';
-import { detectCityCountry } from '../../services/location';
 
 const COUNTRIES = [
   'India', 'United States', 'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Singapore', 'Canada', 'Australia', 'Japan', 'South Korea', 'China', 'Philippines', 'United Arab Emirates'
@@ -21,51 +18,27 @@ export default function CountrySelectScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const email = useSelector((s) => s.auth?.user?.email);
   const token = useSelector((s) => s.auth?.token);
+  const existingCountry = useSelector((s) => s.auth?.user?.address?.country);
+  const canNavigateBack = navigation?.canGoBack?.() ?? false;
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState(null);
-  const [detecting, setDetecting] = useState(false);
-  const [detectedLabel, setDetectedLabel] = useState('');
+  const [selected, setSelected] = useState(() => {
+    const initial = route?.params?.initialCountry || existingCountry || null;
+    return COUNTRIES.includes(initial) ? initial : null;
+  });
+  const [saving, setSaving] = useState(false);
   const hasSelection = !!selected;
-  const ensureLocationPermission = useLocationPermission();
+
+  useEffect(() => {
+    if (selected) return;
+    if (!existingCountry) return;
+    if (!COUNTRIES.includes(existingCountry)) return;
+    setSelected(existingCountry);
+  }, [existingCountry, selected]);
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
     return COUNTRIES.filter(c => !q || c.toLowerCase().includes(q));
   }, [query]);
-
-  const detect = async () => {
-    if (detecting) return;
-    setDetecting(true);
-    setDetectedLabel('');
-    try {
-      const ok = await ensureLocationPermission();
-      // Proceed even if permission denied; we'll fallback to IP geo
-      const place = await detectCityCountry();
-      const { city, country, countryCode, method } = place || {};
-      const label = [city, country].filter(Boolean).join(', ');
-      if (label) setDetectedLabel(label);
-      // Try to match to our allowed list
-      const listCountry = (country || '').toLowerCase();
-      const found = COUNTRIES.find(c => c.toLowerCase() === listCountry) ||
-                    COUNTRIES.find(c => listCountry.includes(c.toLowerCase()));
-      if (found) setSelected(found);
-      else if (!found && countryCode) {
-        // Limited aliasing for common variants
-        const aliasMap = {
-          'US': 'United States', 'GB': 'United Kingdom', 'AE': 'United Arab Emirates',
-          'KR': 'South Korea'
-        };
-        const aliased = aliasMap[countryCode];
-        if (aliased && COUNTRIES.includes(aliased)) setSelected(aliased);
-      }
-      // As a last resort, keep previous selection or default to India if none
-      setSelected((s) => s || 'India');
-    } catch (e) {
-      setSelected((s) => s || 'India');
-    } finally {
-      setDetecting(false);
-    }
-  };
 
   const persistCountry = async (countryName) => {
     let bearer = token;
@@ -103,30 +76,39 @@ export default function CountrySelectScreen({ navigation, route }) {
   };
 
   const onContinue = async () => {
-    if (!selected) return;
+    if (!selected || saving) return;
 
     const isPickerMode = route?.params?.mode === 'pick';
 
     if (isPickerMode) {
       let updated = false;
       try {
+        setSaving(true);
         await persistCountry(selected);
         updated = true;
       } catch (err) {
         console.warn('[CountrySelect] picker update failed:', err?.message || err);
+      } finally {
+        setSaving(false);
       }
       if (updated) {
-        navigation.popToTop();
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate?.('Home');
+        }
       }
       return;
     }
 
     try {
+      setSaving(true);
       await persistCountry(selected);
     } catch (err) {
       console.warn('[CountrySelect] set country error:', err?.status, err?.message || err);
     } finally {
       await dispatch(completeVerification());
+      setSaving(false);
     }
   };
 
@@ -140,7 +122,17 @@ export default function CountrySelectScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
-      <View style={styles.header}><Text style={styles.headerTitle}>Select Your Country</Text></View>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={[styles.backBtn, !canNavigateBack && styles.backBtnDisabled]}
+          onPress={() => { if (canNavigateBack) navigation.goBack(); }}
+          disabled={!canNavigateBack}
+        >
+          <ChevronLeft size={18} color={colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Select Your Country</Text>
+        <View style={{ width: 32, height: 32 }} />
+      </View>
       <FlatList
         data={list}
         renderItem={renderItem}
@@ -158,32 +150,40 @@ export default function CountrySelectScreen({ navigation, route }) {
               style={styles.input}
             />
             <Text style={{ color: colors.textSecondary, marginVertical: 8 }}>Tap to choose your country of play.</Text>
-            <TouchableOpacity onPress={detect} style={[styles.detectBtn, detecting && { opacity: 0.7 }]}> 
-              {detecting ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <ActivityIndicator size="small" color={colors.accent} />
-                  <Text style={[styles.detectText, { marginLeft: 8 }]}>Detecting…</Text>
-                </View>
-              ) : (
-                <Text style={styles.detectText}>Use current location</Text>
-              )}
-            </TouchableOpacity>
-            {!!detectedLabel && (
-              <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Detected: {detectedLabel}</Text>
-            )}
           </View>
         )}
       />
       <View style={styles.bottomBar}>
-        <Button title="Continue" onPress={onContinue} disabled={!hasSelection} />
+        <Button title="Continue" onPress={onContinue} disabled={!hasSelection || saving} loading={saving} />
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { height: 56, alignItems: 'center', justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#22252C' },
+  header: {
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#22252C',
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+  },
   headerTitle: { color: colors.white, fontSize: 18, fontWeight: '700' },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#343B49',
+    backgroundColor: '#2B2F39',
+  },
+  backBtnDisabled: {
+    opacity: 0.4,
+  },
   input: {
     width: '100%', backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: colors.white,
   },
@@ -193,8 +193,6 @@ const styles = StyleSheet.create({
   rowText: { color: colors.white, fontWeight: '600' },
   icon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#312B42', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   checkWrap: { position: 'absolute', right: 10, top: 10, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  detectBtn: { alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
-  detectText: { color: colors.accent, fontWeight: '700' },
   bottomBar: {
     position: 'absolute',
     left: 0,

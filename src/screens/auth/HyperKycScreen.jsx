@@ -7,7 +7,6 @@ import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import { completeVerification } from '../../store/auth/authSlice';
 import { HYPERKYC_APP_ID, HYPERKYC_APP_KEY, HYPERKYC_WORKFLOW_ID } from '../../config/hyperkyc';
-import useLocationPermission from '../../hooks/useLocationPermission';
 
 const { Hyperkyc } = NativeModules;
 
@@ -22,7 +21,6 @@ export default function HyperKycScreen({ navigation }) {
   const [running, setRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [lastStatus, setLastStatus] = useState('');
-  const ensureLocationPermission = useLocationPermission();
 
   const unavailable = useMemo(() => !Hyperkyc || typeof Hyperkyc.launch !== 'function', []);
 
@@ -64,16 +62,6 @@ export default function HyperKycScreen({ navigation }) {
     }
     if (running) return;
 
-    let allowLocation = true;
-    try {
-      const granted = await ensureLocationPermission();
-      allowLocation = granted;
-      setStatusMessage(granted ? '' : 'Location permission denied. Launching without location data.');
-    } catch (err) {
-      allowLocation = false;
-      setStatusMessage('Unable to confirm location permission. Launching without location data.');
-    }
-
     setRunning(true);
     try {
       Hyperkyc.launch({
@@ -81,7 +69,7 @@ export default function HyperKycScreen({ navigation }) {
         appKey: HYPERKYC_APP_KEY,
         workflowId: HYPERKYC_WORKFLOW_ID,
         transactionId,
-        useLocation: allowLocation,
+        useLocation: false,
       }, (result) => {
         setRunning(false);
         handleResult(result);
@@ -90,7 +78,7 @@ export default function HyperKycScreen({ navigation }) {
       setRunning(false);
       setStatusMessage(err?.message || 'Unable to start HyperKYC flow.');
     }
-  }, [ensureLocationPermission, handleResult, running, transactionId, unavailable]);
+  }, [handleResult, running, transactionId, unavailable]);
 
   const skip = useCallback(() => {
     if (running) return;

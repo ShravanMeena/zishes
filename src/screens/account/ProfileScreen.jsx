@@ -112,7 +112,7 @@ export default function ProfileScreen({ navigation }) {
             title="Receipts"
             onPress={() => navigation.navigate('Receipts')}
           />
-          <MenuRow icon={<Bell size={18} color={colors.accent} />} title="Notifications" badge="5" onPress={() => navigation.navigate('Home', { screen: 'Notifications' })} />
+          <MenuRow icon={<Bell size={18} color={colors.accent} />} title="Notifications" onPress={() => navigation.navigate('Home', { screen: 'Notifications' })} />
           <MenuRow icon={<Settings size={18} color={colors.accent} />} title="Settings" onPress={() => navigation.navigate('Settings')} />
         </View>
 

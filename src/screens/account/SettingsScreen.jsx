@@ -14,7 +14,7 @@ export default function SettingsScreen({ navigation }) {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [legalPolicies, setLegalPolicies] = useState(null);
-  const goPayments = () => navigation.navigate('PaymentMethodsManage');
+  const goPayments = () => navigation.navigate('PaymentMethods');
   const goDefaultWithdrawal = () => navigation.navigate('DefaultWithdrawal');
 
   const openPolicy = (key) => {
