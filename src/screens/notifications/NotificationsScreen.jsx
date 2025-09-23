@@ -9,7 +9,21 @@ export default function NotificationsScreen({ navigation }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft color={colors.white} size={20} /></TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+              return;
+            }
+            const parent = navigation.getParent?.();
+            if (parent?.navigate) {
+              parent.navigate('Home', { screen: 'HomeIndex' });
+            }
+          }}
+          style={styles.iconBtn}
+        >
+          <ChevronLeft color={colors.white} size={20} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
         <TouchableOpacity
           style={styles.iconBtn}

@@ -2,7 +2,18 @@ import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { colors } from '../../theme/colors';
 
-export default function AppModal({ visible, title, message, confirmText = 'Confirm', cancelText = 'Cancel', onConfirm, onCancel, children, confirmLoading = false }) {
+export default function AppModal({
+  visible,
+  title,
+  message,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  onConfirm,
+  onCancel,
+  children,
+  confirmLoading = false,
+  confirmLoadingText = 'Joining…',
+}) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
@@ -25,7 +36,7 @@ export default function AppModal({ visible, title, message, confirmText = 'Confi
               {confirmLoading ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <ActivityIndicator color={colors.white} style={{ marginRight: 8 }} />
-                  <Text style={styles.confirmText}>Joining…</Text>
+                  <Text style={styles.confirmText}>{confirmLoadingText}</Text>
                 </View>
               ) : (
                 <Text style={styles.confirmText}>{confirmText}</Text>

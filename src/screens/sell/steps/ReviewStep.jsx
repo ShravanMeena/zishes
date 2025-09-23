@@ -75,6 +75,13 @@ export default function ReviewStep({ onEdit }) {
     ? new Date(play.endDate).toLocaleDateString()
     : 'Not set yet';
   const gameName = play?.gameName || 'Not selected yet';
+  const earlyTerminationEnabled = !!play?.earlyTerminationEnabled;
+  const thresholdPctNumber = parseNumber(play?.earlyTerminationThresholdPct);
+  const earlyTerminationStatus = earlyTerminationEnabled ? 'Enabled' : 'Disabled';
+  const earlyTerminationThreshold = earlyTerminationEnabled && thresholdPctNumber != null
+    ? `${Math.round(thresholdPctNumber)}%`
+    : 'Not set';
+  const accessLabel = play?.platinumOnly ? 'Platinum members only' : 'All members';
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 160 }}>
@@ -121,7 +128,12 @@ export default function ReviewStep({ onEdit }) {
         <Row label="Total Entries" value={playsCountLabel} />
         <Row label="Projected Gross" value={totalProjected || '—'} />
         <Row label="Game" value={gameName} />
-        <Row label="Listing End Date" value={endDateLabel} last />
+        <Row label="Listing End Date" value={endDateLabel} />
+        <Row label="Early Termination" value={earlyTerminationStatus} />
+        {earlyTerminationEnabled ? (
+          <Row label="Termination Threshold" value={earlyTerminationThreshold} />
+        ) : null}
+        <Row label="Access" value={accessLabel} last />
       </Section>
 
       <Section

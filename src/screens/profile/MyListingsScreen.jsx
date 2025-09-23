@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Linking, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Linking, Share, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { ChevronLeft, Clock } from 'lucide-react-native';
+import { ChevronLeft, Clock, Share2 } from 'lucide-react-native';
 import ProgressBar from '../../components/common/ProgressBar';
 import { useSelector } from 'react-redux';
 import products from '../../services/products';
 import { mapProductToCard } from '../../utils/productMapper';
 import MyListingsSkeleton from '../../components/skeletons/MyListingsSkeleton';
+import AppModal from '../../components/common/AppModal';
 
 export default function MyListingsScreen({ navigation }) {
   const token = useSelector((s) => s.auth.token);
@@ -17,6 +18,10 @@ export default function MyListingsScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [checkingId, setCheckingId] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelError, setCancelError] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   const load = async () => {
     if (!token) { setItems([]); return; }
@@ -74,9 +79,40 @@ export default function MyListingsScreen({ navigation }) {
     }
   };
 
+  const submitEarlyTermination = async () => {
+    if (!cancelTarget) return;
+    if (!token) {
+      Alert.alert('Sign in required', 'Please log in again to manage your listings.');
+      return;
+    }
+    setCancelLoading(true);
+    setCancelError('');
+    try {
+      await products.cancelTournamentEarly({ product: cancelTarget.id, reason: cancelReason.trim() }, token);
+      setCancelTarget(null);
+      setCancelReason('');
+      Alert.alert('Tournament ended', 'This tournament has been closed early.');
+      await load();
+    } catch (err) {
+      setCancelError(err?.message || 'Failed to cancel the tournament.');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const cancelContext = getEarlyTerminationContext(cancelTarget);
+  const cancelProgressDisplay = cancelContext && Number.isFinite(cancelContext.progressPct)
+    ? cancelContext.progressPct.toFixed(1)
+    : null;
+  const cancelThresholdDisplay = cancelContext && Number.isFinite(cancelContext.thresholdPct)
+    ? cancelContext.thresholdPct.toFixed(1)
+    : null;
+
   const renderItem = ({ item }) => {
     const approval = deriveApprovalState(item);
     const progressPct = Math.round(safeProgress(item) * 100);
+    const earlyContext = getEarlyTerminationContext(item);
+    const canTerminateEarly = canShowEarlyTermination(earlyContext);
     const supportUrl = 'mailto:support@zishes.com';
     const onSupport = () => {
       navigation.navigate('ReportIssue', {
@@ -87,9 +123,14 @@ export default function MyListingsScreen({ navigation }) {
       });
     };
     const onEmailSupport = () => { Linking.openURL(supportUrl).catch(() => {}); };
+    const onEarlyTerminate = () => {
+      setCancelTarget(item);
+      setCancelReason('');
+      setCancelError('');
+    };
 
     return (
-      <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Home', { screen: 'Details', params: { item } })} style={styles.card}>
+      <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.push('Details', { item, from: 'MyListings' })} style={styles.card}>
         <Image source={{ uri: item.image }} style={styles.thumb} />
         <View style={{ flex: 1 }}>
           <View style={styles.rowBetween}>
@@ -99,8 +140,9 @@ export default function MyListingsScreen({ navigation }) {
               {approval.status === 'APPROVED'
                 ? (
                     <>
-                      <TouchableOpacity onPress={() => handleShare(item)}>
-                        <Chip label="Share" type="accent" style={{ marginLeft: 8 }} />
+                      <TouchableOpacity onPress={() => handleShare(item)} style={styles.shareButton}>
+                        <Share2 size={14} color={colors.white} style={{ marginRight: 6 }} />
+                        <Text style={styles.shareButtonText}>Share</Text>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={onSupport}>
                         <Chip label="Need Help" type="info" style={{ marginLeft: 8 }} />
@@ -145,6 +187,11 @@ export default function MyListingsScreen({ navigation }) {
 
           <View style={[styles.rowBetween, { marginTop: 10 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {canTerminateEarly ? (
+                <TouchableOpacity onPress={onEarlyTerminate} style={styles.earlyButton}>
+                  <Text style={styles.earlyButtonText}>End Early</Text>
+                </TouchableOpacity>
+              ) : null}
               {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
                 <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })}>
                   <Chip label="Upload Proof" type="accent" />
@@ -207,7 +254,37 @@ export default function MyListingsScreen({ navigation }) {
           )}
         />
       )}
-
+      <AppModal
+        visible={!!cancelTarget}
+        title="End Tournament Early"
+        message="Closing this tournament now will stop new plays and notify participants."
+        confirmText="Confirm End"
+        cancelText="Keep Running"
+        onCancel={() => { if (!cancelLoading) { setCancelTarget(null); setCancelReason(''); setCancelError(''); } }}
+        onConfirm={submitEarlyTermination}
+        confirmLoading={cancelLoading}
+        confirmLoadingText="Ending…"
+      >
+        {cancelProgressDisplay != null && cancelThresholdDisplay != null ? (
+          <Text style={styles.modalCopy}>
+            Progress: {cancelProgressDisplay}% (threshold {cancelThresholdDisplay}%).
+          </Text>
+        ) : null}
+        <Text style={styles.modalCopy}>Add a quick note for audit (optional).</Text>
+        <TextInput
+          style={styles.modalInput}
+          placeholder="Reason for ending early"
+          placeholderTextColor={colors.textSecondary}
+          value={cancelReason}
+          onChangeText={(text) => {
+            if (text.length <= 500) setCancelReason(text);
+          }}
+          multiline
+          maxLength={500}
+        />
+        <Text style={styles.modalHint}>{cancelReason.length}/500 characters</Text>
+        {cancelError ? <Text style={styles.modalError}>{cancelError}</Text> : null}
+      </AppModal>
     </SafeAreaView>
   );
 }
@@ -242,6 +319,10 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
   chipTxt: { fontWeight: '700' },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  shareButton: { marginLeft: 8, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, flexDirection: 'row', alignItems: 'center' },
+  shareButtonText: { color: colors.white, fontWeight: '700', fontSize: 12 },
+  earlyButton: { backgroundColor: colors.error, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, marginRight: 8 },
+  earlyButtonText: { color: colors.white, fontWeight: '800' },
   approvalNotice: {
     marginTop: 10,
     borderRadius: 14,
@@ -259,6 +340,10 @@ const styles = StyleSheet.create({
   noticeBtnPrimaryTxt: { color: colors.white, fontWeight: '800' },
   noticeBtnGhost: { borderWidth: 1, borderColor: '#4c576e' },
   noticeBtnGhostTxt: { color: colors.textSecondary, fontWeight: '700' },
+  modalCopy: { color: colors.textSecondary, marginBottom: 8 },
+  modalInput: { backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', color: colors.white, paddingHorizontal: 12, paddingVertical: 10, minHeight: 90, textAlignVertical: 'top' },
+  modalHint: { color: colors.textSecondary, alignSelf: 'flex-end', marginTop: 6 },
+  modalError: { color: colors.error, marginTop: 8, fontWeight: '700' },
 });
 
 // Helpers
@@ -295,11 +380,7 @@ function deriveApprovalState(item) {
       status,
       badgeLabel: 'Approved',
       badgeType: 'success',
-      notice: {
-        tone: 'Approved',
-        title: 'Listing approved! You are good to go.',
-        detail: 'Your product is live. Share it with players to fill those seats faster.',
-      },
+      notice: null,
     };
   }
 
@@ -388,6 +469,55 @@ function safeProgress(item) {
   const done = Number(item?.playsCompleted || 0);
   if (!total) return 0;
   return Math.max(0, Math.min(1, done / total));
+}
+
+function getEarlyTerminationContext(item) {
+  if (!item) return null;
+  const raw = item?.raw || {};
+  const tournament = raw?.tournament || null;
+  const status = String(tournament?.status || item?.tournamentStatus || '').toUpperCase();
+  const termsAck = !!raw?.terms?.enableEarlyTerminationAck;
+  const cfg = tournament?.earlyTermination || null;
+  const hasConfig = !!(cfg && typeof cfg === 'object');
+  const enabledFromConfig = hasConfig && ('enabled' in cfg) ? !!cfg.enabled : hasConfig;
+  const enabled = termsAck || enabledFromConfig;
+
+  const thresholdPct = (() => {
+    const pct = Number(cfg?.thresholdPct);
+    if (Number.isFinite(pct) && pct > 0) return pct;
+    return 80;
+  })();
+
+  let progressPct = Number(tournament?.progress);
+  if (Number.isFinite(progressPct)) {
+    if (progressPct <= 1) progressPct *= 100;
+  } else {
+    const players = Number(tournament?.numberOfPlayers ?? tournament?.playsCompleted ?? raw?.playsCompleted ?? item?.playsCompleted ?? 0);
+    const expected = Number(tournament?.expectedPlayers ?? tournament?.totalSeats ?? raw?.playsTotal ?? item?.playsTotal ?? 0);
+    if (expected > 0) {
+      progressPct = (players / expected) * 100;
+    } else {
+      progressPct = safeProgress(item) * 100;
+    }
+  }
+
+  return {
+    enabled,
+    thresholdPct,
+    progressPct,
+    status,
+  };
+}
+
+function canShowEarlyTermination(context) {
+  if (!context) return false;
+  const status = context.status;
+  if (status === 'OVER' || status === 'UNFILLED' || status === 'CANCELLED') return false;
+  const meetsThreshold = Number.isFinite(context.progressPct) && Number.isFinite(context.thresholdPct)
+    ? context.progressPct >= context.thresholdPct
+    : false;
+  if (!meetsThreshold && !context.enabled) return false;
+  return meetsThreshold || context.enabled;
 }
 
 function formatINR(n) {

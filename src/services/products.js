@@ -194,6 +194,18 @@ export async function getProductById(id, token) {
   return data;
 }
 
+export async function cancelTournamentEarly({ product, reason } = {}, token) {
+  if (!product) throw new Error('product is required');
+  const body = { product };
+  if (reason) body.reason = String(reason).slice(0, 500);
+  const data = await request('/tournaments/cancel', {
+    method: 'POST',
+    data: body,
+    token,
+  });
+  return data;
+}
+
 export async function getEntrySuggestion(body = {}, token, opts = {}) {
   const { price, entryFee, currency = 'INR' } = body;
   const payload = {
@@ -238,4 +250,12 @@ export async function updateProduct(id, patch, token) {
   return data;
 }
 
-export default { listProducts, getProductById, buildProductQueryFromUI, createProductWithTournament, getMyProducts, updateProduct };
+export default {
+  listProducts,
+  getProductById,
+  buildProductQueryFromUI,
+  createProductWithTournament,
+  getMyProducts,
+  updateProduct,
+  cancelTournamentEarly,
+};

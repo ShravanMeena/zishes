@@ -4,18 +4,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, KeyRound, CreditCard, Wallet2, FileText, Shield, Scale, Flag, MessageSquare, Users, LogOut } from 'lucide-react-native';
 import { POLICY_MAP } from '../../content/policies';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../store/auth/authSlice';
 import AppModal from '../../components/common/AppModal';
 import appConfigService from '../../services/appConfig';
 
 export default function SettingsScreen({ navigation }) {
   const dispatch = useDispatch();
+  const country = useSelector((s) => s.auth.user?.address?.country);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [legalPolicies, setLegalPolicies] = useState(null);
-  const goPayments = () => navigation.navigate('PaymentMethods');
+  const goPayments = () => navigation.navigate('PaymentMethodsManage');
   const goDefaultWithdrawal = () => navigation.navigate('DefaultWithdrawal');
+  const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
 
   const openPolicy = (key) => {
     const { title, html } = POLICY_MAP[key] || {};
@@ -100,7 +102,9 @@ export default function SettingsScreen({ navigation }) {
         </Section>
 
         <Section title="Account Management">
-          <Row icon={<Wallet2 size={18} color="#FF7A7A" />} title="Manage  Membership" danger onPress={() => navigation.navigate('MembershipTier')} border />
+          {isIndia ? (
+            <Row icon={<Wallet2 size={18} color="#FF7A7A" />} title="Manage  Membership" danger onPress={() => navigation.navigate('MembershipTier')} border />
+          ) : null}
           <Row icon={<Users size={18} color="#FF7A7A" />} title="Delete/Deactivate Account" danger onPress={() => navigation.navigate('ManageAccount')} border />
           <Row icon={<LogOut size={18} color="#FF7A7A" />} title="Log Out" danger onPress={() => setLogoutOpen(true)} />
         </Section>

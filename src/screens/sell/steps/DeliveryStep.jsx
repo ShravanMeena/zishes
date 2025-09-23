@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboard } from 'react-native';
 import { colors } from '../../../theme/colors';
-import { Store, Truck, TruckIcon, Mail, Check } from 'lucide-react-native';
+import { Store, TruckIcon, Mail, Check } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateDelivery } from '../../../store/listingDraft/listingDraftSlice';
 
@@ -10,6 +10,12 @@ export default function DeliveryStep() {
   const { method, pickupNote } = useSelector((s) => s.listingDraft.delivery);
   const setMethod = (v) => dispatch(updateDelivery({ method: v }));
   const setPickupNote = (v) => dispatch(updateDelivery({ pickupNote: v }));
+
+  useEffect(() => {
+    if (method === 'domestic') {
+      dispatch(updateDelivery({ method: 'pickup' }));
+    }
+  }, [method, dispatch]);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }} keyboardShouldPersistTaps="always">
@@ -36,23 +42,20 @@ export default function DeliveryStep() {
         />
       </OptionCard>
 
-      <OptionCard
-        icon={<Truck size={22} color={colors.white} />}
-        title="Courier Delivery ( Domestic )"
-        desc="Item is shipped via a trusted third-party courier service to the Winners address."
-        selected={method === 'domestic'}
-        onPress={() => setMethod('domestic')}
-      />
-
-      <OptionCard
-        icon={<TruckIcon size={22} color={colors.white} />}
-        title="Courier Delivery ( International )"
-        desc="Item is shipped via a trusted third-party courier service to the Winners address."
-        selected={method === 'intl'}
-        onPress={() => setMethod('intl')}
-        badge="Coming Soon"
-        disabled
-      />
+      {/**
+       * Temporarily removing international courier delivery until logistics are ready.
+       * Keeping the markup commented for quick re-enable once the feature returns.
+       */}
+      {false && (
+        <OptionCard
+          icon={<TruckIcon size={22} color={colors.white} />}
+          title="Courier Delivery ( International )"
+          desc="Item is shipped via a trusted third-party courier service to the Winners address."
+          selected={method === 'intl'}
+          onPress={() => setMethod('intl')}
+          disabled
+        />
+      )}
 
       <OptionCard
         icon={<Mail size={22} color={colors.white} />}
@@ -66,16 +69,20 @@ export default function DeliveryStep() {
 }
 
 function OptionCard({ icon, title, desc, selected, onPress, children, badge, disabled }) {
+  const showRight = selected || badge;
   return (
     <TouchableOpacity activeOpacity={0.9} onPress={onPress} disabled={disabled} style={[styles.card, selected && styles.cardActive, disabled && { opacity: 0.6 }]}>
       <View style={styles.cardHeader}>
         <View style={styles.iconWrap}>{icon}</View>
         <Text style={styles.cardTitle}>{title}</Text>
-        <View style={{ flex: 1 }} />
-        {selected ? (
-          <View style={styles.checkWrap}><Check size={16} color={colors.white} /></View>
+        {showRight ? (
+          <View style={styles.cardRight}>
+            {badge ? <View style={styles.badge}><Text style={styles.badgeTxt}>{badge}</Text></View> : null}
+            {selected ? (
+              <View style={styles.checkWrap}><Check size={16} color={colors.white} /></View>
+            ) : null}
+          </View>
         ) : null}
-        {badge ? <View style={styles.badge}><Text style={styles.badgeTxt}>{badge}</Text></View> : null}
       </View>
       <Text style={styles.cardDesc}>{desc}</Text>
       {children}
@@ -92,10 +99,11 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center' },
   iconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#3A2B52', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   checkWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
-  cardTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
+  cardTitle: { flex: 1, color: colors.white, fontWeight: '800', fontSize: 18, flexWrap: 'wrap', marginRight: 8 },
+  cardRight: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
   cardDesc: { color: colors.textSecondary, marginTop: 8 },
   fieldLabel: { color: colors.white, fontWeight: '700', marginTop: 14, marginBottom: 8 },
   input: { backgroundColor: '#1E2128', borderWidth: 1, borderColor: '#3A4051', color: colors.white, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 12 },
-  badge: { backgroundColor: '#FFF2D6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, position: 'absolute', right: 8, top: -10 },
+  badge: { backgroundColor: '#FFF2D6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginLeft: 8 },
   badgeTxt: { color: '#5C4100', fontWeight: '800', fontSize: 12 },
 });

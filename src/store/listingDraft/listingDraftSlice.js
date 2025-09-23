@@ -89,9 +89,15 @@ export const clearDraftStorage = createAsyncThunk('listingDraft/clear', async ()
 
 // Save the current draft as a new entry in the drafts list
 export const saveCurrentAsNewDraft = createAsyncThunk('listingDraft/saveNewDraft', async ({ name }, { getState }) => {
-  const state = getState().listingDraft;
-  const toSave = { ...state, isDirty: false };
-  const saved = await saveNewDraft({ name: name || state?.details?.name || 'Untitled Item', data: toSave });
+  const rootState = getState();
+  const draftState = rootState.listingDraft;
+  const userCountry = rootState?.auth?.user?.address?.country;
+  const toSave = { ...draftState, isDirty: false };
+  const saved = await saveNewDraft({
+    name: name || draftState?.details?.name || 'Untitled Item',
+    data: toSave,
+    originCountry: userCountry,
+  });
   return saved;
 });
 
@@ -315,6 +321,21 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     return rejectWithValue('Invalid end date.');
   }
 
+  const normalizedThreshold = (() => {
+    const pct = Number(play.earlyTerminationThresholdPct);
+    if (!Number.isFinite(pct)) return null;
+    if (pct < 1 || pct > 100) return null;
+    return pct;
+  })();
+  const earlyTerminationPayload = (() => {
+    const enabled = !!play.earlyTerminationEnabled;
+    if (!enabled && normalizedThreshold == null) return undefined;
+    return {
+      enabled,
+      ...(normalizedThreshold != null ? { thresholdPct: normalizedThreshold } : {}),
+    };
+  })();
+
   const payload = {
     images: imageUrls,
     name: String(details.name || ''),
@@ -328,10 +349,7 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     expectedPlayers: Number(play.playsCount || 0),
     endedAt,
     game: String(play.game),
-    earlyTermination: {
-      enabled: !!play.earlyTerminationEnabled,
-      ...(play.earlyTerminationThresholdPct ? { thresholdPct: Number(play.earlyTerminationThresholdPct) } : {}),
-    },
+    ...(earlyTerminationPayload ? { earlyTermination: earlyTerminationPayload } : {}),
     platinumOnly: !!play.platinumOnly,
     delivery: mapDelivery(delivery.method),
 
@@ -346,7 +364,11 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     },
   };
 
-  try { console.log('[publishListing] payload', JSON.stringify(payload)); } catch (_) {}
+  if (__DEV__) {
+    try {
+      console.log('[publishListing] payload', JSON.stringify(payload, null, 2));
+    } catch (_) {}
+  }
 
   try {
     dispatch(setSubmitStage('creating'));

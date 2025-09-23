@@ -33,11 +33,12 @@ export async function getAllDrafts() {
   }
 }
 
-export async function saveNewDraft({ name, data }) {
+export async function saveNewDraft({ name, data, originCountry }) {
   const now = Date.now();
   const draftName = (name || 'Untitled Item').trim();
   const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
-  const item = { id, name: draftName, createdAt: now, data };
+  const country = String(originCountry || '').trim();
+  const item = { id, name: draftName, createdAt: now, originCountry: country || null, data };
   const list = await getAllDrafts();
 
   // Enforce uniqueness by item name (case-insensitive, trimmed)

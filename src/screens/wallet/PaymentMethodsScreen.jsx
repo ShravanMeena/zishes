@@ -133,7 +133,21 @@ export default function PaymentMethodsScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+              return;
+            }
+            const parent = navigation.getParent?.();
+            if (parent?.navigate) {
+              parent.navigate('Wallet', { screen: 'WalletHome' });
+            }
+          }}
+          style={styles.iconBtn}
+        >
+          <ChevronLeft size={20} color={colors.white} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Payment Methods</Text>
         <View style={{ width: 32 }} />
       </View>

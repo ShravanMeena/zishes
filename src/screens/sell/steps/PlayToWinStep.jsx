@@ -35,8 +35,25 @@ export default function PlayToWinStep() {
   const [suggestion, setSuggestion] = useState(null);
   const [playsTouched, setPlaysTouched] = useState(false);
   const playsTouchedRef = useRef(false);
+  const [dateError, setDateError] = useState('');
 
   useEffect(() => { playsTouchedRef.current = playsTouched; }, [playsTouched]);
+
+  useEffect(() => {
+    if (!form.endDate) {
+      setDateError('');
+      return;
+    }
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const parsed = new Date(form.endDate);
+      parsed.setHours(0, 0, 0, 0);
+      setDateError(parsed < today ? 'End date cannot be in the past.' : '');
+    } catch (_) {
+      setDateError('');
+    }
+  }, [form.endDate]);
 
   useEffect(() => {
     let alive = true;
@@ -158,8 +175,16 @@ export default function PlayToWinStep() {
         />
 
         <FieldLabel>Listing End Date <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
-        <Select value={form.endDate} placeholder="Select a date" onPress={() => setShowDate(true)} />
+        <Select
+          value={form.endDate}
+          placeholder="Select a date"
+          onPress={() => {
+            setDateError('');
+            setShowDate(true);
+          }}
+        />
         <FieldHint>Select the final date for your listing to be active.</FieldHint>
+        {dateError ? <FieldHint style={{ color: '#ff9999' }}>{dateError}</FieldHint> : null}
 
         <FieldLabel>Game Option <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
         <Select value={form.gameName} placeholder={gamesLoading ? 'Loading games…' : 'Select a game'} onPress={() => setShowGame(true)} />
@@ -186,7 +211,20 @@ export default function PlayToWinStep() {
         visible={showDate}
         value={form.endDate ? new Date(form.endDate) : new Date()}
         onClose={() => setShowDate(false)}
-        onConfirm={(d) => { set('endDate', formatDateYYYYMMDD(d)); setShowDate(false); }}
+        onConfirm={(d) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const picked = new Date(d);
+          picked.setHours(0, 0, 0, 0);
+          if (picked < today) {
+            setDateError('End date cannot be in the past.');
+            setShowDate(false);
+            return;
+          }
+          set('endDate', formatDateYYYYMMDD(d));
+          setDateError('');
+          setShowDate(false);
+        }}
       />
     </KeyboardAwareScrollView>
   );
@@ -373,7 +411,7 @@ function SuggestionSummary({ loading, error, suggestion, onApplySeats }) {
 }
 
 function EarlyTermination({ expectedPrice, playsTotal }) {
-  const thresholds = [0.6, 0.7, 0.8, 0.9, 1.0];
+  const thresholds = [ 0.8, 0.9];
   const dispatch = useDispatch();
   const { earlyTerminationEnabled, earlyTerminationThresholdPct, platinumOnly } = useSelector((s) => s.listingDraft.play);
   const { listingExtensionAck } = useSelector((s) => s.listingDraft.policies);
@@ -408,14 +446,14 @@ function EarlyTermination({ expectedPrice, playsTotal }) {
       <View style={styles.earlySummaryRow}>
         <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
           <Text style={styles.metricLabel}>Threshold</Text>
-          <Text style={styles.metricValue}>{thresholdPct}% seats</Text>
+          <Text style={styles.metricValue}>{thresholdPct}% game plays</Text>
         </View>
         <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
           <Text style={styles.metricLabel}>Trigger Amount</Text>
           <Text style={styles.metricValue}>{fmtNumber(triggerAmount)} INR</Text>
         </View>
         <View style={styles.earlySummaryBox}>
-          <Text style={styles.metricLabel}>Seats Needed</Text>
+          <Text style={styles.metricLabel}>Game Plays Needed</Text>
           <Text style={styles.metricValue}>{fmtNumber(seatsNeeded)}</Text>
         </View>
       </View>

@@ -35,6 +35,7 @@ export default function SellScreen({ navigation, route }) {
   const submitError = useSelector((s) => s.listingDraft.submitError);
   const pendingLeaveToRoute = useSelector((s) => s.listingDraft.ui.pendingLeaveToRoute);
   const details = useSelector((s) => s.listingDraft.details);
+  const policies = useSelector((s) => s.listingDraft.policies);
 
   const steps = useMemo(
     () => [
@@ -59,14 +60,46 @@ export default function SellScreen({ navigation, route }) {
   const [hideSubmitModal, setHideSubmitModal] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [dialog, setDialog] = useState(null);
+  const policiesAccepted = useMemo(
+    () => !!(policies?.listing && policies?.dispute && policies?.antifraud && policies?.agreeAll),
+    [policies]
+  );
   const routes = steps;
   const progress = (index + 1) / steps.length;
+  const ensurePoliciesAccepted = useCallback(() => {
+    if (policiesAccepted) return true;
+    setDialog({
+      title: 'Accept Required Policies',
+      message: 'Please agree to all required policy checkboxes before continuing.',
+      primary: { label: 'OK' },
+    });
+    return false;
+  }, [policiesAccepted]);
 
-  const goNext = () => { if (index < routes.length - 1) setIndex(index + 1); };
-  const goTo = (key) => {
+  const attemptSetIndex = useCallback((nextIndex) => {
+    if (nextIndex === index) return;
+    const movingForward = nextIndex > index;
+    const currentKey = routes[index]?.key;
+    if (movingForward && currentKey === 'policies' && !ensurePoliciesAccepted()) {
+      return;
+    }
+    if (nextIndex >= 0 && nextIndex < routes.length) {
+      setIndex(nextIndex);
+    }
+  }, [index, routes, ensurePoliciesAccepted]);
+
+  const goNext = useCallback(() => {
+    if (index < routes.length - 1) {
+      attemptSetIndex(index + 1);
+    }
+  }, [attemptSetIndex, index, routes]);
+
+  const goTo = useCallback((key) => {
     const i = routes.findIndex((r) => r.key === key);
-    if (i >= 0) setIndex(i);
-  };
+    if (i >= 0) {
+      attemptSetIndex(i);
+    }
+  }, [routes, attemptSetIndex]);
 
   const activeKey = routes[index]?.key;
   const title = useMemo(() => {
@@ -110,6 +143,7 @@ export default function SellScreen({ navigation, route }) {
         });
       }
     } else {
+      if (routes[index]?.key === 'policies' && !ensurePoliciesAccepted()) return;
       goNext();
     }
   };
@@ -253,7 +287,7 @@ export default function SellScreen({ navigation, route }) {
               <TouchableOpacity
                 key={route.key}
                 style={[styles.tabChip, focused && styles.tabChipActive]}
-                onPress={() => setIndex(idx)}
+                onPress={() => attemptSetIndex(idx)}
                 activeOpacity={0.85}
               >
                 <Text style={[styles.tabChipText, focused && styles.tabChipTextActive]}>{route.title}</Text>
@@ -266,7 +300,7 @@ export default function SellScreen({ navigation, route }) {
       {/* Tabs using react-native-tab-view */}
       <TabView
         navigationState={{ index, routes }}
-        onIndexChange={setIndex}
+        onIndexChange={attemptSetIndex}
         initialLayout={{ width }}
         swipeEnabled={!keyboardOpen}
         renderPager={(pagerProps) => (
