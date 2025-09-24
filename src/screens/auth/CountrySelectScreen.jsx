@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { completeVerification, setUser } from '../../store/auth/authSlice';
 import { setCountry as setAppCountry } from '../../store/app/appSlice';
 import { updateMe as updateCurrentUser } from '../../services/users';
-import { getAccessToken } from '../../services/tokenManager';
+import { getToken } from '../../services/tokenManager';
 import Button from '../../components/ui/Button';
 
 const COUNTRIES = [
@@ -44,7 +44,7 @@ export default function CountrySelectScreen({ navigation, route }) {
     let bearer = token;
     if (!bearer) {
       try {
-        bearer = await getAccessToken();
+        bearer = await getToken();
       } catch {}
     }
     if (!bearer) throw new Error('Missing auth token');

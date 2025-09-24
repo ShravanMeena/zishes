@@ -1,5 +1,7 @@
 import axios from 'axios';
-import { clearTokens, getAccessToken, refreshAccessToken } from './tokenManager';
+import { clearTokens, getToken, refreshAccessToken } from './tokenManager';
+
+const isDev = typeof __DEV__ === 'boolean' ? __DEV__ : process.env.NODE_ENV !== 'production';
 
 let isRefreshing = false;
 let pendingQueue = [];
@@ -18,13 +20,24 @@ export function attachAuthInterceptors(client) {
     try {
       const hasAuth = !!(config.headers && (config.headers.Authorization || config.headers.authorization));
       if (!hasAuth) {
-        const token = await getAccessToken();
+        const token = await getToken();
         if (token) {
           config.headers = config.headers || {};
           config.headers.Authorization = `Bearer ${token}`;
         }
       }
     } catch {}
+    if (isDev) {
+      try {
+        const authHeader = config.headers?.Authorization || config.headers?.authorization || null;
+        const fullUrl = `${config.baseURL || ''}${config.url || ''}`;
+        console.log('[HTTP]', (config.method || 'GET').toUpperCase(), fullUrl, {
+          params: config.params,
+          data: config.data,
+          token: authHeader ? authHeader.replace(/^Bearer\s+/i, '') : null,
+        });
+      } catch {}
+    }
     return config;
   });
 

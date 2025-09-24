@@ -5,7 +5,7 @@ import { navigate } from '../navigation/navigationRef';
 import store from '../store';
 import { fetchMyWallet } from '../store/wallet/walletSlice';
 import users from '../services/users';
-import { getAccessToken } from '../services/tokenManager';
+import { getToken } from '../services/tokenManager';
 
 // Use a fresh, high-importance channel so heads-up notifications show reliably
 const CHANNEL_ID = 'zishes_general_high';
@@ -74,7 +74,7 @@ export async function setupNotificationHandlers() {
           device: Platform.OS,
           devicePlatform: (Platform.OS || '').toUpperCase(),
         };
-        const bearer = await getAccessToken();
+        const bearer = await getToken();
         if (!bearer) return;
         const res = await users.updateMe(payload, { token: bearer });
         // eslint-disable-next-line no-console
@@ -111,7 +111,7 @@ export async function enablePushAfterLogin() {
         device: Platform.OS,
         devicePlatform: (Platform.OS || '').toUpperCase(),
       };
-      const bearer = await getAccessToken();
+      const bearer = await getToken();
       if (!bearer) return;
       const res = await users.updateMe(payload, { token: bearer });
       // eslint-disable-next-line no-console

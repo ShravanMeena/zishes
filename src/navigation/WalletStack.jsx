@@ -5,6 +5,7 @@ import PaymentMethodsScreen from '../screens/wallet/PaymentMethodsScreen';
 import BuyCoinsScreen from '../screens/wallet/BuyCoinsScreen';
 import WithdrawScreen from '../screens/wallet/WithdrawScreen';
 import UploadProofScreen from '../screens/profile/UploadProofScreen';
+import MembershipTierScreen from '../screens/account/MembershipTierScreen';
 import TransactionHistoryScreen from '../screens/wallet/TransactionHistoryScreen';
 
 const Stack = createNativeStackNavigator();
@@ -19,6 +20,7 @@ export default function WalletStack() {
       <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} />
       {/** Register here so Wallet can navigate directly to UploadProof */}
       <Stack.Screen name="UploadProof" component={UploadProofScreen} />
+      <Stack.Screen name="MembershipTier" component={MembershipTierScreen} />
     </Stack.Navigator>
   );
 }

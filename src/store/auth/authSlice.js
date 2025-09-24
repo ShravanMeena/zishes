@@ -47,13 +47,18 @@ export const signup = createAsyncThunk('auth/signup', async ({ email, password }
     ]);
     // Make token available in Redux immediately for interceptors
     try { dispatch(tokenUpdated({ token: accessToken, refreshToken: refreshToken || null })); } catch {}
-    console.log('[Auth] Signup success. Access token:', accessToken);
+    if (__DEV__) {
+      console.log('[Auth] Signup success. Access token:', accessToken);
+      try {
+        console.log('[Auth] Signup tokens', JSON.stringify({ accessToken, refreshToken: refreshToken || null }));
+      } catch {}
+    }
     // After successful auth, create user in Zishes API (ignore duplicates)
     try {
       await createZishesUser({ email, token: accessToken });
     } catch (e) {
-      if (e?.status !== 409) {
-        // Non-duplicate errors can be logged for debugging
+      const status = e?.status;
+      if (status !== 409 && status !== 401 && status !== 403) {
         console.warn('Create user failed:', e?.message || e);
       }
     }
@@ -327,7 +332,7 @@ const authSlice = createSlice({
         state.token = action.payload.token;
         state.refreshToken = action.payload.refreshToken;
         state.user = action.payload.user;
-        state.needsVerification = true;
+        state.needsVerification = false;
         state.provider = 'password';
         state.currentAuthMethod = null;
       })

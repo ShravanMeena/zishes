@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { listCategories } from '../services/categories';
 
 function slugify(name) {
@@ -7,7 +7,7 @@ function slugify(name) {
 }
 
 export default function useCategories() {
-  const [categories, setCategories] = useState([{ id: 'all', label: 'All' }]);
+  const [categories, setCategories] = useState([{ id: 'all', label: 'All', rawId: null }]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -18,9 +18,13 @@ export default function useCategories() {
         setError(null);
         const data = await listCategories();
         const mapped = Array.isArray(data)
-          ? data.map((c) => ({ id: slugify(c?.name || c?._id), label: c?.name || 'Category' }))
+          ? data.map((c) => ({
+              id: slugify(c?.name || c?._id),
+              label: c?.name || 'Category',
+              rawId: c?._id || c?.id || c?.code || c?.slug || null,
+            }))
           : [];
-        if (alive) setCategories([{ id: 'all', label: 'All' }, ...mapped]);
+        if (alive) setCategories([{ id: 'all', label: 'All', rawId: null }, ...mapped]);
       } catch (e) {
         if (alive) setError(e?.message || 'Failed to fetch categories');
       } finally {
@@ -32,4 +36,3 @@ export default function useCategories() {
 
   return { categories, loading, error, slugify };
 }
-

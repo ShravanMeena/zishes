@@ -105,7 +105,14 @@ export default function LoginScreen({ navigation }) {
           loading={isGoogleLoading}
           disabled={isPasswordLoading}
         />
-        <Button variant="outline" title="Continue with Apple" left={<Apple size={18} color={colors.white} />} style={{ marginTop: 10 }} />
+        {Platform.OS === 'ios' ? (
+          <Button
+            variant="outline"
+            title="Continue with Apple"
+            left={<Apple size={18} color={colors.white} />}
+            style={{ marginTop: 10 }}
+          />
+        ) : null}
       </View>
       </KeyboardAwareScrollView>
 

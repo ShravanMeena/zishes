@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import store from '../store';
-import { api } from './api';
 import { tokenUpdated, logout } from '../store/auth/authSlice';
 
 const TOKEN_KEY = 'auth_token';
@@ -13,6 +12,10 @@ export async function getAccessToken() {
   try { return await AsyncStorage.getItem(TOKEN_KEY); } catch {
     return null;
   }
+}
+
+export async function getToken() {
+  return getAccessToken();
 }
 
 export async function getRefreshToken() {
@@ -36,14 +39,22 @@ export async function setTokens({ accessToken, refreshToken }) {
 
 // Try to refresh using the stored refresh token
 export async function refreshAccessToken() {
+  const current = await getToken();
+  if (current) {
+    if (__DEV__) {
+      try {
+        console.log('[Token] refresh skipped — reuse existing access token');
+      } catch {}
+    }
+    return current;
+  }
   const refreshToken = await getRefreshToken();
-  if (!refreshToken) throw new Error('No refresh token');
-  // Call auth API verify/refresh endpoint, expecting tokens in headers
-  const result = await api.verify({ refreshToken });
-  const { accessToken, refreshToken: newRefresh } = result || {};
-  if (!accessToken) throw new Error('Failed to refresh access token');
-  await setTokens({ accessToken, refreshToken: newRefresh || refreshToken });
-  return accessToken;
+  if (__DEV__) {
+    try {
+      console.log('[Token] refresh disabled — no API call performed', { refreshToken });
+    } catch {}
+  }
+  throw new Error('Refresh token flow disabled');
 }
 
 export async function clearTokens() {
@@ -56,9 +67,9 @@ export async function clearTokens() {
 
 export default {
   getAccessToken,
+  getToken,
   getRefreshToken,
   setTokens,
   refreshAccessToken,
   clearTokens,
 };
-

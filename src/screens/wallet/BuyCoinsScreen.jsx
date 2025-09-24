@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
-import { ChevronLeft, CreditCard, QrCode, Wallet, ShieldCheck } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import CongratsModal from '../../components/modals/CongratsModal';
 import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
 import paymentsService from '../../services/payments';
@@ -30,16 +30,15 @@ export default function BuyCoinsScreen({ navigation }) {
   const [payError, setPayError] = useState(null);
   const [lastPlan, setLastPlan] = useState(null);
   const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
+  const planType = useMemo(() => (isIndia ? 'SUBSCRIPTION' : 'TOPUP'), [isIndia]);
+  const filteredPlans = useMemo(
+    () => (plans || []).filter((p) => p?.planType === planType),
+    [plans, planType],
+  );
 
-  const openMembershipTier = useCallback(() => {
-    const parentNav = navigation.getParent?.();
-    const targetParams = { screen: 'MembershipTier' };
-    if (parentNav?.navigate) {
-      parentNav.navigate('Profile', targetParams);
-    } else {
-      navigation.navigate('Profile', targetParams);
-    }
-  }, [navigation]);
+  useEffect(() => {
+    setSelected(null);
+  }, [planType]);
 
   useEffect(() => {
     let alive = true;
@@ -49,7 +48,7 @@ export default function BuyCoinsScreen({ navigation }) {
         setError(null);
         const res = await plansService.listPlans({});
         const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-        if (alive) setPlans(list.filter(p => p?.planType === 'TOPUP'));
+        if (alive) setPlans(list);
       } catch (e) {
         if (alive) setError(e?.message || 'Failed to load plans');
       } finally {
@@ -60,109 +59,137 @@ export default function BuyCoinsScreen({ navigation }) {
   }, []);
 
   const renderPack = ({ item }) => (
-    <TouchableOpacity onPress={() => setSelected(item._id)} style={[styles.pack, selected===item._id && styles.packActive]}>
+    <TouchableOpacity onPress={() => setSelected(item._id)} style={[styles.pack, selected === item._id && styles.packActive]}>
       <View style={styles.coinBadge}><Text style={styles.badgeText}>Z</Text></View>
-      <Text style={styles.packQty}>{Number(item.coins || 0)} Coins</Text>
-      <Text style={styles.packPrice}>{(item.currencyCode || item.baseCurrency || '')} {item.amount}</Text>
+      <Text style={styles.packQty}>
+        {planType === 'TOPUP'
+          ? `${Number(item.coins || 0)} Coins`
+          : `${Number(item.coins || 0)} ZC credits`}
+      </Text>
+      <Text style={styles.packPrice}>{(item.currencySymbol || item.currencyCode || item.baseCurrency || '')} {item.amount}</Text>
+      {planType === 'SUBSCRIPTION' && item.billingPeriod ? (
+        <Text style={styles.planMeta}>{`${item.billingInterval || 1} ${String(item.billingPeriod || '').toLowerCase()}`}</Text>
+      ) : null}
     </TouchableOpacity>
   );
 
-  const startTopup = useCallback(async () => {
+  const startCheckout = useCallback(async (planIdOverride) => {
     try {
-      if (!selected) return;
-      if (!isIndia) {
-        setRegionModal(true);
-        return;
-      }
-      const plan = plans.find(p => p._id === selected);
+      const activePlanId = planIdOverride || selected;
+      if (!activePlanId) return;
+      const plan = filteredPlans.find((p) => p._id === activePlanId);
       if (!plan) throw new Error('Invalid plan');
+      setLastPlan(plan);
       setProcessing(true);
       setPayProcessing(true);
-      setLastPlan(plan);
-      try { console.log('[RZP][BUY] Selected plan:', JSON.stringify({ id: plan._id, coins: plan.coins, amount: plan.amount, currency: plan.currencyCode })); } catch {}
+
+      if (planType === 'TOPUP' && !isIndia) {
+        setRegionModal(true);
+        setProcessing(false);
+        setPayProcessing(false);
+        return;
+      }
+
       const keyRes = await paymentsService.getRazorpayKey();
       const { keyId } = keyRes || {};
-      try { console.log('[RZP][BUY] Public key fetched:', keyRes && keyRes.keyId ? `${String(keyRes.keyId).slice(0,6)}…` : null); } catch {}
+      try { console.log(`[RZP][BUY][${planType}] Public key fetched:`, keyId ? `${String(keyId).slice(0, 6)}…` : null); } catch {}
       if (!keyId) throw new Error('Missing Razorpay key');
-      const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
-      const { order } = orderRes || {};
-      try { console.log('[RZP][BUY] Order created:', JSON.stringify({ id: order?.id, amount: order?.amount, currency: order?.currency })); } catch {}
-      if (!order?.id) throw new Error('Failed to create order');
 
-      const options = {
-        key: keyId,
-        name: 'Zishes',
-        description: 'Coins Topup',
-        order_id: order.id,
-        amount: order.amount,
-        currency: order.currency || plan.currencyCode || 'INR',
-        prefill: {
-          // email: user?.email,
-          // contact: user?.phone,
-        },
-        theme: { color: '#6C7BFF' },
-        retry: { enabled: true, max_count: 2 },
-        external: { wallets: ['paytm', 'phonepe'] },
-        notes: { planId: plan._id },
-      };
+      if (planType === 'TOPUP') {
+        const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
+        const { order } = orderRes || {};
+        try { console.log('[RZP][BUY][TOPUP] Order created:', JSON.stringify({ id: order?.id, amount: order?.amount, currency: order?.currency })); } catch {}
+        if (!order?.id) throw new Error('Failed to create order');
 
-      try {
-        setPayProcessing(false);
-        await RazorpayCheckout.open(options);
-        try { dispatch(fetchMyWallet()); } catch {}
-        try { setCongratsOpen(true); } catch {}
-      } catch (err) {
-        const rawMessage = err?.description || err?.message || '';
-        const desc = String(rawMessage).toLowerCase();
-        console.warn('[RZP][TOPUP-BUY] error:', JSON.stringify(err));
-        if (desc.includes('cancel')) return;
-        if (err?.code === 'RAZORPAY_SDK_MISSING') {
-          Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
-        } else {
-          setPayError('We could not complete your payment. Please retry.');
+        const options = {
+          key: keyId,
+          name: 'Zishes',
+          description: 'Coins Topup',
+          order_id: order.id,
+          amount: order.amount,
+          currency: order.currency || plan.currencyCode || 'INR',
+          prefill: {
+            // email: user?.email,
+            // contact: user?.phone,
+          },
+          theme: { color: '#6C7BFF' },
+          retry: { enabled: true, max_count: 2 },
+          external: { wallets: ['paytm', 'phonepe'] },
+          notes: { planId: plan._id },
+        };
+
+        try {
+          setPayProcessing(false);
+          await RazorpayCheckout.open(options);
+          try { dispatch(fetchMyWallet()); } catch {}
+          setCongratsOpen(true);
+        } catch (err) {
+          const rawMessage = err?.description || err?.message || '';
+          const desc = String(rawMessage).toLowerCase();
+          console.warn('[RZP][BUY][TOPUP] error:', JSON.stringify(err));
+          if (desc.includes('cancel')) return;
+          if (err?.code === 'RAZORPAY_SDK_MISSING') {
+            Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
+          } else {
+            setPayError('We could not complete your payment. Please retry.');
+          }
+        }
+      } else {
+        const subRes = await paymentsService.createRazorpaySubscription({ planId: plan._id });
+        const { subscription } = subRes || {};
+        try { console.log('[RZP][BUY][SUBSCRIPTION] Created:', JSON.stringify({ id: subscription?.id, status: subscription?.status })); } catch {}
+        if (!subscription?.id) throw new Error('Failed to create subscription');
+
+        const options = {
+          key: keyId,
+          name: 'Zishes',
+          description: 'Plan Subscription',
+          subscription_id: subscription.id,
+          prefill: {
+            // email: user?.email,
+            // contact: user?.phone,
+          },
+          theme: { color: '#6C7BFF' },
+          retry: { enabled: true, max_count: 2 },
+          external: { wallets: ['paytm', 'phonepe'] },
+          notes: { planId: plan._id },
+        };
+
+        try {
+          setPayProcessing(false);
+          await RazorpayCheckout.open(options);
+          try { dispatch(fetchMyWallet()); } catch {}
+          setCongratsOpen(true);
+        } catch (err) {
+          const desc = String(err?.description || err?.message || '').toLowerCase();
+          console.warn('[RZP][BUY][SUBSCRIPTION] error:', JSON.stringify(err));
+          if (desc.includes('cancel')) return;
+          if (err?.code === 'RAZORPAY_SDK_MISSING') {
+            Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
+          } else {
+            setPayError('We could not complete your payment. Please retry.');
+          }
         }
       }
-    } catch (e) {
-      console.warn('[RZP][TOPUP-BUY] start error:', e);
+    } catch (err) {
+      console.warn(`[RZP][BUY][${planType}] start error:`, err);
       setPayError('We could not start the payment. Please retry.');
     } finally {
       setProcessing(false);
       setPayProcessing(false);
     }
-  }, [dispatch, isIndia, plans, selected]);
-
-  if (!isIndia) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
-          <Text style={styles.headerTitle}>Buy Coins</Text>
-          <View style={{ width: 32 }} />
-        </View>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-          <Text style={{ color: colors.white, fontWeight: '700', fontSize: 18, textAlign: 'center' }}>Coin top-ups are not available in your region yet.</Text>
-          <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 12 }}>Check out membership subscriptions to unlock more benefits while we work on expanding support.</Text>
-          <TouchableOpacity style={[styles.bottomBtn, styles.buyBtn, { marginTop: 20 }]} onPress={openMembershipTier}>
-            <Text style={styles.buyTxt}>View Memberships</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.bottomBtn, styles.cancelBtn, { marginTop: 12, width: '60%' }]} onPress={() => navigation.goBack()}>
-            <Text style={styles.cancelTxt}>Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  }, [dispatch, filteredPlans, isIndia, planType, selected]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Buy Coins</Text>
+        <Text style={styles.headerTitle}>{planType === 'TOPUP' ? 'Buy Coins' : 'Membership Subscription'}</Text>
         <View style={{ width: 32 }} />
       </View>
 
       <FlatList
-        data={plans}
+        data={filteredPlans}
         keyExtractor={(it) => it._id}
         numColumns={2}
         renderItem={renderPack}
@@ -172,9 +199,15 @@ export default function BuyCoinsScreen({ navigation }) {
               <View style={styles.coinBadgeLg}><Text style={styles.badgeText}>Z</Text></View>
               <Text style={styles.balanceLabel}>Your Current Balance</Text>
               <Text style={styles.balanceQty}>{Number(balance || 0).toLocaleString()} <Text style={{ fontSize: 16 }}>Coins</Text></Text>
-              <Text style={styles.balanceCaption}>Coins power your gameplay — top up anytime.</Text>
+              <Text style={styles.balanceCaption}>
+                {planType === 'TOPUP'
+                  ? 'Coins power your gameplay — top up anytime.'
+                  : 'Keep your membership active to unlock perks and monthly ZC credits.'}
+              </Text>
             </LinearGradient>
-            <Text style={styles.sectionTitle}>Choose Your Coin Pack</Text>
+            <Text style={styles.sectionTitle}>
+              {planType === 'TOPUP' ? 'Choose Your Coin Pack' : 'Choose Your Membership Tier'}
+            </Text>
           </>
         }
         ListFooterComponent={
@@ -193,7 +226,9 @@ export default function BuyCoinsScreen({ navigation }) {
           ) : error ? (
             <Text style={{ color: colors.textSecondary, paddingHorizontal: 12 }}>{error}</Text>
           ) : (
-            <Text style={{ color: colors.textSecondary, paddingHorizontal: 12 }}>No packs available.</Text>
+            <Text style={{ color: colors.textSecondary, paddingHorizontal: 12 }}>
+              {planType === 'TOPUP' ? 'No top-up packs available.' : 'No membership plans available.'}
+            </Text>
           )
         }
       />
@@ -205,17 +240,26 @@ export default function BuyCoinsScreen({ navigation }) {
         <TouchableOpacity
           style={[styles.bottomBtn, styles.buyBtn, !selected && styles.buyBtnDisabled]}
           disabled={!selected}
-          onPress={startTopup}
+          onPress={() => startCheckout()}
         >
-          <Text style={[styles.buyTxt, (!selected || processing) && styles.buyTxtDisabled]}>{processing ? 'Processing…' : 'Buy Now'}</Text>
+          <Text style={[styles.buyTxt, (!selected || processing) && styles.buyTxtDisabled]}>
+            {processing ? 'Processing…' : (planType === 'TOPUP' ? 'Buy Now' : 'Subscribe Now')}
+          </Text>
         </TouchableOpacity>
       </View>
 
       <CongratsModal
         visible={congratsOpen}
-        title="Purchase Successful"
-        message={selected ? `Your ${Number(plans.find(p=>p._id===selected)?.coins || 0)} ZishCoins are on the way!` : 'Coins added successfully.'}
-        primaryText="Great!"
+        title={planType === 'TOPUP' ? 'Purchase Successful' : 'Membership Activated'}
+        message={(() => {
+          const chosen = filteredPlans.find((p) => p._id === selected);
+          const coins = Number(chosen?.coins || 0).toLocaleString();
+          if (planType === 'TOPUP') {
+            return chosen ? `Your ${coins} ZishCoins are on the way!` : 'Coins added successfully.';
+          }
+          return chosen ? `Your membership with ${coins} ZC credits is live. Enjoy the perks!` : 'Your membership is live. Enjoy the perks!';
+        })()}
+        primaryText={planType === 'TOPUP' ? 'Great!' : 'Awesome!'}
         onPrimary={() => { setCongratsOpen(false); navigation.goBack(); }}
         onRequestClose={() => setCongratsOpen(false)}
       />
@@ -228,18 +272,15 @@ export default function BuyCoinsScreen({ navigation }) {
         cancelText="Close"
         confirmText="Retry"
         onCancel={() => setPayError(null)}
-        onConfirm={() => { setPayError(null); if (lastPlan) { setSelected(lastPlan._id); startTopup(); } }}
+        onConfirm={() => {
+          setPayError(null);
+          if (lastPlan) {
+            setSelected(lastPlan._id);
+            startCheckout(lastPlan._id);
+          }
+        }}
       />
     </SafeAreaView>
-  );
-}
-
-function MethodRow({ title, icon }) {
-  return (
-    <View style={styles.methodRow}>
-      <View style={styles.methodLeft}>{icon}<Text style={styles.methodTitle}>{'  '}{title}</Text></View>
-      <ShieldCheck size={16} color={colors.white} />
-    </View>
   );
 }
 
@@ -262,11 +303,7 @@ const styles = StyleSheet.create({
   coinBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#3A2B52', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   packQty: { color: colors.white, fontWeight: '700' },
   packPrice: { color: colors.textSecondary, marginTop: 2 },
-
-  methodsWrap: { paddingHorizontal: 0, marginTop: 4, gap: 10 },
-  methodRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, padding: 12 },
-  methodLeft: { flexDirection: 'row', alignItems: 'center' },
-  methodTitle: { color: colors.white, fontWeight: '700' },
+  planMeta: { color: colors.textSecondary, marginTop: 4, fontSize: 12, textTransform: 'capitalize' },
 
   bottomBar: { paddingTop: 12, flexDirection: 'row', gap: 12 },
   fixedBottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, flexDirection: 'row', gap: 12, backgroundColor: colors.black, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#22252C' },

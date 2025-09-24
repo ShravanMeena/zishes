@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Linking, Share, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Share, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, Clock, Share2 } from 'lucide-react-native';
@@ -113,16 +113,30 @@ export default function MyListingsScreen({ navigation }) {
     const progressPct = Math.round(safeProgress(item) * 100);
     const earlyContext = getEarlyTerminationContext(item);
     const canTerminateEarly = canShowEarlyTermination(earlyContext);
-    const supportUrl = 'mailto:support@zishes.com';
     const onSupport = () => {
-      navigation.navigate('ReportIssue', {
+      const state = navigation.getState?.();
+      const routeNames = Array.isArray(state?.routeNames) ? state.routeNames : [];
+      const params = {
         context: 'listing',
         listingId: item.id,
         headerTitle: 'Listing Support',
         presetCategory: 'Listing',
-      });
+        fallbackTab: 'Home',
+        fallbackScreen: 'MyListings',
+        fallbackParams: {},
+      };
+      if (routeNames.includes('ReportIssue')) {
+        navigation.navigate('ReportIssue', params);
+        return;
+      }
+      const parentNav = navigation.getParent?.();
+      if (parentNav?.navigate) {
+        parentNav.navigate('Profile', { screen: 'ReportIssue', params });
+      } else {
+        navigation.navigate('ReportIssue', params);
+      }
     };
-    const onEmailSupport = () => { Linking.openURL(supportUrl).catch(() => {}); };
+    const onEmailSupport = onSupport;
     const onEarlyTerminate = () => {
       setCancelTarget(item);
       setCancelReason('');

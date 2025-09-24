@@ -13,7 +13,7 @@ import users from '../../services/users';
 import { uploadImage } from '../../services/uploads';
 import ImagePickerSheet from '../../components/common/ImagePickerSheet';
 import useCameraPermission from '../../hooks/useCameraPermission';
-import { getAccessToken } from '../../services/tokenManager';
+import { getToken } from '../../services/tokenManager';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function EditProfileScreen({ navigation }) {
@@ -57,7 +57,7 @@ export default function EditProfileScreen({ navigation }) {
         return;
       }
       let bearer = token;
-      if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
+      if (!bearer) { try { bearer = await getToken(); } catch {} }
       if (!bearer) throw new Error('Missing auth token');
       console.log('[EditProfile] update payload', patch);
       const updated = await users.updateMe(patch, { token: bearer });
@@ -101,7 +101,7 @@ export default function EditProfileScreen({ navigation }) {
         const imageUrl = uploaded?.url;
         if (imageUrl) {
           let bearer = token;
-          if (!bearer) { try { bearer = await getAccessToken(); } catch {} }
+          if (!bearer) { try { bearer = await getToken(); } catch {} }
           if (!bearer) throw new Error('Missing auth token');
           console.log('[EditProfile] update payload (avatar)', { avatar: imageUrl });
           const updated = await users.updateMe({ avatar: imageUrl }, { token: bearer });

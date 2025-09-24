@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Image, ActivityIndicator, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +15,9 @@ import CongratsModal from '../../components/modals/CongratsModal';
 export default function ReportIssueScreen({ navigation, route }) {
   const headerTitle = route?.params?.headerTitle || 'Support';
   const presetCategory = route?.params?.presetCategory;
+  const fallbackTab = route?.params?.fallbackTab;
+  const fallbackScreen = route?.params?.fallbackScreen;
+  const fallbackParams = route?.params?.fallbackParams;
   const [desc, setDesc] = useState('');
   const [category, setCategory] = useState(presetCategory || '');
   const [showCat, setShowCat] = useState(false);
@@ -29,6 +32,21 @@ export default function ReportIssueScreen({ navigation, route }) {
   const [successOpen, setSuccessOpen] = useState(false);
 
   const MAX_ATTACHMENTS = 5;
+
+  const goBackSafe = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    const parent = navigation.getParent?.();
+    if (fallbackTab && fallbackScreen && parent?.navigate) {
+      parent.navigate(fallbackTab, { screen: fallbackScreen, params: fallbackParams || {} });
+      return;
+    }
+    if (parent?.navigate) {
+      parent.navigate('Home', { screen: 'HomeIndex' });
+    }
+  }, [navigation, fallbackTab, fallbackScreen, fallbackParams]);
 
   useEffect(() => {
     if (presetCategory) setCategory(presetCategory);
@@ -139,7 +157,7 @@ export default function ReportIssueScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
+        <TouchableOpacity onPress={goBackSafe} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
         <Text style={styles.headerTitle}>{headerTitle}</Text>
         <TouchableOpacity style={styles.historyBtn} onPress={() => navigation.navigate('IssueHistory')}>
           <Text style={styles.historyTxt}>My Reports</Text>
@@ -208,7 +226,7 @@ export default function ReportIssueScreen({ navigation, route }) {
         >
           <Text style={styles.btnTxt}>{submitting ? 'Submitting...' : 'Submit Report'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, styles.cancel]} onPress={() => navigation.goBack()}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.btn, styles.cancel]} onPress={goBackSafe}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
       </KeyboardAwareScrollView>
 
       <ImagePickerSheet
@@ -238,7 +256,7 @@ export default function ReportIssueScreen({ navigation, route }) {
         title="Issue Reported"
         message="Thanks! Your report has been submitted. Our team will review it shortly."
         primaryText="Done"
-        onPrimary={() => { setSuccessOpen(false); navigation.goBack(); }}
+        onPrimary={() => { setSuccessOpen(false); goBackSafe(); }}
         onRequestClose={() => setSuccessOpen(false)}
       />
     </SafeAreaView>

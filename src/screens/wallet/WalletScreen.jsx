@@ -143,7 +143,12 @@ export default function WalletScreen({ navigation }) {
         else if (['APPROVED','PAID','SUCCESS','COMPLETED'].includes(rawStatus)) status = 'approved';
         else if (['REJECTED','FAILED','DECLINED','CANCELLED'].includes(rawStatus)) status = 'rejected';
         const withdrawAmount = Number(p?.fulfillment?.walletCredit?.amount ?? 0);
-        return { id, title, amount, status, image, raw: p, withdrawAmount };
+        const updatedAt = p?.updatedAt || p?.modifiedAt || p?.createdAt || null;
+        return { id, title, amount, status, image, raw: p, withdrawAmount, updatedAt };
+      }).sort((a, b) => {
+        const at = new Date(a.updatedAt || 0).getTime();
+        const bt = new Date(b.updatedAt || 0).getTime();
+        return bt - at;
       });
       setWithdrawals(mapped);
     } catch (e) {
@@ -168,15 +173,12 @@ export default function WalletScreen({ navigation }) {
   const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
 
   const openMembershipTier = useCallback(() => {
-    const parentNav = navigation.getParent?.();
-    const targetParams = { screen: 'MembershipTier' };
-    if (parentNav?.navigate) {
-      parentNav.navigate('Profile', targetParams);
-    } else {
-      navigation.navigate('Profile', targetParams);
-    }
+    navigation.navigate('MembershipTier', { origin: 'Wallet' });
   }, [navigation]);
   const topupPlans = useMemo(() => (plans || []).filter(p => p?.planType === 'TOPUP'), [plans]);
+  const VISIBLE_WITHDRAW_COUNT = 6;
+  const limitedWithdrawals = useMemo(() => (withdrawals || []).slice(0, VISIBLE_WITHDRAW_COUNT), [withdrawals]);
+  const hasMoreWithdrawals = useMemo(() => (withdrawals || []).length > VISIBLE_WITHDRAW_COUNT, [withdrawals]);
 
   const history = useMemo(() => {
     const mapTitle = (entry) => {
@@ -308,7 +310,7 @@ export default function WalletScreen({ navigation }) {
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => {
-              if (isIndia) navigation.navigate('BuyCoins');
+              if (!isIndia) navigation.navigate('BuyCoins');
               else openMembershipTier();
             }}
             style={{ flex: 1 }}
@@ -421,8 +423,8 @@ export default function WalletScreen({ navigation }) {
                 </View>
               </View>
             ))
-          ) : (withdrawals && withdrawals.length > 0) ? (
-          withdrawals.map((w, idx) => {
+          ) : (limitedWithdrawals && limitedWithdrawals.length > 0) ? (
+          limitedWithdrawals.map((w, idx) => {
             const over = String(w?.raw?.tournament?.status || w?.raw?.tournamentStatus || '').toUpperCase() === 'OVER';
             const rc = w?.raw?.fulfillment?.receiverConfirmation || {};
             const receiverApproved = !!(rc?.confirmedAt || rc?.confirmed || (rc?.status && String(rc.status).toUpperCase() === 'CONFIRMED'));
@@ -471,6 +473,11 @@ export default function WalletScreen({ navigation }) {
             </Text>
           )}
         </View>
+        {hasMoreWithdrawals ? (
+          <TouchableOpacity style={styles.viewMoreBtn} onPress={() => navigation.navigate('MyListings')}>
+            <Text style={styles.viewMoreText}>View more listings</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* Transaction History */}
         <View style={styles.sectionHeaderRow}>
@@ -593,6 +600,8 @@ const styles = StyleSheet.create({
   thumb: { width: 48, height: 48, borderRadius: 10, marginRight: 12, backgroundColor: '#222' },
   withdrawTitle: { color: colors.white, fontWeight: '700', maxWidth: 180 },
   withdrawAmount: { color: colors.textSecondary, marginTop: 2 },
+  viewMoreBtn: { marginHorizontal: 12, marginTop: 10, paddingVertical: 10, alignItems: 'center', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', backgroundColor: '#2B2F39' },
+  viewMoreText: { color: colors.accent, fontWeight: '700' },
   chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
   chipText: { color: colors.white, fontWeight: '700' },
   smallBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },

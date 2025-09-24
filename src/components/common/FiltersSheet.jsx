@@ -1,98 +1,138 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TouchableOpacity as Touchable } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { colors } from '../../theme/colors';
 import Button from '../ui/Button';
 import { X } from 'lucide-react-native';
 import Slider from '../ui/Slider';
 
-export default function FiltersSheet({ onClose, onApply, onReset, categories=[], initialCategory, initialFilters }) {
-  const [price, setPrice] = useState(initialFilters?.price ?? 500);
-  const [plays, setPlays] = useState(initialFilters?.plays ?? 150);
-  const [progress, setProgress] = useState(initialFilters?.progress ?? 35);
-  const [timeLeft, setTimeLeft] = useState(initialFilters?.timeLeft ?? 'today');
-  const [condition, setCondition] = useState(initialFilters?.condition ?? 'new');
-  const [cat, setCat] = useState(initialFilters?.category ?? initialCategory ?? 'all');
-  const [sliding, setSliding] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [sortBy, setSortBy] = useState(initialFilters?.sortBy ?? 'popular');
+const SORT_OPTIONS = [
+  { id: 'newest', label: 'Newest' },
+  { id: 'popular', label: 'Popular' },
+  { id: 'ending', label: 'Ending Soon' },
+  { id: 'oldest', label: 'Oldest' },
+];
 
-  // Sync internal state when initialFilters or initialCategory changes (e.g., persisted Redux)
-  React.useEffect(() => {
-    setPrice(initialFilters?.price ?? 500);
-    setPlays(initialFilters?.plays ?? 150);
-    setProgress(initialFilters?.progress ?? 35);
-    setTimeLeft(initialFilters?.timeLeft ?? 'today');
-    setCondition(initialFilters?.condition ?? 'new');
-    setCat(initialFilters?.category ?? initialCategory ?? 'all');
-    setSortBy(initialFilters?.sortBy ?? 'popular');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialFilters, initialCategory]);
+const DEFAULTS = {
+  entryFeeMax: 500,
+  progressMax: 35,
+  category: null,
+  categorySlug: 'all',
+  sort: 'newest',
+};
+
+export default function FiltersSheet({ onClose, onApply, onReset, categories = [], initialFilters }) {
+  const initialEntry = Number(initialFilters?.entryFeeMax ?? initialFilters?.price ?? DEFAULTS.entryFeeMax);
+  const initialProgress = Number(initialFilters?.progressMax ?? initialFilters?.progress ?? DEFAULTS.progressMax);
+  const initialSort = initialFilters?.sort ?? DEFAULTS.sort;
+
+  const [entryFeeMax, setEntryFeeMax] = useState(initialEntry);
+  const [progressMax, setProgressMax] = useState(initialProgress);
+  const [activeCategorySlug, setActiveCategorySlug] = useState(initialFilters?.categorySlug ?? DEFAULTS.categorySlug);
+  const [sort, setSort] = useState(initialSort);
+  const [sliding, setSliding] = useState(false);
+
+  const chipList = useMemo(() => {
+    if (Array.isArray(categories) && categories.length) return categories;
+    return [{ id: 'all', label: 'All', rawId: null }];
+  }, [categories]);
+
+  const categoryMap = useMemo(() => {
+    const map = new Map();
+    chipList.forEach((cat) => {
+      map.set(cat.id, cat);
+      if (cat?.rawId) map.set(String(cat.rawId), cat);
+    });
+    return map;
+  }, [chipList]);
+
+  useEffect(() => {
+    setEntryFeeMax(Number(initialFilters?.entryFeeMax ?? initialFilters?.price ?? DEFAULTS.entryFeeMax));
+    setProgressMax(Number(initialFilters?.progressMax ?? initialFilters?.progress ?? DEFAULTS.progressMax));
+    const slugFromInitial = (() => {
+      if (initialFilters?.categorySlug) return initialFilters.categorySlug;
+      if (initialFilters?.category) {
+        const matched = categoryMap.get(String(initialFilters.category));
+        if (matched?.id) return matched.id;
+      }
+      return DEFAULTS.categorySlug;
+    })();
+    setActiveCategorySlug(slugFromInitial);
+    setSort(initialFilters?.sort ?? DEFAULTS.sort);
+  }, [initialFilters, categoryMap]);
 
   const apply = () => {
-    const payload = { price, plays, progress, timeLeft, condition, category: cat, sortBy };
+    const selectedCategory = categoryMap.get(activeCategorySlug) || null;
+    const payload = {
+      entryFeeMax,
+      progressMax,
+      category: selectedCategory?.rawId || (activeCategorySlug !== 'all' ? activeCategorySlug : null),
+      categorySlug: activeCategorySlug,
+      sort,
+    };
     try { console.log('[FiltersSheet] apply pressed with', payload); } catch {}
     onApply?.(payload);
   };
+
   const reset = () => {
-    const defaults = { price: 500, plays: 150, progress: 35, timeLeft: 'today', condition: 'new', category: 'all', sortBy: 'popular' };
-    setPrice(defaults.price); setPlays(defaults.plays); setProgress(defaults.progress); setTimeLeft(defaults.timeLeft); setCondition(defaults.condition); setCat(defaults.category); setSortBy(defaults.sortBy);
+    setEntryFeeMax(DEFAULTS.entryFeeMax);
+    setProgressMax(DEFAULTS.progressMax);
+    setActiveCategorySlug(DEFAULTS.categorySlug);
+    setSort(DEFAULTS.sort);
     try { console.log('[FiltersSheet] reset pressed'); } catch {}
-    onReset?.(defaults);
+    onReset?.({ ...DEFAULTS });
   };
 
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>Filters</Text>
-        <Pressable onPress={onClose} style={{ padding: 6 }}><X size={20} color={colors.white} /></Pressable>
+        <Pressable onPress={onClose} style={{ padding: 6 }}>
+          <X size={20} color={colors.white} />
+        </Pressable>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={!sliding}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!sliding}
+        nestedScrollEnabled
+      >
         <View style={styles.section}>
           <Text style={styles.title}>Per Game Play</Text>
-          <Text style={styles.caption}>Adjust the range of Game Play</Text>
-          <Text style={styles.valueTxt}>${price}</Text>
+          <Text style={styles.caption}>Adjust the entry fee per play in ZishCoin.</Text>
+          <View style={styles.valueRow}>
+            <View style={styles.coinBadge}><Text style={styles.coinTxt}>Z</Text></View>
+            <Text style={styles.valueTxt}>{entryFeeMax}</Text>
+          </View>
           <Slider
-            minimumValue={10}
+            minimumValue={0}
             maximumValue={1000}
             step={10}
             minimumTrackTintColor={colors.primary}
             maximumTrackTintColor={'#7d7d87'}
             thumbTintColor={'#ddd'}
-            value={price}
-            onValueChange={setPrice}
+            value={entryFeeMax}
+            onValueChange={setEntryFeeMax}
             onSlidingStart={() => setSliding(true)}
             onSlidingComplete={() => setSliding(false)}
             tapToSeek
             style={styles.slider}
           />
-          <View style={styles.rowBetween}><Text style={styles.tick}>$10</Text><Text style={styles.tick}>$200</Text><Text style={styles.tick}>$500</Text><Text style={styles.tick}>$1000+</Text></View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.title}>No. of Game Plays</Text>
-          <Text style={styles.caption}>Filter by the number of entries in the item pool.</Text>
-          <Text style={styles.valueTxt}>{plays}</Text>
-          <Slider
-            minimumValue={10}
-            maximumValue={1000}
-            step={10}
-            minimumTrackTintColor={colors.primary}
-            maximumTrackTintColor={'#7d7d87'}
-            thumbTintColor={'#ddd'}
-            value={plays}
-            onValueChange={setPlays}
-            onSlidingStart={() => setSliding(true)}
-            onSlidingComplete={() => setSliding(false)}
-            tapToSeek
-            style={styles.slider}
-          />
-          <View style={styles.rowBetween}><Text style={styles.tick}>10</Text><Text style={styles.tick}>1000+</Text></View>
+          <View style={styles.rowBetween}>
+            {[0, 100, 250, 500, 1000].map((tick) => (
+              <View key={`entry-tick-${tick}`} style={styles.tickRow}>
+                <View style={[styles.coinBadge, styles.tickBadge]}><Text style={styles.coinTxt}>Z</Text></View>
+                <Text style={styles.tickTxt}>{tick}{tick === 1000 ? '+' : ''}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.title}>Progress</Text>
           <Text style={styles.caption}>Show items based on how full their entry pools are.</Text>
+          <Text style={styles.progressValue}>{progressMax}%</Text>
           <Slider
             minimumValue={0}
             maximumValue={100}
@@ -100,88 +140,50 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories=[],
             minimumTrackTintColor={colors.primary}
             maximumTrackTintColor={'#7d7d87'}
             thumbTintColor={'#ddd'}
-            value={progress}
-            onValueChange={setProgress}
+            value={progressMax}
+            onValueChange={setProgressMax}
             onSlidingStart={() => setSliding(true)}
             onSlidingComplete={() => setSliding(false)}
             tapToSeek
             style={styles.slider}
           />
-          <View style={styles.rowBetween}><Text style={styles.tick}>10</Text><Text style={styles.tick}>20</Text><Text style={styles.tick}>50</Text><Text style={styles.tick}>100</Text></View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.title}>Time Left</Text>
-          <Text style={styles.caption}>Filter items by their remaining availability.</Text>
-          <View style={styles.row}>
-            {['month','today','week'].map((t) => (
-              <Pressable key={t} onPress={()=>setTimeLeft(t)} style={[styles.segment, timeLeft===t && styles.segmentActive]}>
-                <Text style={[styles.segmentTxt, timeLeft===t && styles.segmentTxtActive]}>
-                  {t==='month'?'This Month':t==='today'?'Today':'This Week'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.title}>Condition of Item</Text>
-          <Text style={styles.caption}>Select the physical condition of the item.</Text>
-          <View style={styles.row}>
-            {['new','likenew','used'].map((t) => (
-              <Pressable key={t} onPress={()=>setCondition(t)} style={[styles.segment, condition===t && styles.segmentActive]}>
-                <Text style={[styles.segmentTxt, condition===t && styles.segmentTxtActive]}>
-                  {t==='likenew'?'Like New':t.charAt(0).toUpperCase()+t.slice(1)}
-                </Text>
-              </Pressable>
+          <View style={styles.rowBetween}>
+            {[0, 50, 100].map((tick) => (
+              <Text key={`progress-tick-${tick}`} style={styles.tickTxt}>{tick}%</Text>
             ))}
           </View>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.title}>Categories</Text>
-          <Text style={styles.caption}>Browse items within specific product categories.</Text>
-          <View style={styles.rowWrap}>
-            {(() => {
-              const dedup = [];
-              const seen = new Set();
-              const input = Array.isArray(categories) ? categories : [];
-              for (const c of input) {
-                if (!c || c.id === 'all') continue;
-                if (!seen.has(c.id)) { seen.add(c.id); dedup.push(c); }
-              }
-              const merged = [{ id: 'all', label: 'All' }, ...dedup];
-              return merged.map((c) => (
-                <Pressable key={`cat-${c.id}`} onPress={() => setCat(c.id)} style={[styles.chip, cat === c.id && styles.chipActive]}>
-                  <Text style={[styles.chipTxt, cat === c.id && styles.chipTxtActive]}>{c.label}</Text>
-                </Pressable>
-              ));
-            })()}
+          <Text style={styles.caption}>Browse listings that match a specific category.</Text>
+          <View style={styles.chipRow}>
+            {(chipList || []).map((cat) => (
+              <Pressable
+                key={`cat-${cat.id}`}
+                onPress={() => setActiveCategorySlug(cat.id)}
+                style={[styles.chip, activeCategorySlug === cat.id && styles.chipActive]}
+              >
+                <Text style={[styles.chipTxt, activeCategorySlug === cat.id && styles.chipTxtActive]}>{cat.label}</Text>
+              </Pressable>
+            ))}
           </View>
         </View>
 
-        <View style={[styles.section, { zIndex: 2 }]}>
-          <Text style={styles.title}>Sort By</Text>
-          <Text style={styles.caption}>Order the search results based on a specific criterion.</Text>
-          <Touchable onPress={() => setSortOpen((v)=>!v)}>
-            <View style={styles.selectBox}><Text style={{ color: colors.white }}>{
-              sortBy === 'popular' ? 'Most Popular' : sortBy === 'latest' ? 'Latest' : sortBy === 'price_low' ? 'Price: Low to High' : 'Price: High to Low'
-            }</Text></View>
-          </Touchable>
-          {sortOpen ? (
-            <View style={styles.dropdown}>
-              {[
-                { id:'popular', label:'Most Popular' },
-                { id:'latest', label:'Latest' },
-                { id:'price_low', label:'Price: Low to High' },
-                { id:'price_high', label:'Price: High to Low' },
-              ].map(opt => (
-                <Touchable key={opt.id} onPress={() => { setSortBy(opt.id); setSortOpen(false); }}>
-                  <View style={styles.dropRow}><Text style={{ color: colors.white }}>{opt.label}</Text></View>
-                </Touchable>
-              ))}
-            </View>
-          ) : null}
+        <View style={styles.section}>
+          <Text style={styles.title}>Sort Results</Text>
+          <Text style={styles.caption}>Choose how tournaments appear in your feed.</Text>
+          <View style={styles.sortRow}>
+            {SORT_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.id}
+                onPress={() => setSort(opt.id)}
+                style={[styles.sortChip, sort === opt.id && styles.sortChipActive]}
+              >
+                <Text style={[styles.sortTxt, sort === opt.id && styles.sortTxtActive]}>{opt.label}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </ScrollView>
 
@@ -212,26 +214,28 @@ const styles = StyleSheet.create({
   section: { paddingVertical: 12 },
   title: { color: colors.white, fontWeight: '700', fontSize: 16 },
   caption: { color: colors.textSecondary, marginTop: 4 },
-  valueTxt: { color: colors.accent, fontWeight: '800', fontSize: 28, marginTop: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  rowWrap: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
-  tick: { color: colors.textSecondary },
+  valueRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+  coinBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  coinTxt: { color: colors.white, fontWeight: '800' },
+  valueTxt: { color: colors.accent, fontWeight: '800', fontSize: 28 },
+  progressValue: { color: colors.accent, fontWeight: '800', fontSize: 24, marginTop: 12 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  tickRow: { flexDirection: 'row', alignItems: 'center' },
+  tickBadge: { width: 20, height: 20, borderRadius: 10, marginRight: 4 },
+  tickTxt: { color: colors.textSecondary, fontWeight: '600' },
 
-  segment: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#343B49', marginRight: 10 },
-  segmentActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  segmentTxt: { color: colors.white, fontWeight: '700' },
-  segmentTxtActive: { color: colors.white },
-
-  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: '#3A4051', backgroundColor: '#2B2F39', marginRight: 8, marginBottom: 8 },
-  chipActive: { backgroundColor: '#3A2B52', borderColor: colors.accent },
-  chipTxt: { color: colors.white },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 12, marginHorizontal: -4 },
+  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: '#353B4A', backgroundColor: '#1E2129', marginHorizontal: 4, marginBottom: 10 },
+  chipActive: { backgroundColor: '#342D4B', borderColor: colors.accent },
+  chipTxt: { color: colors.textSecondary, fontWeight: '600' },
   chipTxtActive: { color: colors.white, fontWeight: '700' },
 
-  selectBox: { height: 44, borderRadius: 8, borderWidth: 1, borderColor: '#3A4051', backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingHorizontal: 12 },
-  dropdown: { position: 'absolute', left: 16, right: 16, top: 140, backgroundColor: '#2B2F39', borderRadius: 10, borderWidth: 1, borderColor: '#343B49', overflow: 'hidden' },
-  dropRow: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343B49' },
+  sortRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 12, marginHorizontal: -4 },
+  sortChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#2C3140', backgroundColor: '#1A1D26', marginHorizontal: 4, marginBottom: 10 },
+  sortChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  sortTxt: { color: colors.textSecondary, fontWeight: '600' },
+  sortTxtActive: { color: colors.white, fontWeight: '700' },
 
   footerBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1F232C', borderTopWidth: 1, borderTopColor: '#2E3440', zIndex: 10, elevation: 10 },
-  slider: { height: 44, marginTop: 10 },
+  slider: { height: 44, marginTop: 12 },
 });

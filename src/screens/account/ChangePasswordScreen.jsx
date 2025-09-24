@@ -1,14 +1,54 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
+import { useDispatch, useSelector } from 'react-redux';
+import authService from '../../services/auth';
+import ResetLinkModal from '../../components/modals/ResetLinkModal';
+import { logout } from '../../store/auth/authSlice';
 
 export default function ChangePasswordScreen({ navigation }) {
-  const [form, setForm] = useState({ current: '', next: '', confirm: '' });
-  const [show, setShow] = useState({ current: false, next: false, confirm: false });
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const dispatch = useDispatch();
+  const userEmail = useSelector((state) => state.auth?.user?.email || '');
+  const [email, setEmail] = useState(userEmail || '');
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    setEmail(userEmail || '');
+  }, [userEmail]);
+
+  const trimmedEmail = useMemo(() => email.trim(), [email]);
+
+  const onSubmit = () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
+      setError('Enter a valid email address.');
+      setMessage('');
+      return;
+    }
+
+    setError('');
+    setMessage('');
+    setLoading(true);
+
+    authService.forgotPassword(trimmedEmail)
+      .then(() => {
+        setMessage('Password reset instructions have been sent to your email.');
+        setModalOpen(true);
+      })
+      .catch((err) => {
+        const msg = err?.message || 'We could not send the reset email. Please try again.';
+        setError(msg);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -19,51 +59,59 @@ export default function ChangePasswordScreen({ navigation }) {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: 16 }} enableOnAndroid extraScrollHeight={20}>
-        <Field label="Current Password">
+        <Text style={styles.description}>
+          Send yourself a password reset link. We will email the reset instructions to your registered address.
+        </Text>
+
+        <Field label="Registered Email">
           <TextInput
-            value={form.current}
-            secureTextEntry={!show.current}
-            onChangeText={(t)=>set('current', t)}
-            placeholder="Enter your current password"
+            value={email}
+            onChangeText={(value) => {
+              setEmail(value);
+              if (error) setError('');
+              if (message) setMessage('');
+            }}
+            placeholder="Email id used during registration"
             placeholderTextColor={colors.textSecondary}
+            keyboardType="email-address"
+            autoCapitalize="none"
             style={styles.input}
           />
-          <TouchableOpacity style={styles.eye} onPress={() => setShow((s)=>({ ...s, current: !s.current }))}>
-            {show.current ? <Eye size={18} color={colors.white} /> : <EyeOff size={18} color={colors.white} />}
-          </TouchableOpacity>
         </Field>
 
-        <Field label="New Password">
-          <TextInput
-            value={form.next}
-            secureTextEntry={!show.next}
-            onChangeText={(t)=>set('next', t)}
-            placeholder="Enter your new password"
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-          />
-          <TouchableOpacity style={styles.eye} onPress={() => setShow((s)=>({ ...s, next: !s.next }))}>
-            {show.next ? <Eye size={18} color={colors.white} /> : <EyeOff size={18} color={colors.white} />}
-          </TouchableOpacity>
-        </Field>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {message ? <Text style={styles.success}>{message}</Text> : null}
 
-        <Field label="Confirm New Password">
-          <TextInput
-            value={form.confirm}
-            secureTextEntry={!show.confirm}
-            onChangeText={(t)=>set('confirm', t)}
-            placeholder="Confirm your new password"
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-          />
-          <TouchableOpacity style={styles.eye} onPress={() => setShow((s)=>({ ...s, confirm: !s.confirm }))}>
-            {show.confirm ? <Eye size={18} color={colors.white} /> : <EyeOff size={18} color={colors.white} />}
-          </TouchableOpacity>
-        </Field>
+        <TouchableOpacity
+          style={[styles.actionBtn, loading && { opacity: 0.7 }]}
+          onPress={onSubmit}
+          disabled={loading}
+        >
+          {loading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.white} />
+              <Text style={styles.actionText}>Sending…</Text>
+            </View>
+          ) : (
+            <Text style={styles.actionText}>Send Reset Link</Text>
+          )}
+        </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.btn, styles.primary]}><Text style={styles.btnTxt}>Save</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, styles.cancel]} onPress={() => navigation.goBack()}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.actionBtn, styles.cancel]} onPress={() => navigation.goBack()}>
+          <Text style={styles.actionText}>Cancel</Text>
+        </TouchableOpacity>
       </KeyboardAwareScrollView>
+
+      <ResetLinkModal
+        visible={modalOpen}
+        email={trimmedEmail}
+        onClose={() => setModalOpen(false)}
+        onGoToLogin={() => {
+          setModalOpen(false);
+          dispatch(logout());
+          navigation.navigate('Login');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -82,11 +130,13 @@ const styles = StyleSheet.create({
   header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#22252C' },
   headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
+  description: { color: colors.textSecondary, marginBottom: 20 },
   label: { color: colors.white, fontWeight: '700', marginBottom: 8 },
   input: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: colors.white },
-  eye: { position: 'absolute', right: 12, top: 12 },
-  btn: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  primary: { backgroundColor: colors.primary },
+  error: { color: '#FF7A7A', marginBottom: 8, fontWeight: '600' },
+  success: { color: '#6EE7B7', marginBottom: 8, fontWeight: '600' },
+  actionBtn: { backgroundColor: colors.primary, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, marginTop: 12 },
   cancel: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
-  btnTxt: { color: colors.white, fontWeight: '800' },
+  actionText: { color: colors.white, fontWeight: '800', fontSize: 16 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

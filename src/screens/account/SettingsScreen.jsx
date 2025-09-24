@@ -59,8 +59,8 @@ export default function SettingsScreen({ navigation }) {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
         <Section title="Account Settings">
           <Row icon={<KeyRound size={18} color={colors.accent} />} title="Change Password" onPress={() => navigation.navigate('ChangePassword')} />
-          <Row icon={<CreditCard size={18} color={colors.accent} />} title="Manage Saved Payment Methods" onPress={goPayments} border />
-          <Row icon={<Wallet2 size={18} color={colors.accent} />} title="Set Default Withdrawal Method" onPress={goDefaultWithdrawal} />
+          <Row icon={<CreditCard size={18} color={colors.accent} />} title="Manage Payment Methods" onPress={goPayments} border />
+          {/* <Row icon={<Wallet2 size={18} color={colors.accent} />} title="Set Default Withdrawal Method" onPress={goDefaultWithdrawal} /> */}
         </Section>
 
         <Section title="Legal & Policies">

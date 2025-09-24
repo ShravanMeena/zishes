@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator, Keyboard, Linking } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { colors } from '../../../theme/colors';
 import LinearGradient from 'react-native-linear-gradient';
@@ -200,6 +200,18 @@ export default function PlayToWinStep() {
       {/* Payout Details */}
       <PayoutDetails expectedPrice={parseFloat(form.expectedPrice) || 0} />
 
+      <View style={styles.kycCard}>
+        <Text style={styles.kycText}>
+          I agree to carry out my KYC as per government regulations while withdrawing from my money wallet.
+        </Text>
+        <TouchableOpacity
+          accessibilityRole="link"
+          onPress={() => Linking.openURL('https://www.hyperverge.co/kyc').catch(() => {})}
+        >
+          <Text style={styles.kycLink}>Read more</Text>
+        </TouchableOpacity>
+      </View>
+
       <PickerModal
         visible={showGame}
         title="Select Game"
@@ -302,6 +314,10 @@ const styles = StyleSheet.create({
   modalTitle: { color: colors.white, fontWeight: '800', fontSize: 16, marginBottom: 8 },
   optionRow: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2B2F39' },
   optionTxt: { color: colors.white, fontWeight: '600' },
+
+  kycCard: { marginTop: 16, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#3A4051', backgroundColor: '#232633' },
+  kycText: { color: colors.white, fontWeight: '600', lineHeight: 20 },
+  kycLink: { marginTop: 8, color: colors.accent, fontWeight: '700' },
 
   subTitle: { color: colors.white, fontSize: 20, fontWeight: '800' },
   earlyCard: { backgroundColor: '#2B2F39', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#343B49', marginTop: 14 },
@@ -485,7 +501,7 @@ function EarlyTermination({ expectedPrice, playsTotal }) {
 
       <TouchableOpacity style={styles.toggleRow} onPress={() => dispatch(updatePolicies({ listingExtensionAck: !listingExtensionAck }))}>
         {renderCheckbox(listingExtensionAck)}
-        <Text style={styles.toggleLabel}>I understand I can extend this listing only twice if plays are not met.</Text>
+        <Text style={styles.toggleLabel}>I understand I can extend this listing only once if plays are not met.</Text>
       </TouchableOpacity>
 
       {showPlatinumOnly ? (

@@ -2,13 +2,11 @@ import { createSlice } from '@reduxjs/toolkit';
 
 // Default UI selections for FiltersSheet
 const defaultSelections = {
-  price: 500,
-  plays: 150,
-  progress: 35,
-  timeLeft: 'today',
-  condition: 'new',
-  category: 'all',
-  sortBy: 'popular',
+  entryFeeMax: 500,
+  progressMax: 35,
+  category: null,
+  categorySlug: 'all',
+  sort: 'newest',
 };
 
 const filtersSlice = createSlice({
@@ -29,4 +27,3 @@ const filtersSlice = createSlice({
 
 export const { setFilters, resetFilters } = filtersSlice.actions;
 export default filtersSlice.reducer;
-

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { attachAuthInterceptors } from './http';
-import { getAccessToken } from './tokenManager';
+import { getToken } from './tokenManager';
 import { API_BASE } from '../config/api';
 
 const client = attachAuthInterceptors(axios.create({ baseURL: API_BASE, timeout: 15000 }));
@@ -57,7 +57,7 @@ export async function updateMe(patch = {}, opts = {}) {
   let bearer = supplied;
   if (!bearer) {
     try {
-      bearer = await getAccessToken();
+      bearer = await getToken();
     } catch {}
   }
   if (!bearer) {

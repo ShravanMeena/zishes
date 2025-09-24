@@ -47,6 +47,16 @@ export default function HomeScreen({ navigation }) {
   const [alreadyOpen, setAlreadyOpen] = useState(false);
   const [alreadyMsg, setAlreadyMsg] = useState('');
   const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    const slug = savedFilters?.categorySlug;
+    if (slug && slug !== selected) {
+      setSelected(slug);
+    }
+    if (!slug && selected !== 'all') {
+      setSelected('all');
+    }
+  }, [savedFilters?.categorySlug, selected, setSelected]);
   const now = useNow(1000);
   const insets = useSafeAreaInsets();
 
@@ -294,13 +304,13 @@ export default function HomeScreen({ navigation }) {
       <BottomSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)} full maxRatio={0.9} noPadding>
         <FiltersSheet
           categories={categories}
-          initialCategory={selected}
           initialFilters={savedFilters}
           onClose={() => setFiltersOpen(false)}
           onApply={(filters) => {
             try { console.log('[HomeScreen] onApply from FiltersSheet', filters); } catch {}
             setFiltersOpen(false);
-            if (filters?.category) setSelected(filters.category);
+            const nextSlug = filters?.categorySlug || 'all';
+            setSelected(nextSlug);
             const params = buildProductQueryFromUI(filters);
             try { console.log('[HomeScreen] mapped API params', params); } catch {}
             // Persist UI selections

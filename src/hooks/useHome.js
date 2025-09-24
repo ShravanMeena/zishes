@@ -23,8 +23,8 @@ export default function useHome() {
   const [refreshing, setRefreshing] = useState(false);
   const [apiParams, setApiParams] = useState({});
 
-  const load = async () => {
-    const params = { page: 1, limit: 20, count: true, ...(apiParams || {}) };
+  const load = async (override) => {
+    const params = { page: 1, limit: 20, count: true, ...((override != null ? override : apiParams) || {}) };
     try { console.log('[useHome] fetching products with params', params); } catch {}
     const data = await listProducts(params);
     const list = (data?.result || []).map((p) => {
@@ -70,7 +70,7 @@ export default function useHome() {
     setApiParams(params || {});
     setRefreshing(true);
     try {
-      const list = await load();
+      const list = await load(params);
       setItems(list);
     } catch (e) {
       setError(e?.message || 'Failed to fetch filtered products');

@@ -132,57 +132,40 @@ export async function listProducts(opts = {}) {
   if (eBefore) params.endsBefore = new Date(eBefore).toISOString();
 
   // Request
+  try { console.log('[products] listProducts -> params', params); } catch {}
   const data = await request('/products', { params });
   if (Array.isArray(data)) return { result: data, meta: { page, limit } };
   return data || { result: [], meta: { page, limit } };
 }
 
 // Helper: map FiltersSheet selections to API params
-// filters: { price, plays, progress, timeLeft, condition, category, sortBy }
+// filters: { entryFeeMax, progressMax, category, sort }
 export function buildProductQueryFromUI(filters = {}) {
   const out = {};
-  const { price, plays, progress, timeLeft, condition, category, sortBy } = filters;
+  const {
+    entryFeeMax,
+    progressMax,
+    category,
+    sort,
+  } = filters || {};
 
-  // Category (single)
-  if (category && String(category).toLowerCase() !== 'all') out.category = category;
-
-  // Condition mapping UI -> API enums
-  if (condition) {
-    const c = String(condition).toLowerCase();
-    if (c === 'new') out.condition = 'New';
-    else if (c === 'likenew' || c === 'like_new' || c === 'like-new') out.condition = 'LIKE_NEW';
-    else if (c === 'used' || c === 'good') out.condition = 'GOOD';
-    else if (c === 'fair') out.condition = 'FAIR';
+  if (entryFeeMax != null) {
+    out.entryFeeMin = 0;
+    out.entryFeeMax = Number(entryFeeMax);
   }
 
-  // Single-value ranges mirrored
-  if (price != null) { out.entryFeeMin = Number(price); out.entryFeeMax = Number(price); }
-  if (plays != null) { out.playersMin = Number(plays); out.playersMax = Number(plays); }
-  if (progress != null) { out.progressMin = Number(progress); out.progressMax = Number(progress); }
-
-  // Time left presets -> tournament end window
-  if (timeLeft) {
-    const now = new Date();
-    const startIso = now.toISOString();
-    const t = String(timeLeft).toLowerCase();
-    let end = new Date(now);
-    if (t === 'today') {
-      end.setHours(23,59,59,999);
-    } else if (t === 'week') {
-      const d = end.getDay();
-      const diff = 6 - d; // days to Saturday (assuming week ends Sat)
-      end.setDate(end.getDate() + diff);
-      end.setHours(23,59,59,999);
-    } else if (t === 'month') {
-      end = new Date(end.getFullYear(), end.getMonth()+1, 0, 23, 59, 59, 999);
-    }
-    out.endsAfter = startIso;
-    out.endsBefore = end.toISOString();
+  if (progressMax != null) {
+    out.progressMin = 0;
+    out.progressMax = Number(progressMax);
   }
 
-  // Sort mapping
-  const s = mapSort(sortBy);
-  if (s) out.sort = s;
+  if (category && String(category).toLowerCase() !== 'all') {
+    out.category = category;
+  }
+
+  if (sort) {
+    out.sort = String(sort).toLowerCase();
+  }
 
   return out;
 }

@@ -1,3 +1,8 @@
+
+import { getToken } from './tokenManager';
+
+const isDev = typeof __DEV__ === 'boolean' ? __DEV__ : process.env.NODE_ENV !== 'production';
+
 // Auth API client (auth domain). Handles /auth/* and /users endpoints
 const BASE_URL = 'https://auth.zishes.com/api/v1';
 // const BASE_URL = 'https://8d76afb84d74.ngrok-free.app/api/v1';
@@ -49,8 +54,17 @@ async function parseJsonResponse(res) {
   return { data, accessToken, refreshToken };
 }
 
+
 async function postJson(path, body, opts = {}) {
-  const token = opts?.token;
+  const token = opts?.withAuth === false ? opts?.token || null : await getToken();
+  if (isDev) {
+    try {
+      console.log('[API] POST', path, {
+        token,
+        body,
+      });
+    } catch {}
+  }
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
@@ -64,8 +78,16 @@ async function postJson(path, body, opts = {}) {
 }
 
 async function getJson(path, params, opts = {}) {
-  const token = opts?.token;
+  const token = opts?.withAuth === false ? opts?.token || null : await getToken();
   const query = buildQuery(params);
+  if (isDev) {
+    try {
+      console.log('[API] GET', `${path}${query}`, {
+        token,
+        params,
+      });
+    } catch {}
+  }
   const res = await fetch(`${BASE_URL}${path}${query}`, {
     method: 'GET',
     headers: {
@@ -77,16 +99,16 @@ async function getJson(path, params, opts = {}) {
 
 export const api = {
   // Auth endpoints
-  signin: ({ email, password }) => postJson('/auth/signin', { email, password }),
-  signup: ({ email, password }) => postJson('/auth/signup', { email, password }),
+  signin: ({ email, password }) => postJson('/auth/signin', { email, password }, { withAuth: false }),
+  signup: ({ email, password }) => postJson('/auth/signup', { email, password }, { withAuth: false }),
   verify: (params) => getJson('/auth/verify', params || {}),
   googleSignin: (payload) => postJson('/auth/google/signin', payload || {}),
   googleCallback: () => `${AUTH_ORIGIN}${GOOGLE_CALLBACK_PATH}`,
   // Users (on auth domain)
   createUser: ({ email, address, token }) => postJson('/users', { email, address }, { token }),
   // Backward-compatible aliases
-  login: ({ email, password }) => postJson('/auth/signin', { email, password }),
-  register: ({ email, password }) => postJson('/auth/signup', { email, password }),
+  login: ({ email, password }) => postJson('/auth/signin', { email, password }, { withAuth: false }),
+  register: ({ email, password }) => postJson('/auth/signup', { email, password }, { withAuth: false }),
 };
 
 export default api;
