@@ -209,6 +209,20 @@ export async function getEntrySuggestion(body = {}, token, opts = {}) {
   return data;
 }
 
+export async function calculateProductTaxes({ amount } = {}, token) {
+  if (!token) throw new Error('Unauthorized');
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new Error('Amount must be a positive number');
+  }
+  const data = await request('/products/taxes', {
+    method: 'POST',
+    data: { amount: numericAmount },
+    token,
+  });
+  return data;
+}
+
 // Create Product + Tournament per backend spec
 export async function createProductWithTournament(body, token) {
   if (!token) throw new Error('Unauthorized');
@@ -241,4 +255,5 @@ export default {
   getMyProducts,
   updateProduct,
   cancelTournamentEarly,
+  calculateProductTaxes,
 };

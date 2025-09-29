@@ -1,0 +1,18 @@
+diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt
+index 4f1f0f7..f0e6f6c 100644
+--- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt
++++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStack.kt
+@@ -312,5 +312,9 @@ class ScreenStack(context: Context?) : ScreenContainer(context) {
+         super.drawChild(op.canvas!!, op.child, op.drawingTime)
+     }
+ 
+     private fun obtainDrawingOp(): DrawingOp =
+-        if (drawingOpPool.isEmpty()) DrawingOp() else drawingOpPool.removeLast()
++        if (drawingOpPool.isEmpty()) {
++            DrawingOp()
++        } else {
++            drawingOpPool.removeAt(drawingOpPool.lastIndex)
++        }
+ 
+     private inner class DrawingOp {
+         var canvas: Canvas? = null

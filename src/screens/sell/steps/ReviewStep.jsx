@@ -3,9 +3,11 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from 'rea
 import { colors } from '../../../theme/colors';
 import { Pencil, Camera, Gamepad2, Truck, FileText } from 'lucide-react-native';
 import { useSelector } from 'react-redux';
+import { formatCurrency as formatCurrencyByCountry, formatNumber as formatNumberByCountry, getCurrencyConfig } from '../../../utils/currency';
 
 const DELIVERY_LABELS = {
   pickup: 'Local Pickup',
+  courier: 'Courier Delivery',
   domestic: 'Courier Delivery (Domestic)',
   intl: 'Courier Delivery (International)',
   digital: 'Digital Delivery',
@@ -21,16 +23,16 @@ function parseNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatCoins(value) {
+function formatCoins(value, currencyConfig) {
   const num = parseNumber(value);
   if (num == null) return '—';
-  return `${num.toLocaleString()} Coins`;
+  return `${formatNumberByCountry(num, { config: currencyConfig })} Coins`;
 }
 
-function formatCurrency(value) {
+function formatCurrencyValue(value, currencyConfig) {
   const num = parseNumber(value);
   if (num == null) return '—';
-  return `₹ ${num.toLocaleString()}`;
+  return formatCurrencyByCountry(num, { config: currencyConfig });
 }
 
 function resolvePhotoUri(photo) {
@@ -45,6 +47,8 @@ export default function ReviewStep({ onEdit }) {
   const play = useSelector((s) => s.listingDraft.play);
   const delivery = useSelector((s) => s.listingDraft.delivery);
   const policies = useSelector((s) => s.listingDraft.policies);
+  const userCountry = useSelector((s) => s.auth?.user?.address?.country);
+  const currencyConfig = getCurrencyConfig(userCountry);
 
   const preparedPhotos = Array.isArray(photos)
     ? photos
@@ -61,14 +65,17 @@ export default function ReviewStep({ onEdit }) {
     ? (delivery?.pickupNote?.trim() || 'No pickup instructions provided.')
     : 'Not applicable';
 
-  const expectedPrice = formatCurrency(play?.expectedPrice);
-  const pricePerPlay = formatCoins(play?.pricePerPlay);
+  const expectedPrice = formatCurrencyValue(play?.expectedPrice, currencyConfig);
+  const pricePerPlay = formatCoins(play?.pricePerPlay, currencyConfig);
   const playsCountNumber = parseNumber(play?.playsCount);
-  const playsCountLabel = playsCountNumber != null ? playsCountNumber.toLocaleString() : '—';
+  const playsCountLabel = playsCountNumber != null
+    ? formatNumberByCountry(playsCountNumber, { config: currencyConfig })
+    : '—';
   const totalProjected = (() => {
     const price = parseNumber(play?.pricePerPlay);
     if (!price || !playsCountNumber) return null;
-    return `${(price * playsCountNumber).toLocaleString()} Coins`;
+    const projected = price * playsCountNumber;
+    return `${formatNumberByCountry(projected, { config: currencyConfig })} Coins`;
   })();
 
   const endDateLabel = play?.endDate

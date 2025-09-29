@@ -13,7 +13,7 @@ export default function DeliveryStep() {
 
   useEffect(() => {
     if (method === 'domestic') {
-      dispatch(updateDelivery({ method: 'pickup' }));
+      dispatch(updateDelivery({ method: 'courier' }));
     }
   }, [method, dispatch]);
 
@@ -31,7 +31,7 @@ export default function DeliveryStep() {
       >
         <Text style={styles.fieldLabel}>Pickup Instructions</Text>
         <TextInput
-          placeholder="Share pickup instructions (e.g., Available after 5 PM, call before)"
+          placeholder="Pickup notes (e.g. 5 PM)"
           placeholderTextColor={colors.textSecondary}
           value={pickupNote}
           onChangeText={setPickupNote}
@@ -42,20 +42,13 @@ export default function DeliveryStep() {
         />
       </OptionCard>
 
-      {/**
-       * Temporarily removing international courier delivery until logistics are ready.
-       * Keeping the markup commented for quick re-enable once the feature returns.
-       */}
-      {false && (
-        <OptionCard
-          icon={<TruckIcon size={22} color={colors.white} />}
-          title="Courier Delivery ( International )"
-          desc="Item is shipped via a trusted third-party courier service to the Winners address."
-          selected={method === 'intl'}
-          onPress={() => setMethod('intl')}
-          disabled
-        />
-      )}
+      <OptionCard
+        icon={<TruckIcon size={22} color={colors.white} />}
+        title="Courier Delivery"
+        desc="Ship using our supported courier partners. Provide tracking and drop-off confirmation when dispatched."
+        selected={method === 'courier'}
+        onPress={() => setMethod('courier')}
+      />
 
       <OptionCard
         icon={<Mail size={22} color={colors.white} />}

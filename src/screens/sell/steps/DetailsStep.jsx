@@ -24,27 +24,27 @@ export default function DetailsStep() {
       extraScrollHeight={20}
     >
       <FieldLabel>Item Name</FieldLabel>
-      <Input placeholder="Enter listing title (e.g., Vintage Gaming Console)" value={form.name} onChangeText={(t)=>set('name', t)} />
+      <Input placeholder="Listing title" value={form.name} onChangeText={(t)=>set('name', t)} />
 
       <FieldLabel>Item Description</FieldLabel>
       <Input
         multiline
         numberOfLines={4}
         style={{ height: 120, textAlignVertical: 'top' }}
-        placeholder="Describe the item's condition, features, and included accessories."
+        placeholder="Condition, features, accessories"
         value={form.description}
         onChangeText={(t)=>set('description', t)}
       />
 
       <FieldLabel>Category</FieldLabel>
-      <Select placeholder="Select a category" value={form.category} onPress={() => setShowCat(true)} />
+      <Select placeholder="Choose category" value={form.category} onPress={() => setShowCat(true)} />
 
       <FieldLabel>Condition</FieldLabel>
-      <Select placeholder="Select a condition" value={form.condition} onPress={() => setShowCond(true)} />
+      <Select placeholder="Choose condition" value={form.condition} onPress={() => setShowCond(true)} />
 
       <FieldLabel>Quantity</FieldLabel>
       <Input
-        placeholder="Enter total quantity"
+        placeholder="Total quantity"
         keyboardType="numeric"
         value={form.qty}
         onChangeText={(t)=>set('qty', t)}

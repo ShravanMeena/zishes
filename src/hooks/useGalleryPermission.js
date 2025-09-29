@@ -8,13 +8,18 @@ export default function useGalleryPermission() {
   const ensure = async () => {
     if (Platform.OS === 'android') {
       try {
-        const sdk = Platform.Version;
-        const perms = sdk >= 33
-          ? [PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES]
-          : [
-              PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-              PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-            ].filter(Boolean);
+        const rawVersion = Platform.Version;
+        const sdk = typeof rawVersion === 'string' ? parseInt(rawVersion, 10) : rawVersion;
+
+        if (Number.isFinite(sdk) && sdk >= 33) {
+          // Android 13+ photo picker does not need runtime permissions.
+          return true;
+        }
+
+        const perms = [
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        ].filter(Boolean);
 
         const results = await PermissionsAndroid.requestMultiple(perms);
         const granted = Object.values(results || {}).some((r) => r === PermissionsAndroid.RESULTS.GRANTED);

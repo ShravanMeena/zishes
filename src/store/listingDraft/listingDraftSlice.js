@@ -246,6 +246,7 @@ function mapCondition(cond) {
 function mapDelivery(method) {
   switch (method) {
     case 'pickup': return 'SELF_PICKUP';
+    case 'courier':
     case 'domestic': return 'COURIER_DOMESTIC';
     case 'intl': return 'COURIER_INTERNATIONAL';
     case 'digital': return 'DIGITAL';
@@ -288,6 +289,14 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
   dispatch(setSubmitError(null));
   dispatch(setSubmitResult(null));
 
+  const fail = (err, fallback) => {
+    const message = typeof err === 'string' ? err : err?.message || fallback;
+    dispatch(setSubmitStage('error'));
+    dispatch(setSubmitting(false));
+    dispatch(setSubmitError(message));
+    return rejectWithValue(message);
+  };
+
   // Upload images if local with coarse progress
   const imageUrls = [];
   const total = photos.length + 1; // +1 for create step
@@ -295,18 +304,22 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
   const update = () => dispatch(setSubmitProgress(step / total));
   dispatch(setSubmitStage('uploading'));
   update();
-  for (const p of photos) {
-    const uri = p?.uri || p;
-    if (!uri) { step += 1; update(); continue; }
-    if (/^https?:\/\//i.test(uri)) {
-      imageUrls.push(uri);
-      step += 1; update();
-    } else {
-      const up = await uploadImage({ uri, token });
-      if (!up?.url) throw new Error('Image upload failed');
-      imageUrls.push(up.url);
-      step += 1; update();
+  try {
+    for (const p of photos) {
+      const uri = p?.uri || p;
+      if (!uri) { step += 1; update(); continue; }
+      if (/^https?:\/\//i.test(uri)) {
+        imageUrls.push(uri);
+        step += 1; update();
+      } else {
+        const up = await uploadImage({ uri, token });
+        if (!up?.url) throw new Error('Image upload failed');
+        imageUrls.push(up.url);
+        step += 1; update();
+      }
     }
+  } catch (err) {
+    return fail(err, 'Failed to upload listing images');
   }
 
   // Build endedAt ISO
@@ -370,10 +383,9 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     } catch (_) {}
   }
 
+  dispatch(setSubmitStage('creating'));
+  step = total - 1; update();
   try {
-    dispatch(setSubmitStage('creating'));
-    // n-1 uploads done, now last step
-    step = total - 1; update();
     const res = await createProductWithTournament(payload, token);
     try {
       const me = await users.getMe();
@@ -387,10 +399,7 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     dispatch(setSubmitting(false));
     dispatch(setSubmitResult(res));
     return res;
-  } catch (e) {
-    dispatch(setSubmitStage('error'));
-    dispatch(setSubmitting(false));
-    dispatch(setSubmitError(e?.message || 'Failed to publish listing'));
-    return rejectWithValue(e?.message || 'Failed to publish listing');
+  } catch (err) {
+    return fail(err, 'Failed to publish listing');
   }
 });

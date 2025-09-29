@@ -8,6 +8,7 @@ import paymentMethods from '../../services/paymentMethods';
 import payouts from '../../services/payouts';
 import { fetchMyWallet } from '../../store/wallet/walletSlice';
 import AppModal from '../../components/common/AppModal';
+import { calculateProductTaxes } from '../../services/products';
 
 export default function WithdrawScreen({ navigation, route }) {
   const routeAmount = Number(route?.params?.maxAmount || 0);
@@ -17,7 +18,9 @@ export default function WithdrawScreen({ navigation, route }) {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [taxPreview, setTaxPreview] = useState(null);
+  const [taxes, setTaxes] = useState(null);
+  const [taxLoading, setTaxLoading] = useState(false);
+  const [taxError, setTaxError] = useState('');
   const [amountInput, setAmountInput] = useState('');
   const userEditedAmount = useRef(false);
   const [successOpen, setSuccessOpen] = useState(false);
@@ -25,6 +28,16 @@ export default function WithdrawScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const token = useSelector((s) => s.auth.token);
   const withdrawalBalance = useSelector((s) => s.wallet.withdrawalBalance);
+
+  const taxLabelMap = useMemo(() => ({
+    platform_fee: 'Platform Fee',
+    gst: 'GST / Govt. Taxes',
+    tds: 'TDS',
+    processing_fee: 'Processing Fee',
+  }), []);
+  const toTitleCase = useCallback((value) => (typeof value === 'string'
+    ? value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : 'Tax'), []);
 
   const baseWithdrawable = Number(withdrawalBalance ?? 0);
   const fallbackAmount = Number.isFinite(routeAmount) ? routeAmount : 0;
@@ -81,37 +94,62 @@ export default function WithdrawScreen({ navigation, route }) {
     loadMethods();
   }, [loadMethods]);
 
-  const feeItems = useMemo(() => {
-    if (!taxPreview || !Array.isArray(taxPreview)) return [];
-    return taxPreview;
-  }, [taxPreview]);
+  const debouncedAmount = useMemo(() => {
+    if (!Number.isFinite(amountNumber) || amountNumber <= 0) return 0;
+    return Math.min(amountNumber, maxCoins || amountNumber);
+  }, [amountNumber, maxCoins]);
 
-  const totalFees = useMemo(() => feeItems.reduce((sum, fee) => sum + Number(fee?.amount || 0), 0), [feeItems]);
-  const netAmount = Math.max(0, amountNumber - totalFees);
+  const deductionRows = useMemo(() => (Array.isArray(taxes?.calculatedTaxes) ? taxes.calculatedTaxes : []), [taxes]);
+  const totalDeductable = useMemo(() => Number(taxes?.deductable ?? NaN), [taxes]);
+  const finalPayout = useMemo(() => Number(taxes?.finalPrice ?? NaN), [taxes]);
+  const countryLabel = taxes?.country;
+  const effectiveNetAmount = useMemo(() => {
+    if (Number.isFinite(finalPayout)) return finalPayout;
+    if (Number.isFinite(totalDeductable)) return Math.max(0, debouncedAmount - totalDeductable);
+    return Math.max(0, debouncedAmount);
+  }, [debouncedAmount, finalPayout, totalDeductable]);
+
+  const fmtCurrency = useCallback((value, options = {}) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '₹ 0';
+    return `₹ ${num.toLocaleString('en-IN', { maximumFractionDigits: options.maxDecimals ?? 2 })}`;
+  }, []);
 
   const onSelectMethod = (type, id) => {
     setSelected({ type, id });
   };
-
-  const onFetchTaxes = async (amt) => {
-    if (!amt || amt <= 0) {
-      setTaxPreview(null);
+  useEffect(() => {
+    if (!token || !debouncedAmount || debouncedAmount <= 0) {
+      setTaxes(null);
+      setTaxLoading(false);
+      setTaxError('');
       return;
     }
-    try {
-      setError(null);
-      const preview = await payouts.getTaxes(amt);
-      setTaxPreview(preview || []);
-    } catch (e) {
-      setTaxPreview(null);
-    }
-  };
 
-  useEffect(() => {
-    const amt = Math.min(amountNumber, maxCoins || amountNumber);
-    if (amt > 0) onFetchTaxes(amt);
-    else setTaxPreview(null);
-  }, [amountNumber, maxCoins]);
+    let cancelled = false;
+    setTaxLoading(true);
+    setTaxError('');
+
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const res = await calculateProductTaxes({ amount: debouncedAmount }, token);
+          if (cancelled) return;
+          setTaxes(res);
+        } catch (err) {
+          if (cancelled) return;
+          setTaxes(null);
+          let message = err?.message || 'Unable to fetch payout details.';
+          if (err?.status === 401) message = 'Please sign in again to view payout details.';
+          setTaxError(message);
+        } finally {
+          if (!cancelled) setTaxLoading(false);
+        }
+      })();
+    }, 420);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [debouncedAmount, token]);
 
   useEffect(() => {
     if (!userEditedAmount.current) {
@@ -236,21 +274,54 @@ export default function WithdrawScreen({ navigation, route }) {
           <Text style={styles.errorInline}>You cannot withdraw more than {maxCoins.toLocaleString()} Coins.</Text>
         ) : null}
 
-        {feeItems.length ? (
-          <View style={styles.feeCard}>
-            <Text style={styles.sectionTitle}>Fee Breakdown</Text>
-            {feeItems.map((fee, idx) => (
-              <View key={`${fee.name}-${idx}`} style={styles.feeRow}>
-                <Text style={styles.feeLabel}>{fee.name}</Text>
-                <Text style={styles.feeValue}>₹{Number(fee.amount || 0).toLocaleString()}</Text>
-              </View>
-            ))}
-            <View style={[styles.feeRow, styles.feeDivider]}>
-              <Text style={[styles.feeLabel, { color: colors.white }]}>Net Amount</Text>
-              <Text style={[styles.feeValue, { color: colors.white }]}>{netAmount.toLocaleString()} Coins</Text>
+        <View style={styles.feeCard}>
+          <Text style={styles.sectionTitle}>Payout Details</Text>
+          {!token ? (
+            <Text style={[styles.feeLabel, { marginTop: 10 }]}>Sign in to view payout breakdown.</Text>
+          ) : debouncedAmount <= 0 ? (
+            <Text style={[styles.feeLabel, { marginTop: 10 }]}>Enter an amount to preview payout details.</Text>
+          ) : taxLoading ? (
+            <View style={{ alignItems: 'center', marginVertical: 18 }}>
+              <ActivityIndicator color={colors.accent} />
             </View>
-          </View>
-        ) : null}
+          ) : taxError ? (
+            <Text style={[styles.errorInline, { marginTop: 10 }]}>{taxError}</Text>
+          ) : (
+            <>
+              <View style={{ marginTop: 10 }}>
+                {deductionRows.length ? deductionRows.map((tax, idx) => {
+                  const key = tax?.key ? String(tax.key) : `tax-${idx}`;
+                  const pctSuffix = tax?.type === 'PERCENT' && Number.isFinite(Number(tax?.value))
+                    ? ` (${Number(tax.value)}%)`
+                    : '';
+                  const baseLabel = taxLabelMap[tax?.key] || taxLabelMap[tax?.name];
+                  const label = tax?.label || tax?.name || baseLabel || toTitleCase(tax?.key);
+                  return (
+                    <View key={key} style={styles.feeRow}>
+                      <Text style={styles.feeLabel}>{`${label}${pctSuffix}`}</Text>
+                      <Text style={styles.feeValue}>- {fmtCurrency(tax?.calculatedTax)}</Text>
+                    </View>
+                  );
+                }) : (
+                  <Text style={[styles.feeLabel, { marginTop: 2 }]}>No taxes configured for your account.</Text>
+                )}
+              </View>
+
+              <View style={[styles.feeRow, styles.feeDivider]}>
+                <Text style={[styles.feeLabel, { color: colors.white }]}>Your Final Payout</Text>
+                <Text style={[styles.feeValue, { color: colors.white }]}>{fmtCurrency(effectiveNetAmount)}</Text>
+              </View>
+
+              {Number.isFinite(totalDeductable) ? (
+                <Text style={[styles.feeLabel, { marginTop: 4 }]}>Total deductions: {fmtCurrency(totalDeductable)}</Text>
+              ) : null}
+
+              {countryLabel ? (
+                <Text style={[styles.feeLabel, { marginTop: 4 }]}>Taxes based on {countryLabel} rules.</Text>
+              ) : null}
+            </>
+          )}
+        </View>
 
         <TouchableOpacity
           style={[styles.primaryBtn, (!selected || submitting || !hasMethods || amountNumber <= 0 || amountNumber > maxCoins) && { opacity: 0.6 }]}

@@ -1,6 +1,6 @@
 // src/screens/HomeScreen.jsx
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, RefreshControl, DeviceEventEmitter, Image, Alert } from "react-native";
+import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, RefreshControl, DeviceEventEmitter, Image, Alert, ActivityIndicator } from "react-native";
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from "../../theme/colors";
@@ -71,6 +71,25 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     fetchWallet();
   }, [fetchWallet]);
+
+  const handleCategorySelect = useCallback((slug) => {
+    if (!slug) return;
+    setSelected(slug);
+    const matched = categories?.find?.((cat) => cat.id === slug);
+    const persistedFilters = savedFilters || {};
+    const nextFilters = {
+      ...persistedFilters,
+      categorySlug: slug,
+      category: matched?.rawId || (slug !== 'all' ? slug : null),
+    };
+    try {
+      dispatch(setFilters(nextFilters));
+    } catch {}
+    try {
+      const params = buildProductQueryFromUI(nextFilters);
+      applyFilters(params);
+    } catch {}
+  }, [dispatch, setSelected, categories, savedFilters, applyFilters]);
 
   // Also refresh wallet when Home regains focus (e.g., after login or returning from other tabs)
   useFocusEffect(
@@ -179,7 +198,13 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       {/* Categories */}
-      <CategoryChips categories={categories} selected={selected} onChange={setSelected} />
+      <CategoryChips categories={categories} selected={selected} onChange={handleCategorySelect} />
+      {refreshing ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.loadingText}>Updating listings…</Text>
+        </View>
+      ) : null}
 
       {/* List / Skeleton */}
       {loaded ? (
@@ -350,4 +375,6 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 8 },
   input: { flex: 1, color: colors.white },
   filterBtn: { marginLeft: 10, width: 44, height: 44, borderRadius: 12, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, marginBottom: 6 },
+  loadingText: { color: colors.textSecondary, marginLeft: 8, fontSize: 12 },
 });

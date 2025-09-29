@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, TextInput, Keyboard } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { Bell } from 'lucide-react-native';
 import ProgressBar from '../../components/common/ProgressBar';
@@ -10,10 +10,11 @@ import BottomSheet from '../../components/common/BottomSheet';
 import SubmissionModal from '../../components/modals/SubmissionModal';
 import { CheckCircle2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadDraft, clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute } from '../../store/listingDraft/listingDraftSlice';
+import { loadDraft, clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute, clearDraftStorage } from '../../store/listingDraft/listingDraftSlice';
 import { publishListing } from '../../store/listingDraft/listingDraftSlice';
 import { BackHandler } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import PhotosStep from './steps/PhotosStep';
 import DetailsStep from './steps/DetailsStep';
@@ -26,6 +27,10 @@ import PagerView from 'react-native-pager-view';
 
 export default function SellScreen({ navigation, route }) {
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+  const bottomNavOffset = Math.max(0, tabBarHeight - insets.bottom);
+  const bottomBarPadding = Math.max(18, insets.bottom + 16);
   const isFocused = useIsFocused();
   const loaded = useSelector((s) => s.listingDraft.loaded);
   const isDirty = useSelector((s) => s.listingDraft.isDirty);
@@ -193,13 +198,24 @@ export default function SellScreen({ navigation, route }) {
     }
   }, [isFocused]);
 
-  const handleAfterLeave = (target) => {
+  const handleAfterLeave = useCallback((target) => {
     if (!target) return;
     if (target === 'BACK') navigation.goBack();
     else navigation.navigate(target);
     dispatch(setPendingLeaveRoute(null));
     setLeaveAfterAction(null);
-  };
+  }, [dispatch, navigation]);
+
+  const handleDiscard = useCallback(async () => {
+    setSavePromptOpen(false);
+    try {
+      await dispatch(clearDraftStorage()).unwrap();
+    } catch (_) {
+      // Ignore storage errors; reset state regardless so UI clears.
+    }
+    dispatch(resetDraft());
+    handleAfterLeave(leaveAfterAction || 'BACK');
+  }, [dispatch, leaveAfterAction, handleAfterLeave]);
 
   // Ensure result modal shows even if user hid while submitting
   useEffect(() => {
@@ -316,7 +332,7 @@ export default function SellScreen({ navigation, route }) {
       </View>
 
       {/* Bottom actions mimic screenshot */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { bottom: bottomNavOffset, paddingBottom: bottomBarPadding }]}>
         <Button
           title="Save Draft"
           variant="outline"
@@ -341,7 +357,7 @@ export default function SellScreen({ navigation, route }) {
 
       {/* Save Draft sheet (themed, not default alert) */}
       <BottomSheet visible={draftOpen} onClose={() => setDraftOpen(false)} full={false}>
-        <View style={{ alignItems: 'center', padding: 8 }}>
+        <View style={{ alignItems: 'center', padding: 8, paddingBottom: 28 }}>
           <CheckCircle2 size={36} color={colors.accent} />
           <Text style={{ color: colors.white, fontWeight: '800', fontSize: 18, marginTop: 8 }}>Saved as Draft</Text>
           <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
@@ -365,7 +381,7 @@ export default function SellScreen({ navigation, route }) {
           if (submitStage === 'success') {
             setHideSubmitModal(true);
             try { dispatch(clearSubmitState()); } catch {}
-            navigation.navigate('Profile', { screen: 'MyListings' });
+            navigation.navigate('Profile', { screen: 'MyListings', params: { forceRefresh: Date.now() } });
           } else if (submitStage === 'error') {
             onPrimary(); // retry
           }
@@ -405,7 +421,7 @@ export default function SellScreen({ navigation, route }) {
 
       {/* Save/Leave Prompt */}
       <BottomSheet visible={isFocused && savePromptOpen} onClose={() => { setSavePromptOpen(false); dispatch(setPendingLeaveRoute(null)); }} full={false}>
-        <View style={{ padding: 4 }}>
+        <View style={{ padding: 12, paddingBottom: Math.max(48, insets.bottom + 32) }}>
           <Text style={{ color: colors.white, fontWeight: '800', fontSize: 18, textAlign: 'center' }}>Save your progress?</Text>
           <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
             You have unsaved changes. Save as a draft or discard.
@@ -414,7 +430,7 @@ export default function SellScreen({ navigation, route }) {
             <View style={{ marginTop: 12 }}>
               <Text style={{ color: colors.white, fontWeight: '700', marginBottom: 6 }}>Item Name (required)</Text>
               <TextInput
-                placeholder="Enter item name"
+                placeholder="Item name"
                 placeholderTextColor={colors.textSecondary}
                 style={{ backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 12, color: colors.white }}
                 value={nameInput}
@@ -427,7 +443,7 @@ export default function SellScreen({ navigation, route }) {
             <Button
               title="Discard"
               variant="outline"
-              onPress={() => { setSavePromptOpen(false); handleAfterLeave(leaveAfterAction); }}
+              onPress={handleDiscard}
               fullWidth={false}
               style={{ flex: 1, marginRight: 8 }}
             />
@@ -439,7 +455,8 @@ export default function SellScreen({ navigation, route }) {
                 try {
                   await dispatch(saveCurrentAsNewDraft({ name })).unwrap();
                   setSavePromptOpen(false);
-                  handleAfterLeave(leaveAfterAction);
+                  setForceAskName(false);
+                  handleAfterLeave(leaveAfterAction || 'BACK');
                 } catch (_) { /* ignore */ }
               }}
               fullWidth={false}

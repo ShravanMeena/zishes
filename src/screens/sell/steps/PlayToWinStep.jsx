@@ -10,13 +10,17 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updatePlay } from '../../../store/listingDraft/listingDraftSlice';
 import { updatePolicies } from '../../../store/listingDraft/listingDraftSlice';
 import gamesApi from '../../../services/games';
-import { getEntrySuggestion } from '../../../services/products';
+import { calculateProductTaxes, getEntrySuggestion } from '../../../services/products';
+import { formatCurrency, formatNumber, getCurrencyConfig } from '../../../utils/currency';
 
 export default function PlayToWinStep() {
   const dispatch = useDispatch();
   const form = useSelector((s) => s.listingDraft.play);
   const token = useSelector((s) => s.auth.token);
+  const userCountry = useSelector((s) => s.auth?.user?.address?.country);
   const set = (k, v) => dispatch(updatePlay({ [k]: v }));
+  const currencyConfig = useMemo(() => getCurrencyConfig(userCountry), [userCountry]);
+  const currencyCode = currencyConfig.code;
 
   const gameOptions = useMemo(() => [
     'Word Map',
@@ -126,8 +130,8 @@ export default function PlayToWinStep() {
         </Text>
 
         <FieldLabel>Expected Selling Price <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
-        <Input
-          placeholder="Enter expected selling price (INR)"
+          <Input
+            placeholder={`Expected price (${currencyCode})`}
           keyboardType="numeric"
           value={form.expectedPrice}
           onChangeText={(t) => set('expectedPrice', t)}
@@ -142,7 +146,7 @@ export default function PlayToWinStep() {
             </LinearGradient>
           </View>
           <TextInput
-            placeholder="Enter price per play (ZishCoin)"
+            placeholder="Price per play (ZishCoin)"
             placeholderTextColor={colors.textSecondary}
             keyboardType="numeric"
             value={form.pricePerPlay}
@@ -156,28 +160,29 @@ export default function PlayToWinStep() {
         <FieldHint>Cost for a single gameplay</FieldHint>
 
         <FieldLabel>Number of Game Plays</FieldLabel>
-        <Input
-          placeholder="Auto-calculated from pricing"
+          <Input
+            placeholder="Auto-filled from price"
           keyboardType="numeric"
           value={form.playsCount}
           editable={false}
         />
         <FieldHint>The seat count adjusts automatically based on your price and entry fee.</FieldHint>
-        <SuggestionSummary
+        {/* <SuggestionSummary
           loading={suggestionLoading}
           error={suggestionError}
           suggestion={suggestion}
+          currencyConfig={currencyConfig}
           onApplySeats={(seats) => {
             if (!seats) return;
             dispatch(updatePlay({ playsCount: String(seats) }));
             setPlaysTouched(false);
           }}
-        />
+        /> */}
 
         <FieldLabel>Listing End Date <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
         <Select
           value={form.endDate}
-          placeholder="Select a date"
+          placeholder="Pick end date"
           onPress={() => {
             setDateError('');
             setShowDate(true);
@@ -187,7 +192,7 @@ export default function PlayToWinStep() {
         {dateError ? <FieldHint style={{ color: '#ff9999' }}>{dateError}</FieldHint> : null}
 
         <FieldLabel>Game Option <Text style={{ color: '#ff8181' }}>*</Text></FieldLabel>
-        <Select value={form.gameName} placeholder={gamesLoading ? 'Loading games…' : 'Select a game'} onPress={() => setShowGame(true)} />
+        <Select value={form.gameName} placeholder={gamesLoading ? 'Loading games…' : 'Choose a game'} onPress={() => setShowGame(true)} />
         {gamesError ? <FieldHint style={{ color: '#ff9999' }}>{gamesError}</FieldHint> : <FieldHint>Select a published game for this tournament.</FieldHint>}
       </View>
 
@@ -195,10 +200,11 @@ export default function PlayToWinStep() {
       <EarlyTermination
         expectedPrice={parseFloat(form.expectedPrice) || 0}
         playsTotal={parseInt(form.playsCount || '1200', 10) || 1200}
+        currencyConfig={currencyConfig}
       />
 
       {/* Payout Details */}
-      <PayoutDetails expectedPrice={parseFloat(form.expectedPrice) || 0} />
+      <PayoutDetails expectedPrice={parseFloat(form.expectedPrice) || 0} currencyConfig={currencyConfig} />
 
       <View style={styles.kycCard}>
         <Text style={styles.kycText}>
@@ -352,16 +358,20 @@ const styles = StyleSheet.create({
   suggestionBadgeTxt: { color: colors.accent, fontWeight: '700', fontSize: 12 },
 });
 
-function SuggestionSummary({ loading, error, suggestion, onApplySeats }) {
+function SuggestionSummary({ loading, error, suggestion, onApplySeats, currencyConfig }) {
   if (!loading && !error && !suggestion) return null;
 
-  const fmtNumber = (n) => {
-    if (n == null || isNaN(Number(n))) return '—';
-    return Number(n).toLocaleString('en-IN');
+  const toNumberOrNull = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
   };
-  const fmtCurrency = (n) => {
-    if (n == null || isNaN(Number(n))) return '—';
-    return `₹ ${Number(n).toLocaleString('en-IN')}`;
+  const fmtNumber = (n) => {
+    const numeric = toNumberOrNull(n);
+    return numeric == null ? '—' : formatNumber(numeric, { config: currencyConfig });
+  };
+  const fmtCurrencyValue = (n) => {
+    const numeric = toNumberOrNull(n);
+    return numeric == null ? '—' : formatCurrency(numeric, { config: currencyConfig });
   };
 
   const recommendedSeats = suggestion?.recommended?.seats;
@@ -388,7 +398,7 @@ function SuggestionSummary({ loading, error, suggestion, onApplySeats }) {
             </View>
             <View>
               <Text style={styles.suggestionLabel}>Coverage</Text>
-              <Text style={styles.suggestionValue}>{fmtCurrency(recommendedCoverage)}</Text>
+              <Text style={styles.suggestionValue}>{fmtCurrencyValue(recommendedCoverage)}</Text>
             </View>
           </View>
           <View style={styles.suggestionBadge}>
@@ -400,20 +410,20 @@ function SuggestionSummary({ loading, error, suggestion, onApplySeats }) {
           <View style={{ gap: 8 }}>
             <Text style={styles.suggestionLabel}>Cover the full price</Text>
             <Text style={styles.suggestionValue}>
-              {fmtNumber(suggestion?.minSeatsToCover)} seats · {fmtCurrency(suggestion?.minSeatsCoverageAmount)}
+              {fmtNumber(suggestion?.minSeatsToCover)} seats · {fmtCurrencyValue(suggestion?.minSeatsCoverageAmount)}
             </Text>
           </View>
           <View style={{ marginTop: 12, gap: 8 }}>
             <Text style={styles.suggestionLabel}>Stay under the price</Text>
             <Text style={styles.suggestionValue}>
-              {fmtNumber(suggestion?.maxSeatsNotExceed)} seats · {fmtCurrency(suggestion?.maxSeatsCoverageAmount)}
+              {fmtNumber(suggestion?.maxSeatsNotExceed)} seats · {fmtCurrencyValue(suggestion?.maxSeatsCoverageAmount)}
             </Text>
           </View>
           {suggestion?.shortfallAmount > 0 ? (
-            <Text style={[styles.suggestionLabel, { marginTop: 12 }]}>Shortfall: {fmtCurrency(suggestion.shortfallAmount)}</Text>
+            <Text style={[styles.suggestionLabel, { marginTop: 12 }]}>Shortfall: {fmtCurrencyValue(suggestion.shortfallAmount)}</Text>
           ) : null}
           {suggestion?.overageAmount > 0 ? (
-            <Text style={[styles.suggestionLabel, { marginTop: 4 }]}>Overage: {fmtCurrency(suggestion.overageAmount)}</Text>
+            <Text style={[styles.suggestionLabel, { marginTop: 4 }]}>Overage: {fmtCurrencyValue(suggestion.overageAmount)}</Text>
           ) : null}
           {recommendedSeats ? (
             <TouchableOpacity style={styles.suggestionButton} onPress={() => onApplySeats(recommendedSeats)}>
@@ -426,8 +436,8 @@ function SuggestionSummary({ loading, error, suggestion, onApplySeats }) {
   );
 }
 
-function EarlyTermination({ expectedPrice, playsTotal }) {
-  const thresholds = [ 0.8, 0.9];
+function EarlyTermination({ expectedPrice, playsTotal, currencyConfig }) {
+  const thresholds = [0.6, 0.7, 0.8, 0.9];
   const dispatch = useDispatch();
   const { earlyTerminationEnabled, earlyTerminationThresholdPct, platinumOnly } = useSelector((s) => s.listingDraft.play);
   const { listingExtensionAck } = useSelector((s) => s.listingDraft.policies);
@@ -436,14 +446,23 @@ function EarlyTermination({ expectedPrice, playsTotal }) {
   const pctValue = Number(earlyTerminationThresholdPct || 80) / 100;
   const selectedThreshold = thresholds.find((t) => Math.round(t * 100) === Math.round(pctValue * 100)) ?? 0.8;
   const thresholdPct = Math.round(selectedThreshold * 100);
-  const triggerAmount = Math.max(0, Math.round((expectedPrice || 0) * selectedThreshold));
+  const triggerAmount = Math.max(0, (expectedPrice || 0) * selectedThreshold);
   const seatsNeeded = Math.max(0, Math.ceil((playsTotal || 0) * selectedThreshold));
   const showPlatinumOnly = String(userCountry).trim().toLowerCase() === 'india';
 
-  const fmtNumber = (n) => {
-    const num = Number(n);
-    if (!Number.isFinite(num)) return '0';
-    return num.toLocaleString('en-IN');
+  const formatCount = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? formatNumber(numeric, { config: currencyConfig }) : '—';
+  };
+
+  const formatAmount = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return formatCurrency(0, { config: currencyConfig });
+    return formatCurrency(numeric, {
+      config: currencyConfig,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
   };
 
   const renderCheckbox = (checked) => (
@@ -458,50 +477,54 @@ function EarlyTermination({ expectedPrice, playsTotal }) {
       <Text style={styles.earlyDesc}>
         Close the tournament early once you have covered enough entries. Winners are declared instantly and no further plays are accepted.
       </Text>
-
-      <View style={styles.earlySummaryRow}>
-        <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
-          <Text style={styles.metricLabel}>Threshold</Text>
-          <Text style={styles.metricValue}>{thresholdPct}% game plays</Text>
-        </View>
-        <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
-          <Text style={styles.metricLabel}>Trigger Amount</Text>
-          <Text style={styles.metricValue}>{fmtNumber(triggerAmount)} INR</Text>
-        </View>
-        <View style={styles.earlySummaryBox}>
-          <Text style={styles.metricLabel}>Game Plays Needed</Text>
-          <Text style={styles.metricValue}>{fmtNumber(seatsNeeded)}</Text>
-        </View>
-      </View>
-
-      <View style={{ marginTop: 14 }}>
-        <ProgressBar value={selectedThreshold} height={10} />
-      </View>
-      <View style={styles.thresholdRow}>
-        {thresholds.map((t) => {
-          const pct = Math.round(t * 100);
-          const active = pct === thresholdPct;
-          return (
-            <TouchableOpacity
-              key={t}
-              style={[styles.thresholdBtn, active && styles.thresholdBtnActive]}
-              onPress={() => dispatch(updatePlay({ earlyTerminationThresholdPct: pct }))}
-            >
-              <Text style={[styles.thresholdTxt, active && styles.thresholdTxtActive]}>{pct}%</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
       <TouchableOpacity style={styles.toggleRow} onPress={() => dispatch(updatePlay({ earlyTerminationEnabled: !earlyTerminationEnabled }))}>
         {renderCheckbox(earlyTerminationEnabled)}
         <Text style={styles.toggleLabel}>Enable early termination for this tournament</Text>
       </TouchableOpacity>
-      <Text style={styles.toggleHint}>We will monitor progress and let you wrap early once the threshold is crossed.</Text>
+
+      {earlyTerminationEnabled ? (
+        <>
+          <Text style={styles.toggleHint}>We will monitor progress and let you wrap early once the threshold is crossed.</Text>
+
+          <View style={styles.earlySummaryRow}>
+            <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
+              <Text style={styles.metricLabel}>Threshold</Text>
+              <Text style={styles.metricValue}>{thresholdPct}% game plays</Text>
+            </View>
+            <View style={[styles.earlySummaryBox, styles.earlySummaryBoxSpacer]}>
+              <Text style={styles.metricLabel}>Trigger Amount</Text>
+              <Text style={styles.metricValue}>{formatAmount(triggerAmount)}</Text>
+            </View>
+            <View style={styles.earlySummaryBox}>
+              <Text style={styles.metricLabel}>Game Plays Needed</Text>
+              <Text style={styles.metricValue}>{formatCount(seatsNeeded)}</Text>
+            </View>
+          </View>
+
+          <View style={{ marginTop: 14 }}>
+            <ProgressBar value={selectedThreshold} height={10} />
+          </View>
+          <View style={styles.thresholdRow}>
+            {thresholds.map((t) => {
+              const pct = Math.round(t * 100);
+              const active = pct === thresholdPct;
+              return (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.thresholdBtn, active && styles.thresholdBtnActive]}
+                  onPress={() => dispatch(updatePlay({ earlyTerminationThresholdPct: pct }))}
+                >
+                  <Text style={[styles.thresholdTxt, active && styles.thresholdTxtActive]}>{pct}%</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       <TouchableOpacity style={styles.toggleRow} onPress={() => dispatch(updatePolicies({ listingExtensionAck: !listingExtensionAck }))}>
         {renderCheckbox(listingExtensionAck)}
-        <Text style={styles.toggleLabel}>I understand I can extend this listing only once if plays are not met.</Text>
+        <Text style={styles.toggleLabel}>⁠I understand I can extend this listing only ONCE.</Text>
       </TouchableOpacity>
 
       {showPlatinumOnly ? (
@@ -514,13 +537,128 @@ function EarlyTermination({ expectedPrice, playsTotal }) {
   );
 }
 
-function PayoutDetails({ expectedPrice }) {
-  const revenue = expectedPrice || 0;
-  const platformFee = Math.round(revenue * 0.15);
-  const gstOnFee = Math.round(platformFee * 0.18);
-  const tcs = Math.round(revenue * 0.01);
-  const finalPayout = revenue - platformFee - gstOnFee - tcs;
-  const fmt = (n) => (isNaN(n) ? '0' : n.toLocaleString('en-IN'));
+function PayoutDetails({ expectedPrice, currencyConfig }) {
+  const token = useSelector((s) => s.auth.token);
+  const [taxes, setTaxes] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const amount = Number(expectedPrice) || 0;
+
+  useEffect(() => {
+    const numericAmount = Number(expectedPrice);
+    if (!token || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setTaxes(null);
+      setLoading(false);
+      setError(token ? '' : '');
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const res = await calculateProductTaxes({ amount: numericAmount }, token);
+          if (cancelled) return;
+          setTaxes(res);
+        } catch (err) {
+          if (cancelled) return;
+          setTaxes(null);
+          let message = err?.message || 'Unable to fetch payout details.';
+          if (err?.status === 401) message = 'Please sign in again to view payout details.';
+          setError(message);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+    }, 420);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [expectedPrice, token]);
+
+  const fmtCurrencyValue = (value, options = {}) => {
+    const { maxDecimals = 2, minDecimals = 0 } = options;
+    const num = Number(value);
+    if (!Number.isFinite(num)) return formatCurrency(0, { config: currencyConfig, maximumFractionDigits: maxDecimals, minimumFractionDigits: minDecimals });
+    return formatCurrency(num, {
+      config: currencyConfig,
+      maximumFractionDigits: maxDecimals,
+      minimumFractionDigits: minDecimals,
+    });
+  };
+
+  const deductionRows = Array.isArray(taxes?.calculatedTaxes) ? taxes.calculatedTaxes : [];
+  const finalPayout = Number(taxes?.finalPrice);
+  const totalDeductable = Number(taxes?.deductable);
+  const countryLabel = taxes?.country;
+  const effectiveFinalPayout = Number.isFinite(finalPayout)
+    ? finalPayout
+    : (Number.isFinite(totalDeductable) ? amount - totalDeductable : amount);
+  const taxLabelMap = {
+    platform_fee: 'Platform Fee',
+    gst: 'GST / Govt. Taxes',
+    tds: 'TDS',
+    processing_fee: 'Processing Fee',
+  };
+  const toTitleCase = (value) => (typeof value === 'string'
+    ? value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : 'Tax');
+
+  const renderBody = () => {
+    if (!token) {
+      return <Text style={[styles.hint, { color: colors.textSecondary, marginTop: 12 }]}>Sign in to view payout breakdown.</Text>;
+    }
+    if (amount <= 0) {
+      return <Text style={[styles.hint, { color: colors.textSecondary, marginTop: 12 }]}>Enter an estimated selling price to preview payout details.</Text>;
+    }
+    if (loading) {
+      return (
+        <View style={{ alignItems: 'center', marginVertical: 18 }}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      );
+    }
+    if (error) {
+      return <Text style={[styles.hint, { color: '#FF9C9C', marginTop: 12 }]}>{error}</Text>;
+    }
+    return (
+      <>
+        <View style={{ marginTop: 10 }}>
+          {deductionRows.length ? deductionRows.map((tax, idx) => {
+            const key = tax?.key ? String(tax.key) : `tax-${idx}`;
+            const baseLabel = taxLabelMap[tax?.key] || toTitleCase(tax?.key);
+            const pctSuffix = tax?.type === 'PERCENT' && Number.isFinite(Number(tax?.value)) ? ` (${Number(tax.value)}%)` : '';
+            return (
+              <Row
+                key={key}
+                label={`${baseLabel}${pctSuffix}`}
+                value={`- ${fmtCurrencyValue(tax?.calculatedTax)}`}
+              />
+            );
+          }) : (
+            <Text style={[styles.hint, { color: colors.textSecondary, marginTop: 2 }]}>No taxes configured for your account.</Text>
+          )}
+        </View>
+
+        <View style={{ height: 1, backgroundColor: '#3A4051', marginVertical: 12 }} />
+
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ color: '#5ee787', fontWeight: '900', fontSize: 18 }}>Your Final Payout</Text>
+          <Text style={{ color: '#27c07d', fontWeight: '900', fontSize: 22 }}>{fmtCurrencyValue(effectiveFinalPayout)}</Text>
+        </View>
+
+        {Number.isFinite(totalDeductable) ? (
+          <Text style={[styles.hint, { color: colors.textSecondary, marginTop: 6 }]}>Total deductions: {fmtCurrencyValue(totalDeductable)}</Text>
+        ) : null}
+
+        {countryLabel ? (
+          <Text style={[styles.hint, { color: colors.textSecondary, marginTop: 4 }]}>Taxes based on {countryLabel} rules.</Text>
+        ) : null}
+      </>
+    );
+  };
 
   return (
     <View style={[styles.card, { marginTop: 16 }]}> 
@@ -528,21 +666,10 @@ function PayoutDetails({ expectedPrice }) {
 
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 }}>
         <Text style={styles.rowTitle}>Total Estimated Revenue</Text>
-        <Text style={styles.rowTitle}>{fmt(revenue)} INR</Text>
+        <Text style={styles.rowTitle}>{fmtCurrencyValue(amount, { maxDecimals: 2 })}</Text>
       </View>
 
-      <View style={{ marginTop: 10 }}>
-        <Row label="Platform Fee (15%)" value={`- ${fmt(platformFee)} INR`} />
-        <Row label="GST/Govt. Tax (18% of fee)" value={`- ${fmt(gstOnFee)} INR`} />
-        <Row label="TCS (1% of Prize Value)" value={`- ${fmt(tcs)} INR`} />
-      </View>
-
-      <View style={{ height: 1, backgroundColor: '#3A4051', marginVertical: 12 }} />
-
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: '#5ee787', fontWeight: '900', fontSize: 18 }}>Your Final Payout</Text>
-        <Text style={{ color: '#27c07d', fontWeight: '900', fontSize: 22 }}>{fmt(finalPayout)} INR</Text>
-      </View>
+      {renderBody()}
     </View>
   );
 }

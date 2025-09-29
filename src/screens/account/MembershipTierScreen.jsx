@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { useDispatch, useSelector } from 'react-redux';
-import { ChevronLeft, Sparkles, CheckCircle2 } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { ChevronLeft, Sparkles, CheckCircle2, RefreshCw, CalendarClock, AlertCircle } from 'lucide-react-native';
 import RazorpayCheckout from 'react-native-razorpay';
 
 import { colors } from '../../theme/colors';
@@ -19,6 +20,46 @@ import { fetchMyWallet } from '../../store/wallet/walletSlice';
 const GRADIENT_BORDER = ['#7C5DFF', '#5BC0FF'];
 const CARD_BG = '#22252E';
 
+function toDate(value) {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    const ms = numeric < 1e12 ? numeric * 1000 : numeric;
+    const date = new Date(ms);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDate(value) {
+  const date = toDate(value);
+  if (!date) return '—';
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function normalizeStatus(status) {
+  if (!status) return 'Unknown';
+  const text = String(status).replace(/_/g, ' ').toLowerCase();
+  return text.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+}
+
+function collectPlanKeys(plan) {
+  if (!plan) return [];
+  const { _id, id, planId, plan_id, razorpayPlanId, razorpay_plan_id } = plan;
+  return [_id, id, planId, plan_id, razorpayPlanId, razorpay_plan_id].filter(Boolean).map(String);
+}
+
+function isPlanActive(plan, activeKeySet) {
+  if (!activeKeySet || activeKeySet.size === 0) return false;
+  const keys = collectPlanKeys(plan);
+  return keys.some((k) => activeKeySet.has(k));
+}
+
 function formatPlanTitle(plan) {
   if (!plan) return 'Membership';
   const { name, billingPeriod, billingInterval } = plan;
@@ -30,7 +71,7 @@ function formatPlanTitle(plan) {
   return 'Membership';
 }
 
-function formatCurrency(plan) {
+function formatPlanPrice(plan) {
   const prefix = plan?.currencySymbol || plan?.currencyCode || plan?.baseCurrency || '';
   const amount = Number(plan?.amount || 0).toLocaleString('en-IN');
   return `${prefix ? `${prefix} ` : ''}${amount}`;
@@ -43,11 +84,12 @@ function formatCredits(plan) {
 export default function MembershipTierScreen({ navigation }) {
   const dispatch = useDispatch();
   const userCountry = useSelector((s) => s.auth.user?.address?.country);
+  const isIndia = useMemo(() => String(userCountry || '').trim().toLowerCase() === 'india', [userCountry]);
 
   const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const [plansError, setPlansError] = useState(null);
   const [processingPlanId, setProcessingPlanId] = useState(null);
   const [payProcessing, setPayProcessing] = useState(false);
   const [payError, setPayError] = useState(null);
@@ -56,33 +98,84 @@ export default function MembershipTierScreen({ navigation }) {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [lastPlan, setLastPlan] = useState(null);
 
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscriptionRefreshing, setSubscriptionRefreshing] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState('');
+  const [subscriptionNotFound, setSubscriptionNotFound] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+  const [activePlan, setActivePlan] = useState(null);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState({ visible: false, title: '', message: '' });
+  const [cancelling, setCancelling] = useState(false);
+
   const fetchPlans = useCallback(async () => {
     try {
-      setError(null);
-      setLoading(true);
+      setPlansError(null);
+      setPlansLoading(true);
       const res = await plansService.listPlans({});
       const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
       setPlans(list.filter((p) => p?.planType === 'SUBSCRIPTION'));
     } catch (e) {
       setPlans([]);
-      setError(e?.message || 'Failed to load membership plans');
+      setPlansError(e?.message || 'Failed to load membership plans');
     } finally {
-      setLoading(false);
+      setPlansLoading(false);
     }
   }, []);
+
+  const loadSubscription = useCallback(async (opts = {}) => {
+    const { refreshing = false, silent = false } = opts;
+    if (!isIndia) {
+      setSubscription(null);
+      setActivePlan(null);
+      setSubscriptionNotFound(false);
+      setSubscriptionError('');
+      return;
+    }
+    if (refreshing) setSubscriptionRefreshing(true);
+    else if (!silent) setSubscriptionLoading(true);
+    setSubscriptionError('');
+    try {
+      const data = await paymentsService.getRazorpayActiveSubscription();
+      setSubscription(data?.subscription || null);
+      setActivePlan(data?.plan || null);
+      setSubscriptionNotFound(!data?.subscription);
+    } catch (err) {
+      if (err?.status === 404) {
+        setSubscription(null);
+        setActivePlan(null);
+        setSubscriptionNotFound(true);
+      } else {
+        setSubscriptionError(err?.message || 'Unable to fetch subscription details.');
+      }
+    } finally {
+      if (refreshing) setSubscriptionRefreshing(false);
+      else if (!silent) setSubscriptionLoading(false);
+    }
+  }, [isIndia]);
 
   useEffect(() => {
     fetchPlans();
   }, [fetchPlans]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadSubscription();
+      return undefined;
+    }, [loadSubscription])
+  );
+
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
+    setPullRefreshing(true);
     try {
-      await fetchPlans();
+      await Promise.all([
+        fetchPlans(),
+        loadSubscription({ refreshing: true, silent: true }),
+      ]);
     } finally {
-      setRefreshing(false);
+      setPullRefreshing(false);
     }
-  }, [fetchPlans]);
+  }, [fetchPlans, loadSubscription]);
 
   const sortedPlans = useMemo(() => {
     const list = Array.isArray(plans) ? [...plans] : [];
@@ -126,6 +219,7 @@ export default function MembershipTierScreen({ navigation }) {
         try { dispatch(fetchMyWallet()); } catch {}
         setSelectedPlan(plan);
         setCongratsOpen(true);
+        await loadSubscription({ silent: true });
       } catch (err) {
         const desc = String(err?.description || err?.message || '').toLowerCase();
         if (desc.includes('cancel')) return;
@@ -141,7 +235,7 @@ export default function MembershipTierScreen({ navigation }) {
       setPayProcessing(false);
       setProcessingPlanId(null);
     }
-  }, [dispatch, userCountry]);
+  }, [dispatch, userCountry, loadSubscription]);
 
   const successMessage = useMemo(() => {
     if (!selectedPlan) return 'Your membership is live. Enjoy the perks!';
@@ -150,6 +244,152 @@ export default function MembershipTierScreen({ navigation }) {
     return `Your ${title} membership is active. ${credits}`;
   }, [selectedPlan]);
 
+  const canCancel = useMemo(() => {
+    if (!subscription) return false;
+    const status = String(subscription?.status || '').toLowerCase();
+    return ['created', 'active', 'authenticated', 'pending', 'inprogress'].includes(status);
+  }, [subscription]);
+
+  const activePlanKeys = useMemo(() => {
+    const keys = new Set();
+    collectPlanKeys(activePlan).forEach((k) => keys.add(k));
+    if (subscription?.plan_id) keys.add(String(subscription.plan_id));
+    if (subscription?.plan?.id) keys.add(String(subscription.plan.id));
+    if (subscription?.plan) collectPlanKeys(subscription.plan).forEach((k) => keys.add(k));
+    return keys;
+  }, [activePlan, subscription]);
+
+  const handleCancel = useCallback(async () => {
+    setCancelling(true);
+    try {
+      const data = await paymentsService.cancelRazorpaySubscription();
+      const cancelled = data?.subscription || data;
+      setFeedbackModal({
+        visible: true,
+        title: 'Cancellation Requested',
+        message: 'Your subscription will not renew after the current billing cycle. You can resubscribe anytime.',
+      });
+      if (cancelled) {
+        setSubscription(cancelled);
+      }
+      await loadSubscription({ silent: true });
+    } catch (err) {
+      setFeedbackModal({
+        visible: true,
+        title: 'Could not cancel',
+        message: err?.message || 'We were unable to cancel the subscription. Please try again later.',
+      });
+    } finally {
+      setCancelling(false);
+      setConfirmCancelOpen(false);
+    }
+  }, [loadSubscription]);
+
+  const renderSubscriptionCard = () => {
+    if (!isIndia) return null;
+
+    if (subscriptionLoading) {
+      return (
+        <View style={[styles.subscriptionCard, { alignItems: 'center' }]}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={[styles.cardDesc, { marginTop: 12 }]}>Fetching subscription details…</Text>
+        </View>
+      );
+    }
+
+    if (subscriptionError) {
+      return (
+        <View style={[styles.subscriptionCard, { paddingVertical: 20 }]}> 
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <AlertCircle size={20} color="#FF9C9C" />
+            <Text style={[styles.cardTitle, { marginLeft: 8 }]}>Unable to load subscription</Text>
+          </View>
+          <Text style={[styles.cardDesc, { marginTop: 8 }]}>{subscriptionError}</Text>
+          <Button title="Try Again" onPress={() => loadSubscription()} style={{ marginTop: 16 }} />
+        </View>
+      );
+    }
+
+    if (subscriptionNotFound || !subscription) {
+      return (
+        <View style={styles.subscriptionCard}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <AlertCircle size={20} color={colors.accent} />
+            <Text style={[styles.cardTitle, { marginLeft: 8 }]}>No active subscription</Text>
+          </View>
+          <Text style={[styles.cardDesc, { marginTop: 8 }]}>Pick a membership below to unlock recurring ZishCoin credits.</Text>
+        </View>
+      );
+    }
+
+    const subscriptionStatus = normalizeStatus(subscription?.status);
+    const planCoins = activePlan?.coins;
+    const planName = activePlan?.name || subscription?.plan_id || 'Membership Plan';
+    const planInterval = activePlan?.interval || activePlan?.frequency;
+    const nextBilling = subscription?.current_end || subscription?.charge_at;
+    const currentStart = subscription?.current_start || subscription?.start_at;
+    const planAmountDisplay = (() => {
+      if (!activePlan) return null;
+      return formatPlanPrice(activePlan);
+    })();
+
+    return (
+      <View style={styles.subscriptionCard}>
+        <View style={styles.statusRow}>
+          <View style={styles.statusPill}>
+            <CheckCircle2 size={14} color={colors.primary} />
+            <Text style={styles.statusText}>{subscriptionStatus}</Text>
+          </View>
+          <TouchableOpacity onPress={() => loadSubscription({ refreshing: true })} disabled={subscriptionRefreshing}>
+            <RefreshCw size={18} color={colors.textSecondary} style={{ opacity: subscriptionRefreshing ? 0.4 : 1 }} />
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.cardTitle, { marginTop: 12 }]}>Active Subscription</Text>
+        <View style={styles.subscriptionDivider} />
+
+        <InfoRow label="Subscription ID" value={subscription?.id || '—'} />
+        <InfoRow label="Plan" value={planName} />
+        {planCoins != null ? (
+          <InfoRow label="Coins per cycle" value={`${Number(planCoins).toLocaleString('en-IN')} ZC`} />
+        ) : null}
+        {planAmountDisplay ? (
+          <InfoRow label="Plan price" value={planAmountDisplay} />
+        ) : null}
+        {planInterval ? <InfoRow label="Billing cycle" value={normalizeStatus(planInterval)} /> : null}
+        <InfoRow label="Started" value={formatDate(currentStart)} icon={<CalendarClock size={16} color={colors.textSecondary} />} />
+        <InfoRow label="Next renewal" value={formatDate(nextBilling)} icon={<CalendarClock size={16} color={colors.textSecondary} />} />
+
+        {subscription?.remaining_count != null ? (
+          <InfoRow label="Cycles remaining" value={String(subscription.remaining_count)} />
+        ) : null}
+
+        {subscription?.short_url ? (
+          <InfoRow
+            label="Manage on Razorpay"
+            value={subscription.short_url}
+            isLink
+            onPress={() => {
+              if (subscription?.short_url) {
+                Linking.openURL(subscription.short_url).catch(() => {});
+              }
+            }}
+          />
+        ) : null}
+
+        {canCancel ? (
+          <Button
+            title="Cancel Auto-Renew"
+            variant="outline"
+            onPress={() => setConfirmCancelOpen(true)}
+            style={{ marginTop: 20 }}
+          />
+        ) : (
+          <Text style={[styles.cardDesc, { marginTop: 16, color: colors.textSecondary }]}>This subscription is already scheduled to end after the current cycle.</Text>
+        )}
+      </View>
+    );
+  };
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -162,7 +402,7 @@ export default function MembershipTierScreen({ navigation }) {
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: 32 }}
-        refreshControl={<RefreshControl tintColor={colors.white} refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl tintColor={colors.white} refreshing={pullRefreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         <LinearGradient colors={['#1F1A3A', '#141821']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
@@ -174,27 +414,44 @@ export default function MembershipTierScreen({ navigation }) {
           <Text style={styles.heroSubtitle}>Pick a plan that matches your pace—every tier includes ZishCoin credits to kickstart your next gameplay.</Text>
         </LinearGradient>
 
-        {loading ? (
+        {(() => {
+          const card = renderSubscriptionCard();
+          if (!card) return null;
+          return (
+            <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+              {card}
+            </View>
+          );
+        })()}
+
+        {plansLoading ? (
           <View style={styles.loaderWrap}>
             <ActivityIndicator size="small" color={colors.accent} />
             <Text style={styles.loaderTxt}>Loading memberships…</Text>
           </View>
-        ) : error ? (
+        ) : plansError ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorTxt}>{error}</Text>
+            <Text style={styles.errorTxt}>{plansError}</Text>
             <Button title="Retry" onPress={fetchPlans} style={{ marginTop: 12 }} />
           </View>
         ) : (
           <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-            {sortedPlans.map((plan) => (
-              <PlanCard
-                key={plan._id}
-                plan={plan}
-                recommended={Boolean(plan?.highlight)}
-                processing={processingPlanId === plan._id}
-                onSubscribe={() => startSubscribe(plan)}
-              />
-            ))}
+            {sortedPlans.map((plan) => {
+              const activeForPlan = isPlanActive(plan, activePlanKeys);
+              const processing = processingPlanId === plan._id || (activeForPlan && cancelling);
+              return (
+                <PlanCard
+                  key={plan._id}
+                  plan={plan}
+                  recommended={Boolean(plan?.highlight)}
+                  processing={processing}
+                  onSubscribe={() => startSubscribe(plan)}
+                  isActive={activeForPlan}
+                  canCancel={canCancel}
+                  onCancel={() => setConfirmCancelOpen(true)}
+                />
+              );
+            })}
             {sortedPlans.length === 0 && (
               <Text style={styles.emptyTxt}>Membership plans will appear here soon.</Text>
             )}
@@ -223,13 +480,32 @@ export default function MembershipTierScreen({ navigation }) {
         onCancel={() => setPayError(null)}
         onConfirm={() => { setPayError(null); if (lastPlan) startSubscribe(lastPlan); }}
       />
+      <AppModal
+        visible={confirmCancelOpen}
+        title="Cancel auto-renew?"
+        message="We will stop future charges after this billing cycle. You will keep your benefits until the current period ends."
+        confirmText="Confirm Cancel"
+        confirmLoading={cancelling}
+        confirmLoadingText="Cancelling…"
+        onCancel={() => setConfirmCancelOpen(false)}
+        onConfirm={handleCancel}
+      />
+      <AppModal
+        visible={feedbackModal.visible}
+        title={feedbackModal.title || 'Subscription update'}
+        message={feedbackModal.message || ''}
+        confirmText="Got it"
+        cancelText="Close"
+        onConfirm={() => setFeedbackModal({ visible: false, title: '', message: '' })}
+        onCancel={() => setFeedbackModal({ visible: false, title: '', message: '' })}
+      />
     </SafeAreaView>
   );
 }
 
-function PlanCard({ plan, recommended, processing, onSubscribe }) {
+function PlanCard({ plan, recommended, processing, onSubscribe, isActive, canCancel, onCancel }) {
   const title = formatPlanTitle(plan);
-  const price = formatCurrency(plan);
+  const price = formatPlanPrice(plan);
   const credits = formatCredits(plan);
   const perks = Array.isArray(plan?.perks) ? plan.perks : [];
 
@@ -239,6 +515,12 @@ function PlanCard({ plan, recommended, processing, onSubscribe }) {
         <View style={styles.recommendBadge}>
           <Sparkles size={14} color={colors.white} />
           <Text style={styles.recommendTxt}>Recommended</Text>
+        </View>
+      ) : null}
+      {isActive ? (
+        <View style={[styles.currentBadge, recommended && styles.currentBadgeShifted]}>
+          <CheckCircle2 size={14} color={colors.white} />
+          <Text style={styles.currentBadgeTxt}>Current Plan</Text>
         </View>
       ) : null}
       <Text style={styles.planTitle}>{title}</Text>
@@ -256,12 +538,28 @@ function PlanCard({ plan, recommended, processing, onSubscribe }) {
         </View>
       ) : null}
 
-      <Button
-        title={processing ? 'Processing…' : 'Subscribe Now'}
-        onPress={onSubscribe}
-        disabled={processing}
-        style={styles.subscribeBtn}
-      />
+      <View style={styles.ctaRow}>
+        {isActive ? (
+          canCancel ? (
+            <Button
+              title={processing ? 'Processing…' : 'Cancel Auto-Renew'}
+              variant="outline"
+              onPress={onCancel}
+              disabled={processing}
+              style={styles.ctaButton}
+            />
+          ) : (
+            <Text style={styles.cannotCancelTxt}>Renewal already cancelled for this cycle.</Text>
+          )
+        ) : (
+          <Button
+            title={processing ? 'Processing…' : 'Subscribe Now'}
+            onPress={onSubscribe}
+            disabled={processing}
+            style={styles.ctaButton}
+          />
+        )}
+      </View>
     </View>
   );
 
@@ -278,6 +576,27 @@ function PlanCard({ plan, recommended, processing, onSubscribe }) {
       {CardContent}
     </View>
   );
+}
+
+function InfoRow({ label, value, icon, isLink, onPress }) {
+  const content = (
+    <View style={styles.infoRow}>
+      <View style={styles.infoLeft}>
+        {icon ? <View style={{ marginRight: 8 }}>{icon}</View> : null}
+        <Text style={styles.infoLabel}>{label}</Text>
+      </View>
+      <Text style={[styles.infoValue, isLink && { color: colors.accent }]} numberOfLines={2}>{value || '—'}</Text>
+    </View>
+  );
+
+  if (isLink && typeof onPress === 'function') {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+  return content;
 }
 
 const styles = StyleSheet.create({
@@ -298,18 +617,35 @@ const styles = StyleSheet.create({
   errorTxt: { color: '#FF9C9C', fontWeight: '600' },
   emptyTxt: { color: colors.textSecondary, textAlign: 'center', marginTop: 12 },
 
+  subscriptionCard: { backgroundColor: '#2B2F39', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 18, marginBottom: 16 },
+  subscriptionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#343B49', marginVertical: 14 },
+  cardTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
+  cardDesc: { color: colors.textSecondary, marginTop: 6, lineHeight: 20 },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(94, 231, 135, 0.12)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6 },
+  statusText: { color: '#5EE787', fontWeight: '700', fontSize: 12 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 8 },
+  infoLeft: { flexDirection: 'row', alignItems: 'center' },
+  infoLabel: { color: colors.textSecondary, fontWeight: '600' },
+  infoValue: { color: colors.white, fontWeight: '700', marginLeft: 12, flex: 1, textAlign: 'right' },
+
   planGradientWrap: { marginBottom: 16, borderRadius: 22, padding: 1 },
   planWrap: { marginBottom: 16, borderRadius: 22, borderWidth: 1, borderColor: '#2E3340', backgroundColor: '#1A1D26' },
   planCard: { backgroundColor: CARD_BG, borderRadius: 21, padding: 20, overflow: 'hidden' },
   recommendBadge: { position: 'absolute', top: -12, alignSelf: 'center', backgroundColor: '#7C5DFF', paddingHorizontal: 18, paddingVertical: 6, borderRadius: 999, flexDirection: 'row', alignItems: 'center' },
   recommendTxt: { color: colors.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.4, marginLeft: 6 },
+  currentBadge: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(124,93,255,0.18)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, gap: 6, marginTop: 12 },
+  currentBadgeShifted: { marginTop: 32 },
+  currentBadgeTxt: { color: colors.white, fontWeight: '700', fontSize: 12 },
   planTitle: { color: colors.white, fontWeight: '800', fontSize: 20, textAlign: 'center', marginTop: 12 },
   planPrice: { color: colors.white, fontWeight: '900', fontSize: 28, textAlign: 'center', marginTop: 8 },
   planCredits: { color: colors.textSecondary, textAlign: 'center', marginTop: 4 },
   perksGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 18, marginHorizontal: -4 },
   perkPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#313648', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginHorizontal: 4, marginBottom: 8, flexGrow: 1, flexBasis: '48%' },
   perkTxt: { color: colors.white, fontWeight: '600', flexShrink: 1, marginLeft: 8 },
-  subscribeBtn: { marginTop: 20 },
+  ctaRow: { marginTop: 20 },
+  ctaButton: { },
+  cannotCancelTxt: { color: colors.textSecondary, textAlign: 'center', fontWeight: '600' },
 
   note: { color: colors.textSecondary, textAlign: 'center', marginTop: 24, paddingHorizontal: 24, fontSize: 12 },
 });

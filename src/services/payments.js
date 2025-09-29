@@ -40,6 +40,17 @@ export async function createRazorpaySubscription({ planId, totalCount, customerN
   return data;
 }
 
+export async function getRazorpayActiveSubscription() {
+  const data = await request('/payments/razorpay/subscription');
+  console.log(data,"datadatadatadatadatadatadatadata")
+  return data;
+}
+
+export async function cancelRazorpaySubscription() {
+  const data = await request('/payments/razorpay/unsubscribe', { method: 'POST' });
+  return data;
+}
+
 // Stripe
 export async function getStripeKey() {
   const data = await request('/payments/stripe/key');
@@ -63,9 +74,10 @@ export default {
   getRazorpayKey,
   createRazorpayTopup,
   createRazorpaySubscription,
+  getRazorpayActiveSubscription,
+  cancelRazorpaySubscription,
   // Stripe
   getStripeKey,
   createStripeSubscriptionSession,
   createStripeAccountSession,
 };
-

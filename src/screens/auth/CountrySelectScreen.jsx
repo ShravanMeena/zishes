@@ -10,8 +10,10 @@ import { updateMe as updateCurrentUser } from '../../services/users';
 import { getToken } from '../../services/tokenManager';
 import Button from '../../components/ui/Button';
 
+
+/// need to get from API
 const COUNTRIES = [
-  'India', 'United States', 'United Kingdom', 'Germany', 'France', 'Italy', 'Spain', 'Singapore', 'Canada', 'Australia', 'Japan', 'South Korea', 'China', 'Philippines', 'United Arab Emirates'
+  'India', 'United Arab Emirates'
 ];
 
 export default function CountrySelectScreen({ navigation, route }) {

@@ -103,7 +103,7 @@ export default function SettingsScreen({ navigation }) {
 
         <Section title="Account Management">
           {isIndia ? (
-            <Row icon={<Wallet2 size={18} color="#FF7A7A" />} title="Manage  Membership" danger onPress={() => navigation.navigate('MembershipTier')} border />
+            <Row icon={<Wallet2 size={18} color="#FF7A7A" />} title="Membership & Subscription" danger onPress={() => navigation.navigate('MembershipTier')} border />
           ) : null}
           <Row icon={<Users size={18} color="#FF7A7A" />} title="Delete/Deactivate Account" danger onPress={() => navigation.navigate('ManageAccount')} border />
           <Row icon={<LogOut size={18} color="#FF7A7A" />} title="Log Out" danger onPress={() => setLogoutOpen(true)} />

@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, Share, Alert, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, Clock, Share2 } from 'lucide-react-native';
 import ProgressBar from '../../components/common/ProgressBar';
@@ -10,9 +12,14 @@ import { mapProductToCard } from '../../utils/productMapper';
 import MyListingsSkeleton from '../../components/skeletons/MyListingsSkeleton';
 import AppModal from '../../components/common/AppModal';
 
-export default function MyListingsScreen({ navigation }) {
+const STALE_REFRESH_WINDOW_MS = 2 * 60 * 1000; // only refresh automatically when data is older than this
+
+export default function MyListingsScreen({ navigation, route }) {
   const token = useSelector((s) => s.auth.token);
   const withdrawalBalance = useSelector((s) => s.wallet.withdrawalBalance);
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarOffset = Math.max(0, tabBarHeight - insets.bottom);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -22,26 +29,63 @@ export default function MyListingsScreen({ navigation }) {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelError, setCancelError] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const lastForceRef = useRef(null);
+  const lastFetchedAtRef = useRef(0);
 
-  const load = async () => {
-    if (!token) { setItems([]); return; }
-    setLoading(true); setError(null);
+  const load = useCallback(async ({ silent } = {}) => {
+    if (!token) {
+      setItems([]);
+      setError(null);
+      if (!silent) setLoading(false);
+      setHasLoadedOnce(true);
+      lastFetchedAtRef.current = Date.now();
+      return;
+    }
+
+    if (!silent) setLoading(true);
+    setError(null);
     try {
       const list = await products.getMyProducts(token);
       const mapped = Array.isArray(list) ? list.map(mapProductToCard) : [];
       setItems(mapped);
+      lastFetchedAtRef.current = Date.now();
     } catch (e) {
       setError(e?.message || 'Failed to fetch listings');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      setHasLoadedOnce(true);
     }
-  };
+  }, [token]);
 
-  useEffect(() => { load(); }, [token]);
+  useEffect(() => {
+    setHasLoadedOnce(false);
+    load({ silent: false });
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const forceKey = route?.params?.forceRefresh ?? route?.params?.forceRefreshKey;
+      if (forceKey && lastForceRef.current !== forceKey) {
+        lastForceRef.current = forceKey;
+        load({ silent: hasLoadedOnce });
+        const currentParams = route?.params ? { ...route.params } : {};
+        navigation.setParams?.({ ...currentParams, forceRefresh: undefined, forceRefreshKey: undefined });
+        return undefined;
+      }
+
+      if (!hasLoadedOnce || !token) return undefined;
+      const now = Date.now();
+      if (now - lastFetchedAtRef.current >= STALE_REFRESH_WINDOW_MS) {
+        load({ silent: true });
+      }
+      return undefined;
+    }, [route?.params, load, hasLoadedOnce, token, navigation])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    try { await load(); } finally { setRefreshing(false); }
+    try { await load({ silent: true }); } finally { setRefreshing(false); }
   };
 
   const handleShare = async (item) => {
@@ -67,7 +111,7 @@ export default function MyListingsScreen({ navigation }) {
       const freshStatus = String(fresh?.approvalStatus || '').toUpperCase();
       if (freshStatus === 'APPROVED') {
         Alert.alert('Already approved', 'Approved listings can no longer be edited. Share it with buyers instead.');
-        await load();
+        await load({ silent: true });
         return;
       }
       const draftData = buildDraftFromProduct(fresh);
@@ -92,7 +136,7 @@ export default function MyListingsScreen({ navigation }) {
       setCancelTarget(null);
       setCancelReason('');
       Alert.alert('Tournament ended', 'This tournament has been closed early.');
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setCancelError(err?.message || 'Failed to cancel the tournament.');
     } finally {
@@ -147,25 +191,27 @@ export default function MyListingsScreen({ navigation }) {
       <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.push('Details', { item, from: 'MyListings' })} style={styles.card}>
         <Image source={{ uri: item.image }} style={styles.thumb} />
         <View style={{ flex: 1 }}>
-          <View style={styles.rowBetween}>
+          <View style={styles.headerRow}>
             <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {approval.badgeLabel ? <Chip label={approval.badgeLabel} type={approval.badgeType} /> : null}
+            <View style={styles.actionRow}>
+              {approval.badgeLabel ? (
+                <Chip label={approval.badgeLabel} type={approval.badgeType} style={[styles.actionChip, { marginLeft: 0 }]} />
+              ) : null}
               {approval.status === 'APPROVED'
                 ? (
                     <>
-                      <TouchableOpacity onPress={() => handleShare(item)} style={styles.shareButton}>
+                      <TouchableOpacity onPress={() => handleShare(item)} style={[styles.shareButton, styles.actionChipTouchable]}>
                         <Share2 size={14} color={colors.white} style={{ marginRight: 6 }} />
                         <Text style={styles.shareButtonText}>Share</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={onSupport}>
-                        <Chip label="Need Help" type="info" style={{ marginLeft: 8 }} />
+                      <TouchableOpacity onPress={onSupport} style={styles.actionChipTouchable}>
+                        <Chip label="Need Help" type="info" style={styles.actionChip} />
                       </TouchableOpacity>
                     </>
                   )
                 : (
-                    <TouchableOpacity onPress={() => handleEdit(item)} disabled={checkingId === item.id}>
-                      <Chip label={checkingId === item.id ? 'Opening…' : 'Edit'} type="accent" style={{ marginLeft: 8, opacity: checkingId === item.id ? 0.7 : 1 }} />
+                    <TouchableOpacity onPress={() => handleEdit(item)} disabled={checkingId === item.id} style={styles.actionChipTouchable}>
+                      <Chip label={checkingId === item.id ? 'Opening…' : 'Edit'} type="accent" style={[styles.actionChip, checkingId === item.id && { opacity: 0.7 }]} />
                     </TouchableOpacity>
                   )}
             </View>
@@ -188,7 +234,7 @@ export default function MyListingsScreen({ navigation }) {
             </View>
           ) : null}
 
-          <View style={styles.rowBetween}>
+          <View style={styles.metaRow}>
             <Text style={styles.price}>{formatINR(item?.raw?.price)}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Clock size={14} color={colors.textSecondary} />
@@ -199,16 +245,16 @@ export default function MyListingsScreen({ navigation }) {
           <Text style={styles.progressTxt}>{`${progressPct}% seats filled`}</Text>
           <ProgressBar value={safeProgress(item)} />
 
-          <View style={[styles.rowBetween, { marginTop: 10 }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.footerActionRow}>
+            <View style={styles.footerActionInner}>
               {canTerminateEarly ? (
-                <TouchableOpacity onPress={onEarlyTerminate} style={styles.earlyButton}>
+                <TouchableOpacity onPress={onEarlyTerminate} style={[styles.earlyButton, styles.footerActionButton]}>
                   <Text style={styles.earlyButtonText}>End Early</Text>
                 </TouchableOpacity>
               ) : null}
               {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
-                <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })}>
-                  <Chip label="Upload Proof" type="accent" />
+                <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })} style={styles.footerActionButton}>
+                  <Chip label="Upload Proof" type="accent" style={styles.actionChip} />
                 </TouchableOpacity>
               ) : null}
               {String(item?.raw?.fulfillment?.verificationStatus || '').toUpperCase() === 'VERIFIED' ? (
@@ -216,8 +262,9 @@ export default function MyListingsScreen({ navigation }) {
                   onPress={() => {
                     navigation.navigate('Wallet', { screen: 'Withdraw', params: { maxAmount: withdrawalBalance, productId: item.id } });
                   }}
+                  style={styles.footerActionButton}
                 >
-                  <Chip label="Withdraw" type="success" style={{ marginLeft: 8 }} />
+                  <Chip label="Withdraw" type="success" style={styles.actionChip} />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -248,7 +295,7 @@ export default function MyListingsScreen({ navigation }) {
       ) : error ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <Text style={{ color: '#ffb3b3', fontWeight: '700', fontSize: 16, textAlign: 'center' }}>{error}</Text>
-          <TouchableOpacity onPress={load} style={{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#3A4051' }}>
+          <TouchableOpacity onPress={() => load({ silent: false })} style={{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#3A4051' }}>
             <Text style={{ color: colors.white, fontWeight: '800' }}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -257,7 +304,7 @@ export default function MyListingsScreen({ navigation }) {
           data={items}
           renderItem={renderItem}
           keyExtractor={(it) => it.id}
-          contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
+          contentContainerStyle={{ padding: 12, paddingBottom: Math.max(36, insets.bottom + tabBarOffset + 56) }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -332,11 +379,18 @@ const styles = StyleSheet.create({
   progressTxt: { color: colors.textSecondary, marginTop: 6, marginBottom: 6 },
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
   chipTxt: { fontWeight: '700' },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  shareButton: { marginLeft: 8, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, flexDirection: 'row', alignItems: 'center' },
+  headerRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: 4 },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4, marginLeft: 8 },
+  actionChip: { marginTop: 6 },
+  actionChipTouchable: { marginLeft: 8, marginTop: 6 },
+  shareButton: { backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, flexDirection: 'row', alignItems: 'center' },
   shareButtonText: { color: colors.white, fontWeight: '700', fontSize: 12 },
-  earlyButton: { backgroundColor: colors.error, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, marginRight: 8 },
+  earlyButton: { backgroundColor: colors.error, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
   earlyButtonText: { color: colors.white, fontWeight: '800' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  footerActionRow: { marginTop: 14 },
+  footerActionInner: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  footerActionButton: { marginRight: 8, marginTop: 10 },
   approvalNotice: {
     marginTop: 10,
     borderRadius: 14,
@@ -488,7 +542,11 @@ function safeProgress(item) {
 function getEarlyTerminationContext(item) {
   if (!item) return null;
   const raw = item?.raw || {};
+
   const tournament = raw?.tournament || null;
+
+  // console.log(tournament,"tournamenttournamenttournamenttournament")
+
   const status = String(tournament?.status || item?.tournamentStatus || '').toUpperCase();
   const termsAck = !!raw?.terms?.enableEarlyTerminationAck;
   const cfg = tournament?.earlyTermination || null;

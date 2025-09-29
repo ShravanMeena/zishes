@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 import { attachAuthInterceptors } from './http';
 import { API_BASE } from '../config/api';
 
@@ -35,12 +36,14 @@ export async function uploadImage({ uri, name, type, token, onUploadProgress }) 
   const form = new FormData();
   const filename = name || uri.split('/').pop() || 'image.jpg';
   const mime = type || (filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
-  form.append('file', { uri, name: filename, type: mime });
+  const normalizedUri = Platform.OS === 'ios' && uri.startsWith('file://')
+    ? uri.replace('file://', '')
+    : uri;
+  form.append('file', { uri: normalizedUri, name: filename, type: mime });
   // POST /api/v1/uploads/image
   const data = await request('/uploads/image', {
     method: 'POST',
     data: form,
-    headers: { 'Content-Type': 'multipart/form-data' },
     token,
     onUploadProgress,
   });
