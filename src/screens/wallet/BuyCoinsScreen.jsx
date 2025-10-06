@@ -5,7 +5,6 @@ import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import { ChevronLeft } from 'lucide-react-native';
 import CongratsModal from '../../components/modals/CongratsModal';
-import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
 import paymentsService from '../../services/payments';
 import RazorpayCheckout from 'react-native-razorpay';
 import { useDispatch } from 'react-redux';
@@ -14,8 +13,21 @@ import plansService from '../../services/plans';
 import { useSelector } from 'react-redux';
 import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
 import AppModal from '../../components/common/AppModal';
+import { getPlanGateway, isGatewaySupportedForCountry, isIndiaCountry } from '../../utils/payments';
+import { useStripe } from '@stripe/stripe-react-native';
 
-export default function BuyCoinsScreen({ navigation }) {
+const planSortAsc = (a, b) => {
+  const coinsA = Number(a?.coins ?? 0);
+  const coinsB = Number(b?.coins ?? 0);
+  if (Number.isFinite(coinsA) && Number.isFinite(coinsB) && coinsA !== coinsB) {
+    return coinsA - coinsB;
+  }
+  const amountA = Number(a?.amount ?? 0);
+  const amountB = Number(b?.amount ?? 0);
+  return amountA - amountB;
+};
+
+export default function BuyCoinsScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,17 +35,46 @@ export default function BuyCoinsScreen({ navigation }) {
   const [selected, setSelected] = useState(null);
   const [congratsOpen, setCongratsOpen] = useState(false);
   const balance = useSelector((s) => s.wallet.availableZishCoins);
-  const country = useSelector((s) => s.auth.user?.address?.country);
+  const authCountry = useSelector((s) => s.auth?.user?.address?.country || s.auth?.user?.country || null);
+  const appCountry = useSelector((s) => s.app?.country || null);
+  const user = useSelector((s) => s.auth.user);
+  const userId = useMemo(() => user?._id || user?.id || user?.userId || null, [user]);
+  const routeCountry = route?.params?.countryOverride || route?.params?.country || null;
+  const enforcedPlanType = route?.params?.planType
+    || (route?.params?.mode === 'membership' ? 'SUBSCRIPTION'
+      : route?.params?.mode === 'topup' ? 'TOPUP' : null);
+  const country = useMemo(
+    () => routeCountry || authCountry || appCountry || (enforcedPlanType === 'SUBSCRIPTION' ? 'IN' : null),
+    [routeCountry, authCountry, appCountry, enforcedPlanType],
+  );
+  const isUserInIndia = useMemo(() => isIndiaCountry(country), [country]);
+  const showSubscriptionCopy = useMemo(
+    () => isUserInIndia && enforcedPlanType !== 'TOPUP',
+    [isUserInIndia, enforcedPlanType],
+  );
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [processing, setProcessing] = useState(false);
-  const [regionModal, setRegionModal] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [payError, setPayError] = useState(null);
   const [lastPlan, setLastPlan] = useState(null);
-  const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
-  const planType = useMemo(() => (isIndia ? 'SUBSCRIPTION' : 'TOPUP'), [isIndia]);
+  const planType = useMemo(() => {
+    if (enforcedPlanType) return enforcedPlanType;
+    if (isUserInIndia) return 'SUBSCRIPTION';
+    if (!country) {
+      const hasMembershipPlan = (plans || []).some((p) => p?.planType === 'SUBSCRIPTION' && getPlanGateway(p) === 'razorpay');
+      if (hasMembershipPlan) return 'SUBSCRIPTION';
+    }
+    return 'TOPUP';
+  }, [enforcedPlanType, isUserInIndia, country, plans]);
   const filteredPlans = useMemo(
-    () => (plans || []).filter((p) => p?.planType === planType),
-    [plans, planType],
+    () => (plans || [])
+      .filter((p) => {
+        if (p?.planType !== planType) return false;
+        const gateway = getPlanGateway(p);
+        return isGatewaySupportedForCountry(gateway, country);
+      })
+      .sort(planSortAsc),
+    [plans, planType, country],
   );
 
   useEffect(() => {
@@ -79,14 +120,45 @@ export default function BuyCoinsScreen({ navigation }) {
       if (!activePlanId) return;
       const plan = filteredPlans.find((p) => p._id === activePlanId);
       if (!plan) throw new Error('Invalid plan');
+
       setLastPlan(plan);
       setProcessing(true);
       setPayProcessing(true);
 
-      if (planType === 'TOPUP' && !isIndia) {
-        setRegionModal(true);
-        setProcessing(false);
+      const gateway = getPlanGateway(plan);
+      if (!isGatewaySupportedForCountry(gateway, country)) {
+        Alert.alert('Plan not available', 'This plan is not available in your region yet.');
+        return;
+      }
+
+      if (gateway !== 'razorpay') {
+        try { console.log('[BUY] Using Stripe for plan:', JSON.stringify({ id: plan._id, planType })); } catch {}
+        const intentRes = await paymentsService.createStripeTopupIntent({ planId: plan._id });
+        const clientSecret = intentRes?.clientSecret || intentRes?.client_secret;
+        if (!clientSecret) throw new Error('Unable to start card payment.');
+
+        const defaultBillingDetails = {};
+        if (user?.name) defaultBillingDetails.name = user.name;
+        if (user?.email) defaultBillingDetails.email = user.email;
+
+        const { error: initError } = await initPaymentSheet({
+          merchantDisplayName: 'Zishes',
+          paymentIntentClientSecret: clientSecret,
+          defaultBillingDetails: Object.keys(defaultBillingDetails).length ? defaultBillingDetails : undefined,
+          allowsDelayedPaymentMethods: false,
+        });
+        if (initError) throw new Error(initError.message || 'Failed to initialize payment sheet');
+
         setPayProcessing(false);
+        const { error: presentError } = await presentPaymentSheet();
+        if (presentError) {
+          if (presentError.code === 'Canceled') return;
+          throw new Error(presentError.message || 'Payment was not completed.');
+        }
+
+        try { dispatch(fetchMyWallet()); } catch {}
+        const coins = Number(plan?.coins || 0).toLocaleString();
+        setCongratsOpen(true);
         return;
       }
 
@@ -108,14 +180,15 @@ export default function BuyCoinsScreen({ navigation }) {
           order_id: order.id,
           amount: order.amount,
           currency: order.currency || plan.currencyCode || 'INR',
-          prefill: {
-            // email: user?.email,
-            // contact: user?.phone,
-          },
+          prefill: {},
           theme: { color: '#6C7BFF' },
           retry: { enabled: true, max_count: 2 },
           external: { wallets: ['paytm', 'phonepe'] },
-          notes: { planId: plan._id },
+          notes: {
+            planId: plan._id,
+            userId: userId || 'unknown',
+            app: 'zishes',
+          },
         };
 
         try {
@@ -145,14 +218,15 @@ export default function BuyCoinsScreen({ navigation }) {
           name: 'Zishes',
           description: 'Plan Subscription',
           subscription_id: subscription.id,
-          prefill: {
-            // email: user?.email,
-            // contact: user?.phone,
-          },
+          prefill: {},
           theme: { color: '#6C7BFF' },
           retry: { enabled: true, max_count: 2 },
           external: { wallets: ['paytm', 'phonepe'] },
-          notes: { planId: plan._id },
+          notes: {
+            planId: plan._id,
+            userId: userId || 'unknown',
+            app: 'zishes',
+          },
         };
 
         try {
@@ -172,19 +246,19 @@ export default function BuyCoinsScreen({ navigation }) {
         }
       }
     } catch (err) {
-      console.warn(`[RZP][BUY][${planType}] start error:`, err);
-      setPayError('We could not start the payment. Please retry.');
+      console.warn(`[BUY][${planType}] start error:`, err);
+      setPayError(err?.message || 'We could not start the payment. Please retry.');
     } finally {
       setProcessing(false);
       setPayProcessing(false);
     }
-  }, [dispatch, filteredPlans, isIndia, planType, selected]);
+  }, [country, dispatch, filteredPlans, initPaymentSheet, planType, presentPaymentSheet, selected, user?.email, user?.name]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>{planType === 'TOPUP' ? 'Buy Coins' : 'Membership Subscription'}</Text>
+        <Text style={styles.headerTitle}>{showSubscriptionCopy ? 'Subscription' : 'Top Up'}</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -200,13 +274,13 @@ export default function BuyCoinsScreen({ navigation }) {
               <Text style={styles.balanceLabel}>Your Current Balance</Text>
               <Text style={styles.balanceQty}>{Number(balance || 0).toLocaleString()} <Text style={{ fontSize: 16 }}>Coins</Text></Text>
               <Text style={styles.balanceCaption}>
-                {planType === 'TOPUP'
-                  ? 'Coins power your gameplay — top up anytime.'
-                  : 'Keep your membership active to unlock perks and monthly ZC credits.'}
+                {showSubscriptionCopy
+                  ? 'Keep your subscription active to unlock perks and monthly ZC credits.'
+                  : 'Coins power your gameplay — top up anytime.'}
               </Text>
             </LinearGradient>
             <Text style={styles.sectionTitle}>
-              {planType === 'TOPUP' ? 'Choose Your Coin Pack' : 'Choose Your Membership Tier'}
+              {showSubscriptionCopy ? 'Choose Your Subscription' : 'Choose Your Top Up'}
             </Text>
           </>
         }
@@ -227,7 +301,7 @@ export default function BuyCoinsScreen({ navigation }) {
             <Text style={{ color: colors.textSecondary, paddingHorizontal: 12 }}>{error}</Text>
           ) : (
             <Text style={{ color: colors.textSecondary, paddingHorizontal: 12 }}>
-              {planType === 'TOPUP' ? 'No top-up packs available.' : 'No membership plans available.'}
+              {showSubscriptionCopy ? 'No subscription plans available.' : 'No top-up packs available.'}
             </Text>
           )
         }
@@ -243,27 +317,26 @@ export default function BuyCoinsScreen({ navigation }) {
           onPress={() => startCheckout()}
         >
           <Text style={[styles.buyTxt, (!selected || processing) && styles.buyTxtDisabled]}>
-            {processing ? 'Processing…' : (planType === 'TOPUP' ? 'Buy Now' : 'Subscribe Now')}
+            {processing ? 'Processing…' : (showSubscriptionCopy ? 'Subscribe Now' : 'Buy Now')}
           </Text>
         </TouchableOpacity>
       </View>
 
       <CongratsModal
         visible={congratsOpen}
-        title={planType === 'TOPUP' ? 'Purchase Successful' : 'Membership Activated'}
+        title={showSubscriptionCopy ? 'Subscription Activated' : 'Top Up Successful'}
         message={(() => {
           const chosen = filteredPlans.find((p) => p._id === selected);
           const coins = Number(chosen?.coins || 0).toLocaleString();
-          if (planType === 'TOPUP') {
+          if (!showSubscriptionCopy) {
             return chosen ? `Your ${coins} ZishCoins are on the way!` : 'Coins added successfully.';
           }
-          return chosen ? `Your membership with ${coins} ZC credits is live. Enjoy the perks!` : 'Your membership is live. Enjoy the perks!';
+          return chosen ? `Your subscription with ${coins} ZC credits is live. Enjoy the perks!` : 'Your subscription is live. Enjoy the perks!';
         })()}
-        primaryText={planType === 'TOPUP' ? 'Great!' : 'Awesome!'}
+        primaryText={showSubscriptionCopy ? 'Awesome!' : 'Great!'}
         onPrimary={() => { setCongratsOpen(false); navigation.goBack(); }}
         onRequestClose={() => setCongratsOpen(false)}
       />
-      <PaymentsRegionModal visible={regionModal} onClose={() => setRegionModal(false)} />
       <ProcessingPaymentModal visible={payProcessing} />
       <AppModal
         visible={!!payError}

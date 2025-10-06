@@ -8,6 +8,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../store/auth/authSlice';
 import AppModal from '../../components/common/AppModal';
 import appConfigService from '../../services/appConfig';
+import FAQSheet from '../../components/panels/FAQSheet.js';
+import { getFAQs } from '../../services/faq';
 
 export default function SettingsScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -15,6 +17,9 @@ export default function SettingsScreen({ navigation }) {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [legalPolicies, setLegalPolicies] = useState(null);
+  const [faqSheetVisible, setFaqSheetVisible] = useState(false);
+  const [faqLoading, setFaqLoading] = useState(false);
+  const [faqs, setFaqs] = useState([]);
   const goPayments = () => navigation.navigate('PaymentMethodsManage');
   const goDefaultWithdrawal = () => navigation.navigate('DefaultWithdrawal');
   const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
@@ -28,6 +33,20 @@ export default function SettingsScreen({ navigation }) {
     if (!item) return;
     const { title, url } = item;
     navigation.navigate('PolicyViewer', { title: title || 'Policy', url });
+  };
+
+  const openFaqs = async () => {
+    try {
+      setFaqLoading(true);
+      setFaqSheetVisible(true);
+      const data = await getFAQs();
+      const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setFaqs(list);
+    } catch (err) {
+      setFaqs([{ _id: 'err', title: 'Unable to load FAQs', message: err?.message || 'Please try again later.' }]);
+    } finally {
+      setFaqLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -96,7 +115,7 @@ export default function SettingsScreen({ navigation }) {
         </Section>
 
         <Section title="Support & Community">
-          <Row icon={<Flag size={18} color={colors.accent} />} title="FAQs" onPress={() => Linking.openURL('https://example.com/faq')} border />
+          <Row icon={<Flag size={18} color={colors.accent} />} title="FAQs" onPress={openFaqs} border />
           <Row icon={<MessageSquare size={18} color={colors.accent} />} title="Report an Issue" onPress={() => navigation.navigate('ReportIssue')} border />
           <Row icon={<Users size={18} color={colors.accent} />} title="Community/Feedback" onPress={() => navigation.navigate('CommunityFeedback')} />
         </Section>
@@ -118,6 +137,12 @@ export default function SettingsScreen({ navigation }) {
         onCancel={() => setLogoutOpen(false)}
         onConfirm={() => { setLogoutOpen(false); dispatch(logout()); }}
       />
+      <FAQSheet
+        visible={faqSheetVisible}
+        onClose={() => setFaqSheetVisible(false)}
+        loading={faqLoading}
+        items={faqs}
+      />
     </SafeAreaView>
   );
 }
@@ -136,7 +161,13 @@ function Row({ icon, title, onPress, border, danger }) {
     <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={[styles.row, border && styles.rowBorder]}> 
       <View style={styles.rowLeft}>
         <View style={styles.rowIcon}>{icon}</View>
-        <Text style={[styles.rowTitle, danger && { color: '#FF7A7A' }]}>{title}</Text>
+        <Text
+          style={[styles.rowTitle, danger && { color: '#FF7A7A' }]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {title}
+        </Text>
       </View>
       <ChevronLeft size={18} color={colors.white} style={{ transform: [{ rotate: '180deg' }] }} />
     </TouchableOpacity>
@@ -155,7 +186,7 @@ const styles = StyleSheet.create({
 
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 14 },
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343B49' },
-  rowLeft: { flexDirection: 'row', alignItems: 'center' },
-  rowIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#312B42', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  rowTitle: { color: colors.white, fontWeight: '700' },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, columnGap: 12, paddingRight: 12 },
+  rowIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#312B42', alignItems: 'center', justifyContent: 'center' },
+  rowTitle: { color: colors.white, fontWeight: '700', flex: 1, flexShrink: 1 },
 });

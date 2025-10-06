@@ -1,143 +1,50 @@
-import { View, ActivityIndicator, Animated, Easing, Image, StyleSheet, Platform } from 'react-native'
 import React, { useEffect, useRef } from 'react'
+import { Animated, StyleSheet, Text, View } from 'react-native'
+import LinearGradient from 'react-native-linear-gradient'
 import { colors } from '../theme/colors'
 
 export default function Splash() {
-  const opacity = useRef(new Animated.Value(0)).current
-  const scale = useRef(new Animated.Value(0.92)).current
-  const spin = useRef(new Animated.Value(0)).current
+  const pulse = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    // Initial reveal: fade in + slight scale up
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(scale, {
-        toValue: 1,
-        duration: 700,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // Subtle breathing loop while app boots
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(scale, {
-            toValue: 1.06,
-            duration: 1200,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scale, {
-            toValue: 1,
-            duration: 1200,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ])
-      ).start()
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 1400, useNativeDriver: true }),
+      ])
+    )
+    animation.start()
+    return () => animation.stop()
+  }, [pulse])
 
-      // Soft, continuous spin on a subtle background ring (if desired later)
-      Animated.loop(
-        Animated.timing(spin, {
-          toValue: 1,
-          duration: 3000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      ).start()
-    })
-  }, [opacity, scale, spin])
-
-  const spinInterpolate = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  })
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.08] })
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] })
 
   return (
-    <View style={styles.container}>
-      <View style={styles.logoWrap}>
-        <Animated.View
-          style={[
-            styles.glow,
-            {
-              opacity,
-              transform: [{ scale }],
-            },
-          ]}
-        />
-
+    <LinearGradient
+      colors={[colors.splashGradientStart, colors.splashGradientEnd]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={styles.container}
+    >
+      <View style={styles.content}>
         <Animated.Image
           source={require('../assets/zishes_logo.png')}
+          style={[styles.logoImg, { transform: [{ scale }], opacity }]}
           resizeMode="contain"
-          style={[
-            styles.logo,
-            {
-              opacity,
-              transform: [{ scale }],
-            },
-          ]}
-          fadeDuration={0}
         />
-
-        <Animated.View
-          style={[
-            styles.ring,
-            {
-              transform: [{ rotate: spinInterpolate }, { scale }],
-              opacity: 0.35,
-            },
-          ]}
-        />
+        <Text style={styles.title}>Zishes</Text>
+        <Text style={styles.subtitle}>Play • Win • Own</Text>
       </View>
-    </View>
+    </LinearGradient>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoWrap: {
-    width: 160,
-    height: 160,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: {
-    width: 140,
-    height: 140,
-  },
-  glow: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 90,
-    backgroundColor: colors.primary,
-    opacity: 0.12,
-    // soft shadow glow
-    shadowColor: colors.primary,
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    ...(Platform.OS === 'android' ? { elevation: 8 } : null),
-  },
-  ring: {
-    position: 'absolute',
-    width: 170,
-    height: 170,
-    borderRadius: 100,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  loaderRow: {
-    marginTop: 28,
-  },
+  container: { flex: 1 },
+  content: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 24 },
+  logoImg: { width: 220, height: 220 },
+  title: { color: colors.white, fontSize: 40, fontWeight: '800', letterSpacing: 4, marginTop: 16 },
+  subtitle: { color: 'rgba(255,255,255,0.75)', fontSize: 18, fontWeight: '600', letterSpacing: 1.2 },
+  caption: { color: 'rgba(255,255,255,0.55)', fontSize: 13, letterSpacing: 0.6 },
 })

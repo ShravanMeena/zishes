@@ -6,6 +6,7 @@ import { Globe, Check, ChevronLeft } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { completeVerification, setUser } from '../../store/auth/authSlice';
 import { setCountry as setAppCountry } from '../../store/app/appSlice';
+import { clearDraftStorage, resetDraft } from '../../store/listingDraft/listingDraftSlice';
 import { updateMe as updateCurrentUser } from '../../services/users';
 import { getToken } from '../../services/tokenManager';
 import Button from '../../components/ui/Button';
@@ -59,6 +60,8 @@ export default function CountrySelectScreen({ navigation, route }) {
       if (updated) {
         dispatch(setUser(updated?.data || updated));
         await dispatch(setAppCountry(countryName));
+        try { await dispatch(clearDraftStorage(countryName)); } catch (_) {}
+        dispatch(resetDraft({ originCountry: countryName }));
       }
     };
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Modal, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Modal, Pressable, Alert, Platform } from 'react-native';
 import { colors } from '../../../theme/colors';
 import { launchCamera } from 'react-native-image-picker';
 import useCameraPermission from '../../../hooks/useCameraPermission';
@@ -17,10 +17,33 @@ export default function PhotosStep() {
   const addPhotos = async () => {
     const ok = await ensurePermission();
     if (!ok) return;
-    const res = await launchCamera({ mediaType: 'photo', quality: 0.9, cameraType: 'back', saveToPhotos: true });
-    if (res?.assets?.length) {
-      const next = res.assets.map((a) => ({ uri: a.uri }));
-      dispatch(addPhotosAction(next));
+    try {
+      const res = await launchCamera({
+        mediaType: 'photo',
+        quality: 0.9,
+        cameraType: 'back',
+        saveToPhotos: Platform.OS === 'android' ? Platform.Version <= 32 : true,
+      });
+      if (res?.didCancel) return;
+      if (res?.errorCode) {
+        Alert.alert('Unable to open camera', res.errorMessage || res.errorCode);
+        return;
+      }
+      const next = (res?.assets || [])
+        .filter((asset) => asset?.uri)
+        .map((asset) => ({
+          uri: asset.uri,
+          name: asset.fileName || asset.uri.split('/').pop() || `photo-${Date.now()}.jpg`,
+          type: asset.type || (asset.fileName?.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'),
+          width: asset.width,
+          height: asset.height,
+          fileSize: asset.fileSize,
+        }));
+      if (next.length) {
+        dispatch(addPhotosAction(next));
+      }
+    } catch (err) {
+      Alert.alert('Unable to add photo', err?.message || 'Please try again.');
     }
   };
 

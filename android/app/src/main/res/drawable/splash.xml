@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Solid background color -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#0B1220" />
+            <gradient
+                android:angle="315"
+                android:endColor="#24002F"
+                android:startColor="#9C27C5"
+                android:type="linear" />
         </shape>
     </item>
-    <!-- Center logo (fallback to app icon until zishes_logo is added) -->
-    <item>
+    <item android:gravity="center">
         <bitmap
             android:gravity="center"
             android:src="@drawable/zishes_logo" />

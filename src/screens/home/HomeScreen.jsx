@@ -1,5 +1,5 @@
 // src/screens/HomeScreen.jsx
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, RefreshControl, DeviceEventEmitter, Image, Alert, ActivityIndicator } from "react-native";
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -92,10 +92,15 @@ export default function HomeScreen({ navigation }) {
   }, [dispatch, setSelected, categories, savedFilters, applyFilters]);
 
   // Also refresh wallet when Home regains focus (e.g., after login or returning from other tabs)
+  const refreshRef = React.useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
   useFocusEffect(
     useCallback(() => {
       fetchWallet();
-      // Background check: ensure user profile exists and has country; update if changed
+      refreshRef.current?.();
       let cancelled = false;
       (async () => {
         if (!token) return;
@@ -104,17 +109,17 @@ export default function HomeScreen({ navigation }) {
           const doc = me?.data || me;
           if (cancelled) return;
           if (!doc?.address?.country) {
-            // Update store and let RootNavigator switch to CountrySelect
             try { dispatch(setUser(doc)); } catch {}
             return;
           }
           if (!user || user?.address?.country !== doc.address.country) {
             try { dispatch(setUser(doc)); } catch {}
+            if (!cancelled) refreshRef.current?.();
           }
         } catch {}
       })();
       return () => { cancelled = true; };
-    }, [fetchWallet])
+    }, [fetchWallet, token, user?.address?.country, dispatch])
   );
 
   // Listen for external requests to refresh Home (e.g., after join from Details/Favorites)
@@ -303,7 +308,7 @@ export default function HomeScreen({ navigation }) {
         available={coins || 0}
         required={requiredCoins}
         onClose={() => setInsufficientOpen(false)}
-        onBuy={() => { setInsufficientOpen(false); navigation.navigate('BuyCoins'); }}
+        onBuy={() => { setInsufficientOpen(false); navigation.navigate('Wallet'); }}
       />
 
       <AppModal

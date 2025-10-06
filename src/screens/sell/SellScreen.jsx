@@ -1,16 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, TextInput, Keyboard } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { Bell } from 'lucide-react-native';
 import ProgressBar from '../../components/common/ProgressBar';
 import Button from '../../components/ui/Button';
 import BottomSheet from '../../components/common/BottomSheet';
+import SaveDraftModal from '../../components/modals/SaveDraftModal';
 // import CongratsModal from '../../components/modals/CongratsModal';
 import SubmissionModal from '../../components/modals/SubmissionModal';
-import { CheckCircle2 } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { loadDraft, clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute, clearDraftStorage } from '../../store/listingDraft/listingDraftSlice';
+import { clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute, clearDraftStorage } from '../../store/listingDraft/listingDraftSlice';
 import { publishListing } from '../../store/listingDraft/listingDraftSlice';
 import { BackHandler } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
@@ -29,8 +29,8 @@ export default function SellScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-  const bottomNavOffset = Math.max(0, tabBarHeight - insets.bottom);
-  const bottomBarPadding = Math.max(18, insets.bottom + 16);
+  const bottomNavOffset = 10;
+  const bottomBarPadding = 0
   const isFocused = useIsFocused();
   const loaded = useSelector((s) => s.listingDraft.loaded);
   const isDirty = useSelector((s) => s.listingDraft.isDirty);
@@ -41,6 +41,8 @@ export default function SellScreen({ navigation, route }) {
   const pendingLeaveToRoute = useSelector((s) => s.listingDraft.ui.pendingLeaveToRoute);
   const details = useSelector((s) => s.listingDraft.details);
   const policies = useSelector((s) => s.listingDraft.policies);
+  const draftOriginCountry = useSelector((s) => s.listingDraft.originCountry);
+  const userCountry = useSelector((s) => s.auth?.user?.address?.country || s.app?.country || null);
 
   const steps = useMemo(
     () => [
@@ -71,6 +73,7 @@ export default function SellScreen({ navigation, route }) {
   );
   const routes = steps;
   const progress = (index + 1) / steps.length;
+  const listingExtensionAck = !!policies?.listingExtensionAck;
   const ensurePoliciesAccepted = useCallback(() => {
     if (policiesAccepted) return true;
     setDialog({
@@ -88,10 +91,18 @@ export default function SellScreen({ navigation, route }) {
     if (movingForward && currentKey === 'policies' && !ensurePoliciesAccepted()) {
       return;
     }
+    if (movingForward && currentKey === 'play' && !listingExtensionAck) {
+      setDialog({
+        title: 'Acknowledge Listing Limit',
+        message: 'Please confirm you understand the listing can only be extended once before continuing.',
+        primary: { label: 'OK' },
+      });
+      return;
+    }
     if (nextIndex >= 0 && nextIndex < routes.length) {
       setIndex(nextIndex);
     }
-  }, [index, routes, ensurePoliciesAccepted]);
+  }, [index, routes, ensurePoliciesAccepted, listingExtensionAck]);
 
   const goNext = useCallback(() => {
     if (index < routes.length - 1) {
@@ -155,15 +166,37 @@ export default function SellScreen({ navigation, route }) {
 
   const closeDialog = useCallback(() => setDialog(null), []);
 
-  // Initialize: reset by default; prefill only if draftData is provided
+  const initializedRef = useRef(false);
+
+  // Initialize: reset by default; prefill only if draftData is provided.
   useEffect(() => {
     const draftData = route?.params?.draftData;
-    if (draftData) {
+    if (draftData && !initializedRef.current) {
       dispatch(loadFromDraft(draftData));
-    } else {
-      dispatch(resetDraft());
+      initializedRef.current = true;
+      return;
     }
-  }, [route?.params?.draftData, dispatch]);
+
+    if (draftData) {
+      return;
+    }
+
+    if (!userCountry) {
+      if (!initializedRef.current) {
+        dispatch(resetDraft());
+        initializedRef.current = true;
+      }
+      return;
+    }
+
+    if (!initializedRef.current || draftOriginCountry !== userCountry) {
+      if (draftOriginCountry && draftOriginCountry !== userCountry) {
+        dispatch(clearDraftStorage(userCountry));
+      }
+      dispatch(resetDraft({ originCountry: userCountry }));
+      initializedRef.current = true;
+    }
+  }, [dispatch, route?.params?.draftData, userCountry, draftOriginCountry]);
 
   // Intercept Android back to prompt save if there are unsaved changes
   useEffect(() => {
@@ -198,6 +231,11 @@ export default function SellScreen({ navigation, route }) {
     }
   }, [isFocused]);
 
+  const closeSavePrompt = useCallback(() => {
+    setSavePromptOpen(false);
+    dispatch(setPendingLeaveRoute(null));
+  }, [dispatch]);
+
   const handleAfterLeave = useCallback((target) => {
     if (!target) return;
     if (target === 'BACK') navigation.goBack();
@@ -206,16 +244,40 @@ export default function SellScreen({ navigation, route }) {
     setLeaveAfterAction(null);
   }, [dispatch, navigation]);
 
+  const resetListingForm = useCallback(() => {
+    dispatch(resetDraft({ originCountry: userCountry }));
+    setIndex(0);
+    setForceAskName(false);
+    setNameInput('');
+  }, [dispatch, userCountry]);
+
   const handleDiscard = useCallback(async () => {
-    setSavePromptOpen(false);
+    closeSavePrompt();
     try {
-      await dispatch(clearDraftStorage()).unwrap();
+      await dispatch(clearDraftStorage(userCountry)).unwrap();
     } catch (_) {
       // Ignore storage errors; reset state regardless so UI clears.
     }
-    dispatch(resetDraft());
+    dispatch(resetDraft({ originCountry: userCountry }));
     handleAfterLeave(leaveAfterAction || 'BACK');
-  }, [dispatch, leaveAfterAction, handleAfterLeave]);
+  }, [dispatch, leaveAfterAction, handleAfterLeave, userCountry, closeSavePrompt]);
+
+  const handleSaveDraft = useCallback(async () => {
+    const name = forceAskName ? (nameInput || '').trim() : (details?.name || '').trim();
+    if (!name) {
+      if (!forceAskName) setForceAskName(true);
+      return;
+    }
+    try {
+      await dispatch(saveCurrentAsNewDraft({ name })).unwrap();
+      const nextTarget = leaveAfterAction || 'BACK';
+      resetListingForm();
+      closeSavePrompt();
+      handleAfterLeave(nextTarget);
+    } catch (_) {
+      // ignore errors, keep modal open for retry
+    }
+  }, [dispatch, forceAskName, nameInput, details?.name, closeSavePrompt, handleAfterLeave, leaveAfterAction, resetListingForm]);
 
   // Ensure result modal shows even if user hid while submitting
   useEffect(() => {
@@ -336,7 +398,7 @@ export default function SellScreen({ navigation, route }) {
         <Button
           title="Save Draft"
           variant="outline"
-          onPress={() => {
+          onPress={async () => {
             const needsName = !details?.name;
             if (needsName) {
               setForceAskName(true);
@@ -344,10 +406,13 @@ export default function SellScreen({ navigation, route }) {
               setLeaveAfterAction(null);
               setSavePromptOpen(true);
             } else {
-              dispatch(saveCurrentAsNewDraft({ name: details.name }))
-                .unwrap()
-                .then(() => setDraftOpen(true))
-                .catch(() => {});
+              try {
+                await dispatch(saveCurrentAsNewDraft({ name: details.name })).unwrap();
+                resetListingForm();
+                setDraftOpen(true);
+              } catch (_) {
+                // noop
+              }
             }
           }}
           style={{ flex: 1, marginRight: 10 }}
@@ -355,20 +420,20 @@ export default function SellScreen({ navigation, route }) {
         <Button title={isReview ? "Let's Zish It !!" : 'Next'} onPress={onPrimary} style={{ flex: 1 }} disabled={submitting} />
       </View>
 
-      {/* Save Draft sheet (themed, not default alert) */}
-      <BottomSheet visible={draftOpen} onClose={() => setDraftOpen(false)} full={false}>
-        <View style={{ alignItems: 'center', padding: 8, paddingBottom: 28 }}>
-          <CheckCircle2 size={36} color={colors.accent} />
-          <Text style={{ color: colors.white, fontWeight: '800', fontSize: 18, marginTop: 8 }}>Saved as Draft</Text>
-          <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
-            Your listing has been saved. You can return and finish anytime.
-          </Text>
-          <View style={{ flexDirection: 'row', marginTop: 14 }}>
-            <Button title="Keep Editing" variant="outline" onPress={() => setDraftOpen(false)} fullWidth={false} style={{ flex: 1, marginRight: 8 }} />
-            <Button title="Go to Drafts" onPress={() => { setDraftOpen(false); navigation.navigate('Profile', { screen: 'Drafts' }); }} fullWidth={false} style={{ flex: 1 }} />
-          </View>
-        </View>
-      </BottomSheet>
+      <SaveDraftModal
+        visible={draftOpen}
+        variant="success"
+        onClose={() => setDraftOpen(false)}
+        successTitle="Saved as Draft"
+        successSubtitle="Your listing has been saved. You can return and finish anytime."
+        successPrimaryLabel="Keep Editing"
+        successSecondaryLabel="Go to Drafts"
+        onSuccessPrimary={() => setDraftOpen(false)}
+        onSuccessSecondary={() => {
+          setDraftOpen(false);
+          navigation.navigate('Profile', { screen: 'Drafts' });
+        }}
+      />
 
       {/* Submission modal with progress + success/error states */}
       <SubmissionModal
@@ -420,51 +485,19 @@ export default function SellScreen({ navigation, route }) {
       </BottomSheet>
 
       {/* Save/Leave Prompt */}
-      <BottomSheet visible={isFocused && savePromptOpen} onClose={() => { setSavePromptOpen(false); dispatch(setPendingLeaveRoute(null)); }} full={false}>
-        <View style={{ padding: 12, paddingBottom: Math.max(48, insets.bottom + 32) }}>
-          <Text style={{ color: colors.white, fontWeight: '800', fontSize: 18, textAlign: 'center' }}>Save your progress?</Text>
-          <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
-            You have unsaved changes. Save as a draft or discard.
-          </Text>
-          {forceAskName ? (
-            <View style={{ marginTop: 12 }}>
-              <Text style={{ color: colors.white, fontWeight: '700', marginBottom: 6 }}>Item Name (required)</Text>
-              <TextInput
-                placeholder="Item name"
-                placeholderTextColor={colors.textSecondary}
-                style={{ backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 12, color: colors.white }}
-                value={nameInput}
-                onChangeText={setNameInput}
-                // Do not autoFocus to avoid immediate keyboard overlay on open
-              />
-            </View>
-          ) : null}
-          <View style={{ flexDirection: 'row', marginTop: 14 }}>
-            <Button
-              title="Discard"
-              variant="outline"
-              onPress={handleDiscard}
-              fullWidth={false}
-              style={{ flex: 1, marginRight: 8 }}
-            />
-            <Button
-              title="Save & Continue"
-              onPress={async () => {
-                const name = forceAskName ? (nameInput || '').trim() : (details?.name || '').trim();
-                if (!name) return; // keep the modal open until name provided
-                try {
-                  await dispatch(saveCurrentAsNewDraft({ name })).unwrap();
-                  setSavePromptOpen(false);
-                  setForceAskName(false);
-                  handleAfterLeave(leaveAfterAction || 'BACK');
-                } catch (_) { /* ignore */ }
-              }}
-              fullWidth={false}
-              style={{ flex: 1 }}
-            />
-          </View>
-        </View>
-      </BottomSheet>
+      <SaveDraftModal
+        visible={isFocused && savePromptOpen}
+        requireName={forceAskName}
+        nameValue={nameInput}
+        onChangeName={setNameInput}
+        onClose={closeSavePrompt}
+        onDiscard={handleDiscard}
+        onSave={handleSaveDraft}
+        onHome={() => {
+          closeSavePrompt();
+          handleAfterLeave('Home');
+        }}
+      />
     </SafeAreaView>
   );
 }

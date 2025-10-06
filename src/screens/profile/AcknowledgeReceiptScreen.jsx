@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ScrollView, ActivityIndicator, RefreshControl, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { ChevronLeft, Bell, Camera, Calendar, AlertTriangle } from 'lucide-react-native';
+import { ChevronLeft, Bell, Camera, Calendar, AlertTriangle, X } from 'lucide-react-native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import useGalleryPermission from '../../hooks/useGalleryPermission';
 import useCameraPermission from '../../hooks/useCameraPermission';
@@ -12,6 +12,14 @@ import fulfillments from '../../services/fulfillments';
 import reviews from '../../services/reviews';
 import { uploadImage } from '../../services/uploads';
 import CongratsModal from '../../components/modals/CongratsModal';
+import {
+  createEmptyPickupAddresses as buildEmptyPickupAddresses,
+  normalizePickupAddressesForState,
+  normalizePickupAddressesForSubmit,
+  hasAddress,
+  hasPickupAddresses,
+  resolveProductCountry,
+} from '../../utils/pickupAddresses';
 
 export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const { item } = route?.params || {};
@@ -20,6 +28,8 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [images, setImages] = useState([]); // array of { uri }
+  const [preview, setPreview] = useState(null);
+  const [videoUrl, setVideoUrl] = useState('');
   const [date, setDate] = useState('');
   const [comment, setComment] = useState('');
   const [showDate, setShowDate] = useState(false);
@@ -32,6 +42,8 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rating, setRating] = useState(0);
+  const [pickupAddresses, setPickupAddresses] = useState(() => buildEmptyPickupAddresses());
+  const [productCountry, setProductCountry] = useState('');
 
   const banner = useMemo(() => {
     const title = item?.product?.name || item?.game?.name || item?.tournament?.game?.name || 'Item';
@@ -57,17 +69,19 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
     const load = async () => {
       try {
         setLoading(true);
-        const productId = getProductId();
-        if (!productId) return;
-        const f = await fulfillments.getByProduct(productId);
-        setFulfillment(f);
-        const rc = f?.receiverConfirmation || f?.receiver || null;
-        if (rc?.notes) setComment(rc.notes);
-        const d = rc?.confirmedAt || f?.dateOfReceive || f?.deliveredAt;
-        if (d) {
-          try { setDate(formatDateYYYYMMDD(new Date(d))); } catch {}
-        }
-        const hasAck = !!(f?.received || rc?.confirmedAt || rc?.notes || rc?.videoUrl);
+        const f = await reloadAck(
+          setFulfillment,
+          setComment,
+          setDate,
+          setPickupAddresses,
+          setProductCountry,
+          setVideoUrl,
+          getProductId,
+          item
+        );
+        if (!f) return;
+        const rc = f?.receiverConfirmation || f?.receiver || {};
+        const hasAck = !!(f?.received || rc?.confirmedAt || rc?.notes || rc?.videoUrl || hasPickupAddresses(f?.pickupAddresses));
         if (hasAck) setMode('view');
       } catch (e) {
         // ignore for view
@@ -83,22 +97,25 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
     if (!productId) { setError('Missing product id'); return; }
     try {
       // Upload any images user selected to receiver media
-      setStage('uploading');
-      setUploadPct(0);
       const photos = [];
-      for (let i = 0; i < images.length; i++) {
-        const img = images[i];
-        try {
-          const res = await uploadImage({ uri: img.uri, onUploadProgress: (evt) => {
-            const { loaded, total } = evt || {};
-            const frac = total ? loaded / total : 0.5;
-            const overall = ((i + frac) / Math.max(1, images.length)) * 100;
-            setUploadPct(Math.max(0, Math.min(100, Math.round(overall))));
-          }});
-          if (res?.url) photos.push(res.url);
-        } catch (e) {
-          throw new Error(e?.message || 'Failed to upload image');
+      if (images.length) {
+        setStage('uploading');
+        setUploadPct(0);
+        for (let i = 0; i < images.length; i++) {
+          const img = images[i];
+          try {
+            const res = await uploadImage({ uri: img.uri, onUploadProgress: (evt) => {
+              const { loaded, total } = evt || {};
+              const frac = total ? loaded / total : 0.5;
+              const overall = ((i + frac) / Math.max(1, images.length)) * 100;
+              setUploadPct(Math.max(0, Math.min(100, Math.round(overall))));
+            }});
+            if (res?.url) photos.push(res.url);
+          } catch (e) {
+            throw new Error(e?.message || 'Failed to upload image');
+          }
         }
+        setUploadPct(100);
       }
       setStage('submitting');
       const payload = {};
@@ -108,6 +125,9 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         const d = new Date(date);
         if (!isNaN(d.getTime())) payload.dateOfReceive = d.toISOString();
       }
+      if (videoUrl?.trim()) payload.videoUrl = videoUrl.trim();
+      const normalizedPickup = normalizePickupAddressesForSubmit(pickupAddresses, productCountry);
+      if (normalizedPickup) payload.pickupAddresses = normalizedPickup;
       // videoUrl is optional and our UI collects photos; skip unless you later add video capture
       await fulfillments.submitReceiverProof(productId, payload);
       // Attempt to create a review if rating provided
@@ -123,9 +143,17 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
       }
       setSuccessOpen(true);
       try {
-        const f = await fulfillments.getByProduct(productId);
-        setFulfillment(f);
-        setMode('view');
+        const f = await reloadAck(
+          setFulfillment,
+          setComment,
+          setDate,
+          setPickupAddresses,
+          setProductCountry,
+          setVideoUrl,
+          getProductId,
+          item
+        );
+        if (f) setMode('view');
       } catch {}
     } catch (e) {
       setError(e?.message || 'Failed to submit acknowledgement');
@@ -148,7 +176,30 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 160 }}
         keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); try { await reloadAck(setFulfillment, setComment, setDate, setMode, getProductId); } finally { setRefreshing(false); } }} tintColor={colors.white} />}
+        refreshControl={<RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            try {
+              const f = await reloadAck(
+                setFulfillment,
+                setComment,
+                setDate,
+                setPickupAddresses,
+                setProductCountry,
+                setVideoUrl,
+                getProductId,
+                item
+              );
+              if (f) {
+                const rc = f?.receiverConfirmation || f?.receiver || {};
+                const hasAck = !!(f?.received || rc?.confirmedAt || rc?.notes || rc?.videoUrl || hasPickupAddresses(f?.pickupAddresses));
+                if (hasAck) setMode('view');
+              }
+            } finally { setRefreshing(false); }
+          }}
+          tintColor={colors.white}
+        />}
       >
         {/* Content renders below; full-screen loader overlays while loading */}
         {/* Banner */}
@@ -197,6 +248,25 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
                     </TouchableOpacity>
                   ))}
                 </View>
+              </View>
+            ) : null}
+            {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.sectionTitle}>Pickup Addresses</Text>
+                {hasAddress(fulfillment?.pickupAddresses?.seller) ? (
+                  <AddressSummary
+                    label="Seller"
+                    value={fulfillment?.pickupAddresses?.seller}
+                    productCountry={productCountry || fulfillment?.product?.country}
+                  />
+                ) : null}
+                {hasAddress(fulfillment?.pickupAddresses?.receiver) ? (
+                  <AddressSummary
+                    label="Receiver"
+                    value={fulfillment?.pickupAddresses?.receiver}
+                    productCountry={productCountry || fulfillment?.product?.country}
+                  />
+                ) : null}
               </View>
             ) : null}
             {fulfillment?.received ? (
@@ -250,6 +320,44 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           </>
         ) : null}
 
+        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+          <View style={styles.addressCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.sectionTitle}>Pickup Addresses (optional)</Text>
+              {productCountry ? <Text style={styles.addressHint}>Country locked to {productCountry}</Text> : null}
+            </View>
+            <AddressForm
+              label="Seller pickup address"
+              value={pickupAddresses.seller}
+              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, seller: { ...prev.seller, [field]: value } }))}
+              productCountry={productCountry}
+            />
+            <View style={styles.addressDivider} />
+            <AddressForm
+              label="Receiver delivery address"
+              value={pickupAddresses.receiver}
+              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, receiver: { ...prev.receiver, [field]: value } }))}
+              productCountry={productCountry}
+            />
+          </View>
+        ) : null}
+
+        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+          <>
+            <Text style={styles.sectionTitle}>Video Proof (Optional)</Text>
+            <TextInput
+              value={videoUrl}
+              onChangeText={setVideoUrl}
+              placeholder="https://example.com/proof.mp4"
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              style={styles.input}
+            />
+          </>
+        ) : null}
+
         {/* Comment + Review */}
         {(mode === 'edit' && stage === 'idle' && !loading) ? (
           <>
@@ -300,6 +408,20 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         ) : null}
         <TouchableOpacity style={[styles.btn, styles.cancel]} onPress={() => navigation.goBack()}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
       </ScrollView>
+
+      <Modal visible={!!preview} transparent onRequestClose={() => setPreview(null)} animationType="fade">
+        <View style={styles.previewBackdrop}>
+          <Pressable style={styles.previewBackdrop} onPress={() => setPreview(null)} />
+          <View style={styles.previewBox}>
+            {preview?.uri ? (
+              <Image source={{ uri: preview.uri }} style={styles.previewImg} resizeMode="contain" />
+            ) : null}
+            <Pressable style={styles.previewClose} onPress={() => setPreview(null)}>
+              <X size={18} color={colors.white} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <DatePickerModal
         visible={showDate}
@@ -355,10 +477,26 @@ const styles = StyleSheet.create({
   selTxt: { color: colors.white },
   uploadRow: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   uploadTxt: { color: colors.white, fontWeight: '800' },
+  addressCard: { backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12, marginTop: 16 },
+  addressHint: { color: colors.textSecondary, fontSize: 12 },
+  addressLabel: { color: colors.white, fontWeight: '700', marginBottom: 4 },
+  addressField: { marginTop: 10 },
+  addressRow: { flexDirection: 'row', marginTop: 10 },
+  addressHalf: { flex: 1 },
+  addressHalfLeft: { marginRight: 10 },
+  addressDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#343B49', marginVertical: 14 },
+  addressCountry: { color: colors.textSecondary, fontSize: 12, marginTop: 8 },
+  addressSummary: { marginTop: 8, backgroundColor: '#232630', borderRadius: 10, borderWidth: 1, borderColor: '#343B49', padding: 10 },
+  addressSummaryLabel: { color: colors.white, fontWeight: '800' },
+  addressSummaryText: { color: colors.textSecondary, marginTop: 4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   thumb: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#333' },
   gridThumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#1E2128' },
   removeBtnSmall: { position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  previewBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  previewBox: { width: '92%', height: '78%', borderRadius: 16, backgroundColor: '#11141a', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  previewImg: { width: '100%', height: '100%' },
+  previewClose: { position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   badgeApproved: { alignSelf: 'flex-start', backgroundColor: '#2ECC71', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, marginTop: 6 },
   badgeApprovedTxt: { color: '#0B1220', fontWeight: '900' },
   skeletonCard: { backgroundColor: '#1E2128', borderRadius: 12, borderWidth: 1, borderColor: '#24324A', padding: 14, marginBottom: 12 },
@@ -386,4 +524,117 @@ function DetailRow({ label, value, multiline }) {
 function formatHumanDate(iso) {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleString(); } catch { return '—'; }
+}
+
+function AddressForm({ label, value, onChange, productCountry }) {
+  const v = value || {};
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={styles.addressLabel}>{label}</Text>
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Address line 1"
+        placeholderTextColor={colors.textSecondary}
+        value={v.line1 || ''}
+        onChangeText={(text) => onChange('line1', text)}
+      />
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Address line 2 (optional)"
+        placeholderTextColor={colors.textSecondary}
+        value={v.line2 || ''}
+        onChangeText={(text) => onChange('line2', text)}
+      />
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Landmark (optional)"
+        placeholderTextColor={colors.textSecondary}
+        value={v.landmark || ''}
+        onChangeText={(text) => onChange('landmark', text)}
+      />
+      <View style={styles.addressRow}>
+        <TextInput
+          style={[styles.input, styles.addressField, styles.addressHalf, styles.addressHalfLeft]}
+          placeholder="City"
+          placeholderTextColor={colors.textSecondary}
+          value={v.city || ''}
+          onChangeText={(text) => onChange('city', text)}
+        />
+        <TextInput
+          style={[styles.input, styles.addressField, styles.addressHalf]}
+          placeholder="State"
+          placeholderTextColor={colors.textSecondary}
+          value={v.state || ''}
+          onChangeText={(text) => onChange('state', text)}
+        />
+      </View>
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Pincode / ZIP"
+        placeholderTextColor={colors.textSecondary}
+        value={v.pincode || ''}
+        keyboardType="default"
+        onChangeText={(text) => onChange('pincode', text)}
+      />
+      <Text style={styles.addressCountry}>Country: {productCountry || v.country || '—'} (locked to listing)</Text>
+    </View>
+  );
+}
+
+function AddressSummary({ label, value, productCountry }) {
+  const v = value || {};
+  const lines = [];
+  if (v.line1) lines.push(v.line1);
+  if (v.line2) lines.push(v.line2);
+  if (v.landmark) lines.push(v.landmark);
+  const cityState = [v.city, v.state].filter(Boolean).join(', ');
+  if (cityState) lines.push(cityState);
+  if (v.pincode) lines.push(`Pincode: ${v.pincode}`);
+  const country = v.country || productCountry;
+  if (country) lines.push(`Country: ${country}`);
+
+  return (
+    <View style={styles.addressSummary}>
+      <Text style={styles.addressSummaryLabel}>{label}</Text>
+      {lines.length ? lines.map((line, idx) => (
+        <Text key={`${label}-${idx}`} style={styles.addressSummaryText}>{line}</Text>
+      )) : (
+        <Text style={styles.addressSummaryText}>—</Text>
+      )}
+    </View>
+  );
+}
+
+async function reloadAck(
+  setFulfillment,
+  setComment,
+  setDate,
+  setPickupAddresses,
+  setProductCountry,
+  setVideoUrl,
+  getProductId,
+  item
+) {
+  const productId = getProductId();
+  if (!productId) return null;
+  const f = await fulfillments.getByProduct(productId);
+  setFulfillment(f);
+  const rc = f?.receiverConfirmation || f?.receiver || {};
+  if (setComment) setComment(rc?.notes || '');
+  const confirmedAt = rc?.confirmedAt || f?.dateOfReceive || f?.deliveredAt;
+  if (setDate) {
+    if (confirmedAt) {
+      try { setDate(formatDateYYYYMMDD(new Date(confirmedAt))); } catch { setDate(''); }
+    } else {
+      setDate('');
+    }
+  }
+  if (setVideoUrl) setVideoUrl(rc?.videoUrl || '');
+  const country = resolveProductCountry(f, item);
+  if (setProductCountry) setProductCountry(country || '');
+  if (setPickupAddresses) {
+    const normalized = normalizePickupAddressesForState(f?.pickupAddresses, country);
+    setPickupAddresses(normalized);
+  }
+  return f;
 }

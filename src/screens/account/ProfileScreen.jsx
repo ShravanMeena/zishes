@@ -139,9 +139,9 @@ export default function ProfileScreen({ navigation }) {
 function MenuRow({ icon, title, badge, onPress }) {
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.8}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <View style={styles.rowLeft}>
         <View style={styles.rowIcon}>{icon}</View>
-        <Text style={styles.rowText}>{title}</Text>
+        <Text style={styles.rowText} numberOfLines={2} ellipsizeMode="tail">{title}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {badge ? (
@@ -178,8 +178,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#2B2F39', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14,
     borderWidth: 1, borderColor: '#343B49', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  rowIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#312B42', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  rowText: { color: colors.white, fontWeight: '600' },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, columnGap: 12, paddingRight: 12 },
+  rowIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#312B42', alignItems: 'center', justifyContent: 'center' },
+  rowText: { color: colors.white, fontWeight: '600', flex: 1, flexShrink: 1 },
   badge: { backgroundColor: '#2E7D32', paddingHorizontal: 8, borderRadius: 12, marginRight: 8 },
   badgeText: { color: colors.white, fontWeight: '700' },
   logout: { borderWidth: 1, borderColor: '#C65B5B', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 24 },

@@ -19,6 +19,7 @@ export default function AppTabs() {
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
+      backBehavior="history"
       screenOptions={({ route }) => {
         // Hide tab bar when Unity screen is focused inside Home stack
         const focused = getFocusedRouteNameFromRoute(route) ?? 'HomeIndex';

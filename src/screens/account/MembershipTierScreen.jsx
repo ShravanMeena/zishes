@@ -11,11 +11,11 @@ import { colors } from '../../theme/colors';
 import Button from '../../components/ui/Button';
 import CongratsModal from '../../components/modals/CongratsModal';
 import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
-import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
 import AppModal from '../../components/common/AppModal';
 import plansService from '../../services/plans';
 import paymentsService from '../../services/payments';
 import { fetchMyWallet } from '../../store/wallet/walletSlice';
+import { isIndiaCountry } from '../../utils/payments';
 
 const GRADIENT_BORDER = ['#7C5DFF', '#5BC0FF'];
 const CARD_BG = '#22252E';
@@ -84,7 +84,8 @@ function formatCredits(plan) {
 export default function MembershipTierScreen({ navigation }) {
   const dispatch = useDispatch();
   const userCountry = useSelector((s) => s.auth.user?.address?.country);
-  const isIndia = useMemo(() => String(userCountry || '').trim().toLowerCase() === 'india', [userCountry]);
+  const userId = useSelector((s) => s.auth.user?._id || s.auth.user?.id);
+  const isIndia = useMemo(() => isIndiaCountry(userCountry), [userCountry]);
 
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -93,7 +94,6 @@ export default function MembershipTierScreen({ navigation }) {
   const [processingPlanId, setProcessingPlanId] = useState(null);
   const [payProcessing, setPayProcessing] = useState(false);
   const [payError, setPayError] = useState(null);
-  const [regionModal, setRegionModal] = useState(false);
   const [congratsOpen, setCongratsOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [lastPlan, setLastPlan] = useState(null);
@@ -112,16 +112,22 @@ export default function MembershipTierScreen({ navigation }) {
     try {
       setPlansError(null);
       setPlansLoading(true);
+      if (!isIndiaCountry(userCountry)) {
+        setPlans([]);
+        setPlansError('Membership subscriptions are currently available only in India.');
+        return;
+      }
       const res = await plansService.listPlans({});
       const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-      setPlans(list.filter((p) => p?.planType === 'SUBSCRIPTION'));
+      const accessible = list.filter((p) => p?.planType === 'SUBSCRIPTION');
+      setPlans(accessible);
     } catch (e) {
       setPlans([]);
       setPlansError(e?.message || 'Failed to load membership plans');
     } finally {
       setPlansLoading(false);
     }
-  }, []);
+  }, [userCountry]);
 
   const loadSubscription = useCallback(async (opts = {}) => {
     const { refreshing = false, silent = false } = opts;
@@ -184,12 +190,13 @@ export default function MembershipTierScreen({ navigation }) {
 
   const startSubscribe = useCallback(async (plan) => {
     try {
+      if (!plan?._id) throw new Error('Invalid plan');
       setLastPlan(plan);
-      if (!userCountry || String(userCountry).toLowerCase() !== 'india') {
-        setRegionModal(true);
+
+      if (!isIndia) {
+        Alert.alert('Not available', 'Membership subscriptions are currently available only in India.');
         return;
       }
-      if (!plan?._id) throw new Error('Invalid plan');
 
       setProcessingPlanId(plan._id);
       setPayProcessing(true);
@@ -210,7 +217,11 @@ export default function MembershipTierScreen({ navigation }) {
         theme: { color: '#6C7BFF' },
         retry: { enabled: true, max_count: 2 },
         external: { wallets: ['paytm', 'phonepe'] },
-        notes: { planId: plan._id },
+        notes: {
+          planId: plan._id,
+          userId: userId || 'unknown',
+          app: 'zishes',
+        },
       };
 
       try {
@@ -469,7 +480,6 @@ export default function MembershipTierScreen({ navigation }) {
         onPrimary={() => { setCongratsOpen(false); setSelectedPlan(null); navigation.goBack(); }}
         onRequestClose={() => { setCongratsOpen(false); setSelectedPlan(null); }}
       />
-      <PaymentsRegionModal visible={regionModal} onClose={() => setRegionModal(false)} />
       <ProcessingPaymentModal visible={payProcessing} />
       <AppModal
         visible={!!payError}

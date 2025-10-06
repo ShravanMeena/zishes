@@ -5,6 +5,7 @@ import ProgressBar from '../common/ProgressBar';
 import useGameCard from './useGameCard';
 import LinearGradient from 'react-native-linear-gradient';
 import { Star, Share2, Zap, Info, Clock } from 'lucide-react-native';
+import { getEarlyTerminationContext, canShowEarlyTermination } from '../../utils/earlyTermination';
 
 function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
   const { faved, toggleFav, progress, endsIn, loading, handlePlay, ended, msLeft, calcReady } = useGameCard(item, now);
@@ -15,6 +16,8 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
   const statusEnded = tourStatus === 'OVER' || tourStatus === 'UNFILLED';
   const showEndedUI = !!statusEnded;
   const completionPercent = Number.isFinite(progress) ? Math.round(progress * 100) : 0;
+  const earlyTerminationContext = getEarlyTerminationContext(item);
+  const showEarlyTermination = canShowEarlyTermination(earlyTerminationContext);
 
   return (
     <View style={styles.card}>
@@ -73,36 +76,46 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
                 </>
               ) : null}
             </View>
-            <View style={styles.gameTypeWrap}>
-              <Image source={{ uri: item.gameTypeIcon }} style={styles.gameIcon} />
-            </View>
           </View>
         </View>
       </TouchableOpacity>
 
-      <View style={[styles.rowBetween, { marginTop: 16, alignItems: 'center', paddingHorizontal: 14, paddingBottom: 14 }]}>
-        {calcReady ? (
-          showEndedUI ? (
-            <View style={[styles.playGrad, { backgroundColor: '#3A4051' }]}>
-              <Text style={styles.playText}>Game End</Text>
-            </View>
+      <View style={styles.footerRow}>
+        <View style={styles.playSection}>
+          {calcReady ? (
+            showEndedUI ? (
+              <View style={[styles.playGrad, { backgroundColor: '#3A4051' }]}>
+                <Text style={styles.playText}>Game End</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.playBtn} onPress={onPlayPress} activeOpacity={0.85} disabled={loading}>
+                <LinearGradient colors={[colors.primary, colors.gradientEnd]} start={{x:0,y:0}} end={{x:1,y:1}} style={[styles.playGrad, loading && { opacity: 0.7 }]}>
+                  {loading ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.playText}>Play Now</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            )
           ) : (
-            <TouchableOpacity style={styles.playBtn} onPress={onPlayPress} activeOpacity={0.85} disabled={loading}>
-              <LinearGradient colors={[colors.primary, colors.gradientEnd]} start={{x:0,y:0}} end={{x:1,y:1}} style={[styles.playGrad, loading && { opacity: 0.7 }]}>
-                {loading ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <Text style={styles.playText}>Play Now</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          )
-        ) : (
-          <View style={[styles.playGrad, { backgroundColor: '#3A4051', opacity: 0.5 }]} />
-        )}
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={styles.subtle}>Game Type :</Text>
-          <Text style={styles.gameType}>{' '}{item.gameType}</Text>
+            <View style={[styles.playGrad, { backgroundColor: '#3A4051', opacity: 0.5 }]} />
+          )}
+          {showEarlyTermination ? (
+            <View style={styles.earlyBadge}>
+              <Text style={styles.earlyBadgeText}>Early termination available</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.footerMeta}>
+          {!!item.gameType && (
+            <Text style={styles.gameName} numberOfLines={1} ellipsizeMode="tail">
+              {item.gameType}
+            </Text>
+          )}
+          <View style={styles.gameTypeWrap}>
+            <Image source={{ uri: item.gameTypeIcon }} style={styles.gameIcon} />
+          </View>
         </View>
       </View>
     </View>
@@ -202,6 +215,44 @@ const styles = StyleSheet.create({
   playBtn: { borderRadius: 12, overflow: 'hidden' },
   playGrad: { paddingHorizontal: 22, paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   playText: { color: colors.white, fontWeight: '800', fontSize: 18 },
-  gameType: { color: colors.white, fontWeight: '600' },
+  footerRow: {
+    marginTop: 16,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  playSection: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  footerMeta: {
+    marginLeft: 16,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    alignSelf: 'flex-start',
+    maxWidth: 90,
+  },
+  earlyBadge: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(124, 58, 237, 0.16)',
+  },
+  earlyBadgeText: {
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  gameName: {
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 13,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
 });
  

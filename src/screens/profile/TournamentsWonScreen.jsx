@@ -157,7 +157,7 @@ export default function TournamentsWonScreen({ navigation }) {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft color={colors.white} size={20} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Tournaments Played</Text>
-        <TouchableOpacity style={styles.iconBtn}><Filter color={colors.white} size={18} /></TouchableOpacity>
+        <View style={styles.iconSpacer} />
       </View>
       {loading ? (
         <FlatList
@@ -189,9 +189,10 @@ export default function TournamentsWonScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#22252C' },
-  headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
+  header: { height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#22252C' },
+  headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18, flex: 1, textAlign: 'center' },
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
+  iconSpacer: { width: 32, height: 32 },
 
   card: { backgroundColor: '#2B2F39', borderRadius: 18, borderWidth: 1, borderColor: '#343B49', padding: 12 },
   hero: { width: '100%', height: 150, borderRadius: 12, backgroundColor: '#222', marginBottom: 10 },

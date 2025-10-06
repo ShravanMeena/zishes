@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow secure + cleartext traffic for Zishes endpoints and CDN assets -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">zishes.com</domain>
+        <domain includeSubdomains="true">api.zishes.com</domain>
+        <domain includeSubdomains="true">auth.zishes.com</domain>
+        <domain includeSubdomains="true">static.zishes.com</domain>
+    </domain-config>
+    <!-- Permit presigned asset endpoints (S3/CloudFront) that may return http URLs -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">amazonaws.com</domain>
+        <domain includeSubdomains="true">cloudfront.net</domain>
+    </domain-config>
+</network-security-config>

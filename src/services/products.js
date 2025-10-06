@@ -19,10 +19,23 @@ async function request(path, { method = 'GET', params, data, token, headers } = 
   } catch (err) {
     const status = err?.response?.status;
     const data = err?.response?.data;
-    const message = data?.message || data?.error || err?.message || 'Request failed';
+    const rawResponse = err?.request?._response;
+    let parsedBody = data;
+    if (!parsedBody && typeof rawResponse === 'string' && rawResponse.trim().length) {
+      try {
+        parsedBody = JSON.parse(rawResponse);
+      } catch (_) {
+        parsedBody = rawResponse;
+      }
+    }
+    const message = parsedBody?.message
+      || parsedBody?.error
+      || (typeof rawResponse === 'string' && rawResponse.trim().length ? rawResponse : null)
+      || err?.message
+      || 'Request failed';
     const e = new Error(message);
-    e.status = status;
-    e.data = data;
+    e.status = typeof status === 'number' ? status : null;
+    e.data = parsedBody != null ? parsedBody : data;
     throw e;
   }
 }
@@ -224,11 +237,71 @@ export async function calculateProductTaxes({ amount } = {}, token) {
 }
 
 // Create Product + Tournament per backend spec
+function isNetworkFailure(error) {
+  const msg = error?.message || '';
+  return /network\s+error/i.test(msg) || /network request failed/i.test(msg);
+}
+
+async function postProductWithFetch(body, token) {
+  const url = `${API_BASE}/products`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  let json = null;
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch (_) {
+      json = null;
+    }
+  }
+
+  if (!res.ok) {
+    const message = json?.message || json?.error || text || 'Request failed';
+    const error = new Error(message);
+    error.status = res.status;
+    error.data = json || text;
+    throw error;
+  }
+
+  return json;
+}
+
 export async function createProductWithTournament(body, token) {
   if (!token) throw new Error('Unauthorized');
   if (!body || typeof body !== 'object') throw new Error('Invalid payload');
-  const data = await request('/products', { method: 'POST', data: body, token });
-  return data;
+  try {
+    const data = await request('/products', {
+      method: 'POST',
+      data: body,
+      token,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+    return data;
+  } catch (err) {
+    if (isNetworkFailure(err)) {
+      try {
+        return await postProductWithFetch(body, token);
+      } catch (fallbackError) {
+        if (!fallbackError?.status) {
+          fallbackError.status = err?.status || null;
+        }
+        throw fallbackError;
+      }
+    }
+    throw err;
+  }
 }
 
 // Auth: Get my products/listings for the authenticated seller

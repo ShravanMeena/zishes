@@ -11,6 +11,7 @@ import products from '../../services/products';
 import { mapProductToCard } from '../../utils/productMapper';
 import MyListingsSkeleton from '../../components/skeletons/MyListingsSkeleton';
 import AppModal from '../../components/common/AppModal';
+import { safeProgress, getEarlyTerminationContext, canShowEarlyTermination } from '../../utils/earlyTermination';
 
 const STALE_REFRESH_WINDOW_MS = 2 * 60 * 1000; // only refresh automatically when data is older than this
 
@@ -235,15 +236,21 @@ export default function MyListingsScreen({ navigation, route }) {
           ) : null}
 
           <View style={styles.metaRow}>
-            <Text style={styles.price}>{formatINR(item?.raw?.price)}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.price}>{formatListingPrice(item?.raw)}</Text>
+            <View style={styles.metaTime}>
               <Clock size={14} color={colors.textSecondary} />
-              <Text style={styles.time}>{'  '}{timeLeft(item)}</Text>
+              <Text style={styles.time}>{timeLeft(item)}</Text>
             </View>
           </View>
 
-          <Text style={styles.progressTxt}>{`${progressPct}% seats filled`}</Text>
+          <Text style={styles.progressTxt}>{`Game plays filled: ${progressPct}%`}</Text>
           <ProgressBar value={safeProgress(item)} />
+
+          {canTerminateEarly ? (
+            <View style={styles.earlyNotice}>
+              <Text style={styles.earlyNoticeText}>Early termination available</Text>
+            </View>
+          ) : null}
 
           <View style={styles.footerActionRow}>
             <View style={styles.footerActionInner}>
@@ -374,9 +381,19 @@ const styles = StyleSheet.create({
   card: { flexDirection: 'row', backgroundColor: '#2B2F39', borderRadius: 18, borderWidth: 1, borderColor: '#343B49', padding: 12 },
   thumb: { width: 80, height: 80, borderRadius: 10, marginRight: 12, backgroundColor: '#222' },
   title: { color: colors.white, fontWeight: '800', fontSize: 16, flexShrink: 1, paddingRight: 8 },
-  price: { color: '#27c07d', fontWeight: '800', marginTop: 2 },
-  time: { color: colors.textSecondary },
+  price: { color: '#27c07d', fontWeight: '800', marginTop: 2, marginRight: 12 },
+  metaTime: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginTop: 2 },
+  time: { color: colors.textSecondary, marginLeft: 6 },
   progressTxt: { color: colors.textSecondary, marginTop: 6, marginBottom: 6 },
+  earlyNotice: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(124, 58, 237, 0.16)',
+  },
+  earlyNoticeText: { color: colors.accent, fontWeight: '700', fontSize: 12 },
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
   chipTxt: { fontWeight: '700' },
   headerRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: 4 },
@@ -387,7 +404,7 @@ const styles = StyleSheet.create({
   shareButtonText: { color: colors.white, fontWeight: '700', fontSize: 12 },
   earlyButton: { backgroundColor: colors.error, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
   earlyButtonText: { color: colors.white, fontWeight: '800' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 8 },
   footerActionRow: { marginTop: 14 },
   footerActionInner: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
   footerActionButton: { marginRight: 8, marginTop: 10 },
@@ -532,70 +549,25 @@ function buildDraftFromProduct(product) {
   };
 }
 
-function safeProgress(item) {
-  const total = Number(item?.playsTotal || 0);
-  const done = Number(item?.playsCompleted || 0);
-  if (!total) return 0;
-  return Math.max(0, Math.min(1, done / total));
-}
+function formatListingPrice(product) {
+  if (!product) return '—';
+  const amount = Number(product?.price ?? product?.amount ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) return '—';
 
-function getEarlyTerminationContext(item) {
-  if (!item) return null;
-  const raw = item?.raw || {};
+  const currencyCode = (product?.currencyCode || product?.currency || product?.baseCurrency || '').toString().trim().toUpperCase();
+  const currencySymbol = product?.currencySymbol || product?.currency_symbol || product?.symbol || null;
 
-  const tournament = raw?.tournament || null;
-
-  // console.log(tournament,"tournamenttournamenttournamenttournament")
-
-  const status = String(tournament?.status || item?.tournamentStatus || '').toUpperCase();
-  const termsAck = !!raw?.terms?.enableEarlyTerminationAck;
-  const cfg = tournament?.earlyTermination || null;
-  const hasConfig = !!(cfg && typeof cfg === 'object');
-  const enabledFromConfig = hasConfig && ('enabled' in cfg) ? !!cfg.enabled : hasConfig;
-  const enabled = termsAck || enabledFromConfig;
-
-  const thresholdPct = (() => {
-    const pct = Number(cfg?.thresholdPct);
-    if (Number.isFinite(pct) && pct > 0) return pct;
-    return 80;
-  })();
-
-  let progressPct = Number(tournament?.progress);
-  if (Number.isFinite(progressPct)) {
-    if (progressPct <= 1) progressPct *= 100;
-  } else {
-    const players = Number(tournament?.numberOfPlayers ?? tournament?.playsCompleted ?? raw?.playsCompleted ?? item?.playsCompleted ?? 0);
-    const expected = Number(tournament?.expectedPlayers ?? tournament?.totalSeats ?? raw?.playsTotal ?? item?.playsTotal ?? 0);
-    if (expected > 0) {
-      progressPct = (players / expected) * 100;
-    } else {
-      progressPct = safeProgress(item) * 100;
-    }
+  const fallbackCurrency = currencyCode || 'INR';
+  try {
+    return amount.toLocaleString(undefined, {
+      style: 'currency',
+      currency: fallbackCurrency,
+      maximumFractionDigits: 2,
+    });
+  } catch (_) {
+    const prefix = currencySymbol || (fallbackCurrency === 'INR' ? '₹' : `${fallbackCurrency} `);
+    return `${prefix}${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
   }
-
-  return {
-    enabled,
-    thresholdPct,
-    progressPct,
-    status,
-  };
-}
-
-function canShowEarlyTermination(context) {
-  if (!context) return false;
-  const status = context.status;
-  if (status === 'OVER' || status === 'UNFILLED' || status === 'CANCELLED') return false;
-  const meetsThreshold = Number.isFinite(context.progressPct) && Number.isFinite(context.thresholdPct)
-    ? context.progressPct >= context.thresholdPct
-    : false;
-  if (!meetsThreshold && !context.enabled) return false;
-  return meetsThreshold || context.enabled;
-}
-
-function formatINR(n) {
-  const val = Number(n);
-  if (!isFinite(val)) return '—';
-  try { return val.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }); } catch { return `₹${val}`; }
 }
 
 function timeLeft(item) {

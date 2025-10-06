@@ -45,6 +45,10 @@ export async function uploadImage({ uri, name, type, token, onUploadProgress }) 
     method: 'POST',
     data: form,
     token,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      Accept: 'application/json',
+    },
     onUploadProgress,
   });
   return data; // { url, key, contentType, size, name }

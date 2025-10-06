@@ -6,6 +6,8 @@ import { colors } from '../../theme/colors';
 import { ChevronLeft, MessageSquare, Share2, MessageCircleQuestion } from 'lucide-react-native';
 import feedbackApi from '../../services/communityFeedback';
 import CongratsModal from '../../components/modals/CongratsModal';
+import FAQSheet from '../../components/panels/FAQSheet.js';
+import { getFAQs } from '../../services/faq';
 
 export default function CommunityFeedbackScreen({ navigation }) {
   const [msg, setMsg] = useState('');
@@ -13,6 +15,9 @@ export default function CommunityFeedbackScreen({ navigation }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [successOpen, setSuccessOpen] = useState(false);
+  const [faqVisible, setFaqVisible] = useState(false);
+  const [faqLoading, setFaqLoading] = useState(false);
+  const [faqs, setFaqs] = useState([]);
 
   const isValidEmail = (v) => /.+@.+\..+/.test(String(v || '').trim());
   const canSubmit = msg.trim().length > 0 && isValidEmail(email) && !submitting;
@@ -64,7 +69,7 @@ export default function CommunityFeedbackScreen({ navigation }) {
 
         <ActionRow icon={<MessageSquare size={18} color={colors.white} />} title="Join Our Forum" onPress={() => Linking.openURL('https://example.com/forum')} />
         <ActionRow icon={<Share2 size={18} color={colors.white} />} title="Follow on Social Media" onPress={() => Linking.openURL('https://example.com/social')} />
-        <ActionRow icon={<MessageCircleQuestion size={18} color={colors.white} />} title="Read FAQs" onPress={() => Linking.openURL('https://example.com/faq')} />
+        <ActionRow icon={<MessageCircleQuestion size={18} color={colors.white} />} title="Read FAQs" onPress={openFaqs} />
       </KeyboardAwareScrollView>
       <CongratsModal
         visible={successOpen}
@@ -74,6 +79,7 @@ export default function CommunityFeedbackScreen({ navigation }) {
         onPrimary={() => { setSuccessOpen(false); navigation.goBack(); }}
         onRequestClose={() => setSuccessOpen(false)}
       />
+      <FAQSheet visible={faqVisible} onClose={() => setFaqVisible(false)} loading={faqLoading} items={faqs} />
 
     </SafeAreaView>
   );
@@ -110,3 +116,16 @@ const styles = StyleSheet.create({
   rowTitle: { color: colors.white, fontWeight: '700' },
   errorTxt: { color: '#FF7A7A', marginTop: 8 },
 });
+  const openFaqs = async () => {
+    try {
+      setFaqVisible(true);
+      setFaqLoading(true);
+      const data = await getFAQs();
+      const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setFaqs(list);
+    } catch (err) {
+      setFaqs([{ _id: 'err', title: 'Unable to load FAQs', message: err?.message || 'Please try again later.' }]);
+    } finally {
+      setFaqLoading(false);
+    }
+  };

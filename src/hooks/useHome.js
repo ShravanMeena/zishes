@@ -24,7 +24,8 @@ export default function useHome() {
   const [apiParams, setApiParams] = useState({});
 
   const load = async (override) => {
-    const params = { page: 1, limit: 20, count: true, ...((override != null ? override : apiParams) || {}) };
+    const baseParams = { page: 1, limit: 20, count: true, tournamentStatus: 'OPEN' };
+    const params = { ...baseParams, ...((override != null ? override : apiParams) || {}) };
     try { console.log('[useHome] fetching products with params', params); } catch {}
     const data = await listProducts(params);
     const list = (data?.result || []).map((p) => {

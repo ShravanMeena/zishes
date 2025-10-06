@@ -4,6 +4,7 @@ import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/re
 import { navigate } from '../navigation/navigationRef';
 import store from '../store';
 import { fetchMyWallet } from '../store/wallet/walletSlice';
+import { logout } from '../store/auth/authSlice';
 import users from '../services/users';
 import { getToken } from '../services/tokenManager';
 
@@ -12,6 +13,13 @@ const CHANNEL_ID = 'zishes_general_high';
 
 let handlersInitialized = false;
 let pushEnabled = false;
+
+function handlePushUpdateError(error) {
+  const status = error?.status || error?.response?.status;
+  if (status === 401) {
+    try { store.dispatch(logout()); } catch {}
+  }
+}
 
 // Initialize listeners and initial-notification checks. Safe to call once at app start.
 export async function setupNotificationHandlers() {
@@ -82,6 +90,7 @@ export async function setupNotificationHandlers() {
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn('[Push] onTokenRefresh update failed:', e?.message || e);
+        handlePushUpdateError(e);
       }
     });
   } catch {}
@@ -119,6 +128,7 @@ export async function enablePushAfterLogin() {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[Push] Failed to update FCM token to backend:', e?.message || e);
+      handlePushUpdateError(e);
     }
     // eslint-disable-next-line no-console
     console.log('FCM token:', token);
@@ -198,10 +208,10 @@ function maybeHandleAppEvent(data) {
 
 function handleNotificationOpen(data) {
   try {
-    const pretty = JSON.stringify(data, null, 2);
-    Alert.alert('Notification Clicked', pretty, [
-      { text: 'OK', onPress: () => routeFromData(data) },
-    ]);
+    // const pretty = JSON.stringify(data, null, 2);
+    // Alert.alert('Notification Clicked', pretty, [
+    //   { text: 'OK', onPress: () => routeFromData(data) },
+    // ]);
   } catch {
     routeFromData(data);
   }

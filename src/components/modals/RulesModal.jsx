@@ -66,6 +66,7 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
     return item?.game?.instructions || item?.game?.description || item?.description || 'Instructions will appear here once provided.';
   }, [item?.game?.instructions, item?.game?.description, item?.description]);
 
+  
   const entryFee = item?.tournament?.entryFee;
   const entryFeeText = typeof entryFee === 'number' && !Number.isNaN(entryFee)
     ? `Coins are deducted from your Zish Wallet when you join (Entry Fee: ${entryFee})`
@@ -154,9 +155,9 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
         </LinearGradient>
       </TouchableOpacity>
 
-      <View style={styles.instructionsCard}>
+      {/* <View style={styles.instructionsCard}>
         <Text style={styles.instructionsText}>{instructions}</Text>
-      </View>
+      </View> */}
 
       <View style={styles.rulesCard}>
         <Text style={styles.rulesHeading}>Tournament Rules</Text>

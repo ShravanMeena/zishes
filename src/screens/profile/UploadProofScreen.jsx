@@ -12,6 +12,14 @@ import DatePickerModal, { formatDateYYYYMMDD } from '../../components/ui/DatePic
 import { uploadImage } from '../../services/uploads';
 import fulfillments from '../../services/fulfillments';
 import CongratsModal from '../../components/modals/CongratsModal';
+import {
+  createEmptyPickupAddresses as buildEmptyPickupAddresses,
+  normalizePickupAddressesForState,
+  normalizePickupAddressesForSubmit,
+  hasAddress,
+  hasPickupAddresses,
+  resolveProductCountry,
+} from '../../utils/pickupAddresses';
 
 export default function UploadProofScreen({ route, navigation }) {
   const { item } = route.params || {};
@@ -40,6 +48,8 @@ export default function UploadProofScreen({ route, navigation }) {
   const [deliveryMethod, setDeliveryMethod] = useState('IN_PERSON'); // IN_PERSON | COURIER | DIGITAL
   const [extraPhotos, setExtraPhotos] = useState([]); // additional seller photos
   const [pickingGeneral, setPickingGeneral] = useState(false);
+  const [pickupAddresses, setPickupAddresses] = useState(() => buildEmptyPickupAddresses());
+  const [productCountry, setProductCountry] = useState('');
 
   const openPicker = (setter) => { setWhichSetter(() => setter); setPickerOpen(true); };
   const pickFromGallery = async () => {
@@ -72,29 +82,26 @@ export default function UploadProofScreen({ route, navigation }) {
     const load = async () => {
       try {
         setLoading(true);
-        const productId = getProductId();
-        if (!productId) return;
-        const f = await fulfillments.getByProduct(productId);
-        setFulfillment(f);
-        if (f?.deliveryMethod) setDeliveryMethod(String(f.deliveryMethod));
-        // Prefill commonly used fields if present
-        if (f?.courierService) setCourier(f.courierService);
-        if (f?.trackingNumber) setAwb(f.trackingNumber);
-        if (f?.sellerNotes) setComment(f.sellerNotes);
-        const delivered = f?.dateOfDelivery || f?.deliveredAt;
-        if (delivered) {
-          try { setDate(formatDateYYYYMMDD(new Date(delivered))); } catch {}
-        }
-        // Preselect existing photos into extraPhotos as read-only previews
-        const existing = (f?.sellerMedia?.photos || f?.pickupMedia?.photos || [])
-          .filter(Boolean)
-          .map((url) => ({ uri: url, existing: true }));
-        if (existing.length) setExtraPhotos(existing);
+        const f = await reloadFulfillment(
+          setFulfillment,
+          setDeliveryMethod,
+          setCourier,
+          setAwb,
+          setComment,
+          setDate,
+          setExtraPhotos,
+          setPickupAddresses,
+          setProductCountry,
+          getProductId,
+          item
+        );
+        if (!f) return;
         // Enter view mode if we already have proof data
         const hasProof = (
           (f?.sellerNotes) || (f?.trackingNumber) || (f?.courierService) || (f?.dateOfDelivery || f?.deliveredAt) ||
           (f?.sellerMedia && ((f.sellerMedia.photos && f.sellerMedia.photos.length) || (f.sellerMedia.videos && f.sellerMedia.videos.length))) ||
-          (Array.isArray(f?.pickupMedia) && f.pickupMedia.length)
+          (Array.isArray(f?.pickupMedia) && f.pickupMedia.length) ||
+          hasPickupAddresses(f?.pickupAddresses)
         );
         if (hasProof) setMode('view');
       } catch (e) {
@@ -109,27 +116,32 @@ export default function UploadProofScreen({ route, navigation }) {
     setError(null);
     const productId = getProductId();
     if (!productId) { setError('Missing product id'); return; }
+    const isCourier = String(deliveryMethod).toUpperCase() === 'COURIER';
+    if (isCourier && !courier?.trim()) { setError('Courier service is required for courier deliveries.'); return; }
+    if (isCourier && !awb?.trim()) { setError('Tracking number is required for courier deliveries.'); return; }
     try {
-      // Upload available images with progress
-      setStage('uploading');
-      setUploadPct(0);
+      // Upload available images with progress (only new ones)
       const photos = [];
-      const toUpload = [receipt, handover, ...extraPhotos].filter(Boolean);
-      for (let i = 0; i < toUpload.length; i++) {
-        const file = toUpload[i];
-        try {
-          const res = await uploadImage({ uri: file.uri, onUploadProgress: (evt) => {
-            const { loaded, total } = evt || {};
-            const frac = total ? loaded / total : 0.5;
-            const overall = ((i + frac) / Math.max(1, toUpload.length)) * 100;
-            setUploadPct(Math.max(0, Math.min(100, Math.round(overall))));
-          }});
-          if (res?.url) photos.push(res.url);
-        } catch (e) {
-          throw new Error(e?.message || 'Failed to upload image');
+      const toUpload = [receipt, handover, ...extraPhotos.filter((img) => !img?.existing)].filter(Boolean);
+      if (toUpload.length) {
+        setStage('uploading');
+        setUploadPct(0);
+        for (let i = 0; i < toUpload.length; i++) {
+          const file = toUpload[i];
+          try {
+            const res = await uploadImage({ uri: file.uri, onUploadProgress: (evt) => {
+              const { loaded, total } = evt || {};
+              const frac = total ? loaded / total : 0.5;
+              const overall = ((i + frac) / Math.max(1, toUpload.length)) * 100;
+              setUploadPct(Math.max(0, Math.min(100, Math.round(overall))));
+            }});
+            if (res?.url) photos.push(res.url);
+          } catch (e) {
+            throw new Error(e?.message || 'Failed to upload image');
+          }
         }
+        setUploadPct(100);
       }
-      setUploadPct(100);
       setStage('submitting');
       // Build payload
       const payload = {};
@@ -140,19 +152,31 @@ export default function UploadProofScreen({ route, navigation }) {
         if (!isNaN(d.getTime())) payload.dateOfDelivery = d.toISOString();
       }
       // Only include courier fields when method is COURIER
-      const isCourier = String(deliveryMethod).toUpperCase() === 'COURIER';
       if (isCourier) {
         if (courier) payload.courierService = courier;
         if (awb?.trim()) payload.trackingNumber = awb.trim();
       }
+      const normalizedPickup = normalizePickupAddressesForSubmit(pickupAddresses, productCountry);
+      if (normalizedPickup) payload.pickupAddresses = normalizedPickup;
 
       await fulfillments.submitSellerProof(productId, payload);
       setSuccessOpen(true);
       // Refresh fulfillment and enter view mode
       try {
-        const f = await fulfillments.getByProduct(productId);
-        setFulfillment(f);
-        setMode('view');
+        const f = await reloadFulfillment(
+          setFulfillment,
+          setDeliveryMethod,
+          setCourier,
+          setAwb,
+          setComment,
+          setDate,
+          setExtraPhotos,
+          setPickupAddresses,
+          setProductCountry,
+          getProductId,
+          item
+        );
+        if (f) setMode('view');
       } catch {}
     } catch (e) {
       setError(e?.message || 'Failed to submit proof');
@@ -178,7 +202,7 @@ export default function UploadProofScreen({ route, navigation }) {
         keyboardShouldPersistTaps="handled"
         enableOnAndroid
         extraScrollHeight={20}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); try { await reloadFulfillment(setFulfillment, setDeliveryMethod, setCourier, setAwb, setComment, setDate, setExtraPhotos, getProductId); } finally { setRefreshing(false); } }} tintColor={colors.white} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); try { await reloadFulfillment(setFulfillment, setDeliveryMethod, setCourier, setAwb, setComment, setDate, setExtraPhotos, setPickupAddresses, setProductCountry, getProductId, item); } finally { setRefreshing(false); } }} tintColor={colors.white} />}
       >
         {/* Content renders below; full-screen loader overlays while loading */}
         {/* Item banner */}
@@ -222,6 +246,25 @@ export default function UploadProofScreen({ route, navigation }) {
                     </TouchableOpacity>
                   ))}
                 </View>
+              </View>
+            ) : null}
+            {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.sectionTitle}>Pickup Addresses</Text>
+                {hasAddress(fulfillment?.pickupAddresses?.seller) ? (
+                  <AddressSummary
+                    label="Seller"
+                    value={fulfillment?.pickupAddresses?.seller}
+                    productCountry={productCountry || fulfillment?.product?.country}
+                  />
+                ) : null}
+                {hasAddress(fulfillment?.pickupAddresses?.receiver) ? (
+                  <AddressSummary
+                    label="Receiver"
+                    value={fulfillment?.pickupAddresses?.receiver}
+                    productCountry={productCountry || fulfillment?.product?.country}
+                  />
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -292,6 +335,28 @@ export default function UploadProofScreen({ route, navigation }) {
               </View>
             ) : null}
           </>
+        ) : null}
+
+        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+          <View style={[styles.card, { marginTop: 12 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.sectionTitle}>Pickup Addresses (optional)</Text>
+              {productCountry ? <Text style={styles.addressHint}>Country locked to {productCountry}</Text> : null}
+            </View>
+            <AddressForm
+              label="Seller pickup address"
+              value={pickupAddresses.seller}
+              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, seller: { ...prev.seller, [field]: value } }))}
+              productCountry={productCountry}
+            />
+            <View style={styles.addressDivider} />
+            <AddressForm
+              label="Receiver delivery address"
+              value={pickupAddresses.receiver}
+              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, receiver: { ...prev.receiver, [field]: value } }))}
+              productCountry={productCountry}
+            />
+          </View>
         ) : null}
 
         {(mode === 'edit' && stage === 'idle' && !loading) ? (<View style={[styles.card, { marginTop: 16 }]}> 
@@ -423,6 +488,17 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#1E2128', borderWidth: 1, borderColor: '#3A4051', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: colors.white },
   select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selTxt: { color: colors.white },
+  addressHint: { color: colors.textSecondary, fontSize: 12 },
+  addressDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#343B49', marginVertical: 14 },
+  addressLabel: { color: colors.white, fontWeight: '700', marginBottom: 4 },
+  addressField: { marginTop: 10 },
+  addressRow: { flexDirection: 'row', marginTop: 10 },
+  addressHalf: { flex: 1 },
+  addressHalfLeft: { marginRight: 10 },
+  addressCountry: { color: colors.textSecondary, fontSize: 12, marginTop: 8 },
+  addressSummary: { marginTop: 8, backgroundColor: '#232630', borderRadius: 10, borderWidth: 1, borderColor: '#343B49', padding: 10 },
+  addressSummaryLabel: { color: colors.white, fontWeight: '800' },
+  addressSummaryText: { color: colors.textSecondary, marginTop: 4 },
   uploadRow: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#3A4051', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   uploadTxt: { color: colors.white, fontWeight: '800' },
   thumbWrap: { width: 120, height: 120, borderRadius: 12, overflow: 'hidden', marginTop: 10, backgroundColor: '#1E2128', position: 'relative' },
@@ -480,21 +556,125 @@ function DeliveryMessage({ method, courier }) {
   return <Text style={{ color: colors.textSecondary, marginTop: 8 }}>{text}</Text>;
 }
 
-async function reloadFulfillment(setFulfillment, setDeliveryMethod, setCourier, setAwb, setComment, setDate, setExtraPhotos, getProductId) {
+function AddressForm({ label, value, onChange, productCountry }) {
+  const v = value || {};
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={styles.addressLabel}>{label}</Text>
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Address line 1"
+        placeholderTextColor={colors.textSecondary}
+        value={v.line1 || ''}
+        onChangeText={(text) => onChange('line1', text)}
+      />
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Address line 2 (optional)"
+        placeholderTextColor={colors.textSecondary}
+        value={v.line2 || ''}
+        onChangeText={(text) => onChange('line2', text)}
+      />
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Landmark (optional)"
+        placeholderTextColor={colors.textSecondary}
+        value={v.landmark || ''}
+        onChangeText={(text) => onChange('landmark', text)}
+      />
+      <View style={styles.addressRow}>
+        <TextInput
+          style={[styles.input, styles.addressField, styles.addressHalf, styles.addressHalfLeft]}
+          placeholder="City"
+          placeholderTextColor={colors.textSecondary}
+          value={v.city || ''}
+          onChangeText={(text) => onChange('city', text)}
+        />
+        <TextInput
+          style={[styles.input, styles.addressField, styles.addressHalf]}
+          placeholder="State"
+          placeholderTextColor={colors.textSecondary}
+          value={v.state || ''}
+          onChangeText={(text) => onChange('state', text)}
+        />
+      </View>
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder="Pincode / ZIP"
+        placeholderTextColor={colors.textSecondary}
+        value={v.pincode || ''}
+        keyboardType="default"
+        onChangeText={(text) => onChange('pincode', text)}
+      />
+      <Text style={styles.addressCountry}>Country: {productCountry || v.country || '—'} (locked to listing)</Text>
+    </View>
+  );
+}
+
+function AddressSummary({ label, value, productCountry }) {
+  const v = value || {};
+  const lines = [];
+  if (v.line1) lines.push(v.line1);
+  if (v.line2) lines.push(v.line2);
+  if (v.landmark) lines.push(v.landmark);
+  const cityState = [v.city, v.state].filter(Boolean).join(', ');
+  if (cityState) lines.push(cityState);
+  if (v.pincode) lines.push(`Pincode: ${v.pincode}`);
+  const country = v.country || productCountry;
+  if (country) lines.push(`Country: ${country}`);
+
+  return (
+    <View style={styles.addressSummary}>
+      <Text style={styles.addressSummaryLabel}>{label}</Text>
+      {lines.length ? lines.map((line, idx) => (
+        <Text key={`${label}-${idx}`} style={styles.addressSummaryText}>{line}</Text>
+      )) : (
+        <Text style={styles.addressSummaryText}>—</Text>
+      )}
+    </View>
+  );
+}
+
+async function reloadFulfillment(
+  setFulfillment,
+  setDeliveryMethod,
+  setCourier,
+  setAwb,
+  setComment,
+  setDate,
+  setExtraPhotos,
+  setPickupAddresses,
+  setProductCountry,
+  getProductId,
+  item
+) {
   const productId = getProductId();
-  if (!productId) return;
+  if (!productId) return null;
   const f = await fulfillments.getByProduct(productId);
   setFulfillment(f);
-  if (f?.deliveryMethod) setDeliveryMethod(String(f.deliveryMethod));
-  if (f?.courierService) setCourier(f.courierService);
-  if (f?.trackingNumber) setAwb(f.trackingNumber);
-  if (f?.sellerNotes) setComment(f.sellerNotes);
+  if (setDeliveryMethod) setDeliveryMethod(f?.deliveryMethod ? String(f.deliveryMethod) : 'IN_PERSON');
+  if (setCourier) setCourier(f?.courierService || '');
+  if (setAwb) setAwb(f?.trackingNumber || '');
+  if (setComment) setComment(f?.sellerNotes || '');
   const delivered = f?.dateOfDelivery || f?.deliveredAt;
-  if (delivered) {
-    try { setDate(formatDateYYYYMMDD(new Date(delivered))); } catch {}
+  if (setDate) {
+    if (delivered) {
+      try { setDate(formatDateYYYYMMDD(new Date(delivered))); } catch { setDate(''); }
+    } else {
+      setDate('');
+    }
   }
   const existing = (f?.sellerMedia?.photos || f?.pickupMedia?.photos || [])
     .filter(Boolean)
     .map((url) => ({ uri: url, existing: true }));
-  setExtraPhotos(existing);
+  if (setExtraPhotos) setExtraPhotos(existing);
+
+  const productCountry = resolveProductCountry(f, item);
+  if (setProductCountry) setProductCountry(productCountry || '');
+  if (setPickupAddresses) {
+    const normalized = normalizePickupAddressesForState(f?.pickupAddresses, productCountry);
+    setPickupAddresses(normalized);
+  }
+
+  return f;
 }

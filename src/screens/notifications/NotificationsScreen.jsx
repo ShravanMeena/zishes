@@ -137,7 +137,65 @@ export default function NotificationsScreen({ navigation }) {
     );
   };
 
-  const showEmpty = !loading && items.length === 0 && !error;
+  const renderEmptyState = useCallback(() => {
+    if (loading) {
+      return (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={styles.loadingText}>Loading notifications…</Text>
+        </View>
+      );
+    }
+    if (error) {
+      return (
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={fetchNotifications}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return (
+      <EmptyState
+        title="No notifications yet"
+        description="You're all caught up. We'll let you know when something new arrives."
+      />
+    );
+  }, [loading, error, fetchNotifications]);
+
+  const listHeader = useMemo(() => (
+    <View style={[styles.listHeader, hasUnread && statusFilter !== 'read' ? styles.listHeaderSpaced : null]}>
+      <View style={styles.filterRow}>
+        {['all', 'unread', 'read'].map((filter) => {
+          const active = statusFilter === filter;
+          return (
+            <TouchableOpacity
+              key={filter}
+              style={[styles.filterChip, active && styles.filterChipActive]}
+              onPress={() => setStatusFilter(filter)}
+              disabled={statusFilter === filter}
+            >
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                {filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {hasUnread && statusFilter !== 'read' ? (
+        <TouchableOpacity style={styles.markAllBtn} onPress={markAllRead} disabled={markingAll}>
+          <Text style={styles.markAllText}>{markingAll ? 'Marking…' : 'Mark all as read'}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  ), [statusFilter, hasUnread, markingAll, markAllRead]);
+
+  const contentContainerStyle = useMemo(() => ({
+    padding: 12,
+    paddingBottom: 24,
+    flexGrow: items.length === 0 ? 1 : 0,
+  }), [items.length]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
@@ -166,66 +224,23 @@ export default function NotificationsScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {loading && items.length === 0 ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator color={colors.primary} />
-          <Text style={styles.loadingText}>Loading notifications…</Text>
-        </View>
-      ) : error && items.length === 0 ? (
-        <View style={styles.errorWrap}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={fetchNotifications}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : showEmpty ? (
-        <EmptyState
-          title="No notifications yet"
-          description="You're all caught up. We'll let you know when something new arrives."
-        />
-      ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(item) => item?._id || item?.id || Math.random().toString(36)}
-          renderItem={renderItem}
-          contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
-          ListHeaderComponent={(
-            <View style={{ marginBottom: hasUnread && statusFilter !== 'read' ? 12 : 0 }}>
-              <View style={styles.filterRow}>
-                {['all', 'unread', 'read'].map((filter) => {
-                  const active = statusFilter === filter;
-                  return (
-                    <TouchableOpacity
-                      key={filter}
-                      style={[styles.filterChip, active && styles.filterChipActive]}
-                      onPress={() => setStatusFilter(filter)}
-                      disabled={statusFilter === filter}
-                    >
-                      <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                        {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              {/* {hasUnread && statusFilter !== 'read' ? (
-                <TouchableOpacity style={styles.markAllBtn} onPress={markAllRead} disabled={markingAll}>
-                  <Text style={styles.markAllText}>{markingAll ? 'Marking…' : 'Mark all as read'}</Text>
-                </TouchableOpacity>
-              ) : null} */}
-            </View>
-          )}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-          refreshControl={(
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-          )}
-          ListFooterComponent={loading ? (
-            <View style={styles.footerLoading}>
-              <ActivityIndicator color={colors.primary} />
-            </View>
-          ) : null}
-        />
-      )}
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item?._id || item?.id || Math.random().toString(36)}
+        renderItem={renderItem}
+        contentContainerStyle={contentContainerStyle}
+        ListHeaderComponent={listHeader}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        refreshControl={(
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        )}
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={loading && items.length > 0 ? (
+          <View style={styles.footerLoading}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : null}
+      />
     </SafeAreaView>
   );
 }
@@ -285,6 +300,8 @@ const styles = StyleSheet.create({
   meta: { color: '#9CA3AF', fontSize: 12, fontWeight: '600' },
   badge: { color: colors.white, backgroundColor: '#3A4051', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, fontWeight: '700', fontSize: 12, marginLeft: 12 },
   footerLoading: { paddingVertical: 16 },
+  listHeader: { marginBottom: 0 },
+  listHeaderSpaced: { marginBottom: 12 },
   filterRow: { flexDirection: 'row', marginBottom: 12, gap: 8 },
   filterChip: { flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#343B49', backgroundColor: '#2B2F39' },
   filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },

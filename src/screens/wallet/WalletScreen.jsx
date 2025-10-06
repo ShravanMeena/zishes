@@ -13,16 +13,34 @@ import plansService from '../../services/plans';
 import ledgerService from '../../services/ledger';
 import productsService from '../../services/products';
 import paymentsService from '../../services/payments';
+import { getPlanGateway, isGatewaySupportedForCountry, isIndiaCountry } from '../../utils/payments';
 import RazorpayCheckout from 'react-native-razorpay';
-import PaymentsRegionModal from '../../components/modals/PaymentsRegionModal';
 import AppModal from '../../components/common/AppModal';
 import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
 import { fetchMyWallet } from '../../store/wallet/walletSlice';
+import { useStripe } from '@stripe/stripe-react-native';
+
+const planSortAsc = (a, b) => {
+  const coinsA = Number(a?.coins ?? 0);
+  const coinsB = Number(b?.coins ?? 0);
+  if (Number.isFinite(coinsA) && Number.isFinite(coinsB) && coinsA !== coinsB) {
+    return coinsA - coinsB;
+  }
+  const amountA = Number(a?.amount ?? 0);
+  const amountB = Number(b?.amount ?? 0);
+  return amountA - amountB;
+};
 
 export default function WalletScreen({ navigation }) {
   const dispatch = useDispatch();
   const token = useSelector((s) => s.auth.token);
-  const country = useSelector((s) => s.auth.user?.address?.country);
+  const user = useSelector((s) => s.auth.user);
+  const userId = useMemo(() => user?._id || user?.id || user?.userId || null, [user]);
+  const authCountry = useSelector((s) => s.auth?.user?.address?.country || s.auth?.user?.country || null);
+  const appCountry = useSelector((s) => s.app?.country || null);
+  const country = useMemo(() => authCountry || appCountry || null, [authCountry, appCountry]);
+  const isIndia = useMemo(() => isIndiaCountry(country), [country]);
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [wallet, setWallet] = useState({ availableZishCoins: 0, withdrawalBalance: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,7 +55,6 @@ export default function WalletScreen({ navigation }) {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState(null);
   const [processingPlanId, setProcessingPlanId] = useState(null);
-  const [regionModal, setRegionModal] = useState(false);
   const [payProcessing, setPayProcessing] = useState(false);
   const [payError, setPayError] = useState(null);
   const [lastPlan, setLastPlan] = useState(null);
@@ -45,6 +62,9 @@ export default function WalletScreen({ navigation }) {
   const [withdrawals, setWithdrawals] = useState([]);
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
   const [withdrawalsError, setWithdrawalsError] = useState(null);
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState('');
 
   const fetchWallet = useCallback(async () => {
     if (!token) {
@@ -87,13 +107,41 @@ export default function WalletScreen({ navigation }) {
     fetchPlans();
   }, [fetchPlans]);
 
+  const fetchSubscription = useCallback(async () => {
+    if (!token || !isIndia) {
+      setSubscription(null);
+      setSubscriptionError('');
+      return;
+    }
+    try {
+      setSubscriptionLoading(true);
+      setSubscriptionError('');
+      const data = await paymentsService.getRazorpayActiveSubscription();
+      setSubscription(data?.subscription || null);
+    } catch (err) {
+      if (err?.status === 404) {
+        setSubscription(null);
+        setSubscriptionError('');
+      } else {
+        setSubscriptionError(err?.message || 'Unable to load membership details.');
+      }
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }, [token, isIndia]);
+
+  useEffect(() => {
+    fetchSubscription();
+  }, [fetchSubscription]);
+
   useFocusEffect(
     useCallback(() => {
       fetchWallet();
       fetchPlans();
       fetchLedger();
       fetchWithdrawals();
-    }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals])
+      fetchSubscription();
+    }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals, fetchSubscription])
   );
 
   const fetchLedger = useCallback(async () => {
@@ -164,18 +212,31 @@ export default function WalletScreen({ navigation }) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.allSettled([fetchWallet(), fetchPlans(), fetchLedger(), fetchWithdrawals()]);
+      await Promise.allSettled([
+        fetchWallet(),
+        fetchPlans(),
+        fetchLedger(),
+        fetchWithdrawals(),
+        fetchSubscription(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals]);
-
-  const isIndia = useMemo(() => String(country || '').trim().toLowerCase() === 'india', [country]);
+  }, [fetchWallet, fetchPlans, fetchLedger, fetchWithdrawals, fetchSubscription]);
 
   const openMembershipTier = useCallback(() => {
     navigation.navigate('MembershipTier', { origin: 'Wallet' });
   }, [navigation]);
-  const topupPlans = useMemo(() => (plans || []).filter(p => p?.planType === 'TOPUP'), [plans]);
+  const topupPlans = useMemo(
+    () => (plans || [])
+      .filter((p) => {
+        if (p?.planType !== 'TOPUP') return false;
+        const gateway = getPlanGateway(p);
+        return isGatewaySupportedForCountry(gateway, country);
+      })
+      .sort(planSortAsc),
+    [plans, country]
+  );
   const VISIBLE_WITHDRAW_COUNT = 6;
   const limitedWithdrawals = useMemo(() => (withdrawals || []).slice(0, VISIBLE_WITHDRAW_COUNT), [withdrawals]);
   const hasMoreWithdrawals = useMemo(() => (withdrawals || []).length > VISIBLE_WITHDRAW_COUNT, [withdrawals]);
@@ -222,73 +283,114 @@ export default function WalletScreen({ navigation }) {
 
   const startTopup = useCallback(async (plan) => {
     try {
+      if (!plan?._id) throw new Error('Invalid plan');
       setLastPlan(plan);
-      if (!country || String(country).toLowerCase() !== 'india') {
-        setRegionModal(true);
+
+      const gateway = getPlanGateway(plan);
+      if (!isGatewaySupportedForCountry(gateway, country)) {
+        Alert.alert('Plan not available', 'This pack is not available in your region yet.');
         return;
       }
-      if (!plan?._id) throw new Error('Invalid plan');
+
       setProcessingPlanId(plan._id);
       setPayProcessing(true);
-      try { console.log('[RZP][TOPUP] Selected plan:', JSON.stringify({ id: plan._id, coins: plan.coins, amount: plan.amount, currency: plan.currencyCode })); } catch {}
-      // Fetch public key and create an order
-      const keyRes = await paymentsService.getRazorpayKey();
-      const { keyId } = keyRes || {};
-      try { console.log('[RZP][TOPUP] Public key fetched:', keyRes && keyRes.keyId ? `${String(keyRes.keyId).slice(0,6)}…` : null); } catch {}
-      if (!keyId) throw new Error('Missing Razorpay key');
-      const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
-      const { order } = orderRes || {};
-      try { console.log('[RZP][TOPUP] Order created:', JSON.stringify({ id: order?.id, amount: order?.amount, currency: order?.currency })); } catch {}
-      if (!order?.id) throw new Error('Failed to create order');
 
-      const options = {
-        key: keyId,
-        name: 'Zishes',
-        description: 'Coins Topup',
-        order_id: order.id,
-        amount: order.amount,
-        currency: order.currency || plan.currencyCode || 'INR',
-        prefill: {
-          // email: user?.email,
-          // contact: user?.phone,
-        },
-        theme: { color: '#6C7BFF' },
-        retry: { enabled: true, max_count: 2 },
-        external: { wallets: ['paytm', 'phonepe'] },
-        notes: { planId: plan._id },
-      };
+      if (gateway === 'razorpay') {
+        try { console.log('[TOPUP] Using Razorpay for plan:', JSON.stringify({ id: plan._id, gateway })); } catch {}
+        const keyRes = await paymentsService.getRazorpayKey();
+        const { keyId } = keyRes || {};
+        try { console.log('[RZP][TOPUP] Public key fetched:', keyId ? `${String(keyId).slice(0, 6)}…` : null); } catch {}
+        if (!keyId) throw new Error('Missing Razorpay key');
 
-      try {
-        setPayProcessing(false);
-        await RazorpayCheckout.open(options);
-        // Backend credits on webhook; refresh wallet optimistically
-        try { dispatch(fetchMyWallet()); } catch {}
-        try { await fetchWallet(); } catch {}
+        const orderRes = await paymentsService.createRazorpayTopup({ planId: plan._id });
+        const { order } = orderRes || {};
+        try { console.log('[RZP][TOPUP] Order created:', JSON.stringify({ id: order?.id, amount: order?.amount, currency: order?.currency })); } catch {}
+        if (!order?.id) throw new Error('Failed to create order');
+
+        const options = {
+          key: keyId,
+          name: 'Zishes',
+          description: 'Coins Topup',
+          order_id: order.id,
+          amount: order.amount,
+          currency: order.currency || plan.currencyCode || 'INR',
+          prefill: {},
+          theme: { color: '#6C7BFF' },
+          retry: { enabled: true, max_count: 2 },
+          external: { wallets: ['paytm', 'phonepe'] },
+          notes: {
+            planId: plan._id,
+            userId: userId || 'unknown',
+            app: 'zishes',
+          },
+        };
+
         try {
-          const coins = Number(plan?.coins || 0).toLocaleString();
-          setCongratsTitle('Purchase Successful');
-          setCongratsMsg(coins !== '0' ? `Your ${coins} ZishCoins are on the way!` : 'Coins added successfully.');
-          setCongratsOpen(true);
-        } catch {}
-      } catch (err) {
-        const rawMessage = err?.description || err?.message || '';
-        const desc = String(rawMessage).toLowerCase();
-        console.warn('[RZP][TOPUP] error:', JSON.stringify(err));
-        if (desc.includes('cancel')) return;
-        if (err?.code === 'RAZORPAY_SDK_MISSING') {
-          Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
-        } else {
-          setPayError('We could not complete your payment. Please retry.');
+          setPayProcessing(false);
+          await RazorpayCheckout.open(options);
+          try { dispatch(fetchMyWallet()); } catch {}
+          try { await fetchWallet(); } catch {}
+          try {
+            const coins = Number(plan?.coins || 0).toLocaleString();
+            setCongratsTitle('Purchase Successful');
+            setCongratsMsg(coins !== '0' ? `Your ${coins} ZishCoins are on the way!` : 'Coins added successfully.');
+            setCongratsOpen(true);
+          } catch {}
+        } catch (err) {
+          const rawMessage = err?.description || err?.message || '';
+          const desc = String(rawMessage).toLowerCase();
+          console.warn('[RZP][TOPUP] error:', JSON.stringify(err));
+          if (desc.includes('cancel')) return;
+          if (err?.code === 'RAZORPAY_SDK_MISSING') {
+            Alert.alert('Razorpay not installed', 'Please add react-native-razorpay to run checkout, or try again later.');
+          } else {
+            setPayError('We could not complete your payment. Please retry.');
+          }
         }
+        return;
       }
+
+      try { console.log('[TOPUP] Using Stripe for plan:', JSON.stringify({ id: plan._id, gateway })); } catch {}
+      const intentRes = await paymentsService.createStripeTopupIntent({ planId: plan._id });
+      const clientSecret = intentRes?.clientSecret || intentRes?.client_secret;
+      if (!clientSecret) throw new Error('Unable to start card payment.');
+
+      const defaultBillingDetails = {};
+      if (user?.name) defaultBillingDetails.name = user.name;
+      if (user?.email) defaultBillingDetails.email = user.email;
+
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: 'Zishes',
+        paymentIntentClientSecret: clientSecret,
+        defaultBillingDetails: Object.keys(defaultBillingDetails).length ? defaultBillingDetails : undefined,
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initError) throw new Error(initError.message || 'Failed to initialize payment sheet');
+
+      setPayProcessing(false);
+
+      const { error: presentError } = await presentPaymentSheet();
+      if (presentError) {
+        if (presentError.code === 'Canceled') return;
+        throw new Error(presentError.message || 'Payment was not completed.');
+      }
+
+      try { dispatch(fetchMyWallet()); } catch {}
+      try { await fetchWallet(); } catch {}
+
+      const coins = Number(plan?.coins || 0).toLocaleString();
+      setCongratsTitle('Purchase Successful');
+      setCongratsMsg(coins !== '0' ? `Your ${coins} ZishCoins are on the way!` : 'Coins added successfully.');
+      setCongratsOpen(true);
+      return;
     } catch (e) {
-      console.warn('[RZP][TOPUP] start error:', e);
-      setPayError('We could not start the payment. Please retry.');
+      console.warn('[TOPUP] start error:', e);
+      setPayError(e?.message || 'We could not start the payment. Please retry.');
     } finally {
       setPayProcessing(false);
       setProcessingPlanId(null);
     }
-  }, [dispatch, fetchWallet, isIndia]);
+  }, [country, dispatch, fetchWallet, initPaymentSheet, presentPaymentSheet, user?.email, user?.name]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -329,17 +431,17 @@ export default function WalletScreen({ navigation }) {
                 <Text style={styles.balanceQty}>{wallet.availableZishCoins.toLocaleString()}</Text>
                 <Text style={styles.balanceUnit}>Coins</Text>
                 <Text style={styles.balanceCaption}>Use for gameplay and entries only. Non-withdrawable.</Text>
-                {!isIndia ? (
-                  <Text style={[styles.balanceCaption, { marginTop: 6 }]}>Coin top-ups are rolling out region-wise. Explore memberships for additional perks.</Text>
-                ) : null}
               </>
             )}
           </LinearGradient>
           </TouchableOpacity>
 
           <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('PaymentMethods')} style={{ flex: 1 }}>
+          
             <View style={[styles.balanceCard, { backgroundColor: '#16a085', marginLeft: 8 }] }>
-              <Text style={[styles.balanceTitle, { marginTop: 8 }]}>Withdrawable Coins</Text>
+          
+            <View style={styles.coinBadge}><Text style={styles.coinBadgeText}>Z</Text></View>
+              <Text style={[styles.balanceTitle, { marginTop: 8 }]}>CASH WITHDRAWAL</Text>
               {loading ? (
                 <>
                   <View style={[styles.skelLineLg, { marginTop: 10 }]} />
@@ -349,8 +451,8 @@ export default function WalletScreen({ navigation }) {
               ) : (
                 <>
                   <Text style={styles.balanceQty}>{wallet.withdrawalBalance.toLocaleString()}</Text>
-                  <Text style={styles.balanceUnit}>Coins</Text>
-                  <Text style={styles.balanceCaption}>Available to withdraw subject to rules</Text>
+                  
+                  <Text style={styles.balanceCaption}>Available to withdraw subject to T&C.</Text>
                 </>
               )}
             </View>
@@ -397,14 +499,12 @@ export default function WalletScreen({ navigation }) {
             </ScrollView>
           </>
         ) : (
-          <View style={styles.membershipCard}> 
-            <View style={styles.membershipHeader}>
-              <Sparkles size={20} color={colors.accent} />
-              <Text style={styles.membershipTitle}>Unlock Membership Perks</Text>
-            </View>
-            <Text style={styles.membershipBody}>Access exclusive benefits and faster support with our membership tiers. Top-ups will be available in your region soon.</Text>
-            <Button title="View Memberships" onPress={openMembershipTier} style={styles.membershipButton} />
-          </View>
+          <MembershipCard
+            subscription={subscription}
+            loading={subscriptionLoading}
+            error={subscriptionError}
+            onManage={openMembershipTier}
+          />
         )}
 
         {/* Withdrawals (Seller only) */}
@@ -442,7 +542,7 @@ export default function WalletScreen({ navigation }) {
                     <Text style={{ color: approvalStatus === 'REJECTED' ? '#FF7A7A' : colors.textSecondary, marginTop: 4 }}>
                       {approvalStatus === 'REJECTED'
                         ? `Listing rejected${rejectionReason ? `: ${rejectionReason}` : '. Please contact support.'}`
-                        : 'Listing pending approval. Withdrawals unlock once it is approved.'}
+                        : 'Listing pending approval. Withdrawals available as per T&C.'}
                     </Text>
                   ) : null}
                   {over && !receiverApproved ? (
@@ -523,7 +623,6 @@ export default function WalletScreen({ navigation }) {
         onPrimary={() => { setCongratsOpen(false); setSelectedPack(null); }}
         onRequestClose={() => setCongratsOpen(false)}
       />
-      <PaymentsRegionModal visible={regionModal} onClose={() => setRegionModal(false)} />
       <AppModal
         visible={!!payError}
         title="Payment Failed"
@@ -536,6 +635,98 @@ export default function WalletScreen({ navigation }) {
       <ProcessingPaymentModal visible={payProcessing} />
     </SafeAreaView>
   );
+}
+
+function MembershipCard({ subscription, loading, error, onManage }) {
+  const rawStatus = String(subscription?.status || '').toLowerCase();
+  const active = ['created', 'active', 'authenticated', 'pending', 'inprogress'].includes(rawStatus);
+
+  const title = active
+    ? subscription?.plan?.name || subscription?.plan_id || 'Active Membership'
+    : 'Unlock Membership Perks';
+
+  const statusLabel = active ? formatStatusLabel(subscription?.status) : null;
+  const renewalDate = formatSubscriptionDate(subscription?.current_end || subscription?.charge_at);
+  let credits = null;
+  if (active && subscription?.plan?.coins != null) {
+    const coinsVal = Number(subscription.plan.coins);
+    if (Number.isFinite(coinsVal)) {
+      credits = `${coinsVal.toLocaleString()} ZC credits monthly`;
+    }
+  }
+  const planPricing = active ? formatPlanPricing(subscription?.plan) : null;
+
+  let body = 'Access exclusive benefits and faster support with our membership tiers. Top-ups will be available in your region soon.';
+  const bodyStyle = [styles.membershipBody];
+  if (loading) {
+    body = 'Checking membership status…';
+  } else if (error) {
+    body = error;
+    bodyStyle.push(styles.membershipError);
+  } else if (active) {
+    const base = statusLabel ? `Your membership is ${statusLabel.toLowerCase()}.` : 'Your membership is active.';
+    body = renewalDate ? `${base} Renews on ${renewalDate}.` : base;
+  }
+
+  const buttonLabel = active ? 'Manage Membership' : 'Buy Subscription';
+
+  return (
+    <View style={styles.membershipCard}>
+      <View style={styles.membershipHeader}>
+        <Sparkles size={20} color={colors.accent} />
+        <Text style={styles.membershipTitle}>{title}</Text>
+      </View>
+      <Text style={bodyStyle}>{body}</Text>
+      {active ? (
+        <View style={styles.membershipMeta}>
+          {statusLabel ? <Text style={styles.membershipStatus}>{statusLabel}</Text> : null}
+          {renewalDate ? <Text style={styles.membershipMetaText}>Next renewal: {renewalDate}</Text> : null}
+          {credits ? <Text style={styles.membershipMetaText}>{credits}</Text> : null}
+          {planPricing ? <Text style={styles.membershipMetaText}>{planPricing}</Text> : null}
+        </View>
+      ) : null}
+      <Button title={buttonLabel} onPress={onManage} style={styles.membershipButton} />
+      {!active ? (
+        <Text style={styles.membershipFooter}>Membership availability depends on your region.</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function formatStatusLabel(status) {
+  if (!status) return null;
+  const text = String(status).replace(/_/g, ' ').toLowerCase();
+  return text.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+}
+
+function formatSubscriptionDate(value) {
+  if (!value) return null;
+  const numeric = Number(value);
+  const timestamp = Number.isFinite(numeric) ? (numeric < 1e12 ? numeric * 1000 : numeric) : value;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatPlanPricing(plan) {
+  if (!plan) return null;
+  const rawAmount = Number(plan?.amount);
+  const hasAmount = Number.isFinite(rawAmount);
+  const currency = plan?.currencySymbol || plan?.currencyCode || plan?.baseCurrency || '';
+  const formattedAmount = hasAmount ? `${currency ? `${currency} ` : ''}${rawAmount.toLocaleString('en-IN')}` : null;
+
+  const periodRaw = plan?.billingPeriod ? String(plan.billingPeriod).replace(/_/g, ' ').toLowerCase() : null;
+  const interval = Number(plan?.billingInterval || 1);
+  let frequency = null;
+  if (periodRaw) {
+    const normalizedPeriod = periodRaw.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+    frequency = interval > 1 ? `${interval} ${normalizedPeriod}` : normalizedPeriod;
+  }
+
+  if (formattedAmount && frequency) return `${formattedAmount} / ${frequency}`;
+  if (formattedAmount) return formattedAmount;
+  if (frequency) return frequency;
+  return null;
 }
 
 function StatusChip({ status }) {
@@ -594,6 +785,11 @@ const styles = StyleSheet.create({
   membershipTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
   membershipBody: { color: colors.textSecondary, marginTop: 10, lineHeight: 20 },
   membershipButton: { marginTop: 16 },
+  membershipMeta: { marginTop: 12, gap: 4 },
+  membershipStatus: { color: colors.white, fontWeight: '700' },
+  membershipMetaText: { color: colors.textSecondary },
+  membershipError: { color: '#FF7A7A' },
+  membershipFooter: { color: colors.textSecondary, fontSize: 12, marginTop: 10 },
 
   panel: { backgroundColor: '#2B2F39', borderRadius: 16, borderWidth: 1, borderColor: '#343B49', padding: 12, marginHorizontal: 12, marginTop: 10 },
   withdrawRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },

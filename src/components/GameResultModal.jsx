@@ -294,7 +294,7 @@ export default function GameResultModal({
               <Text style={{ color: "#CFE0FF", textAlign: "center", fontWeight: "600" }}>Back</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={{
                 flex: 1,
                 paddingVertical: 12,
@@ -340,7 +340,7 @@ export default function GameResultModal({
               }}
             >
               <Text style={{ color: "#0B1220", textAlign: "center", fontWeight: "700" }}>{joining ? 'Please wait...' : 'Play Again'}</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
           {playErr ? (
             <Text style={{ color: "#FF7A7A", textAlign: 'center', marginTop: 10 }}>{playErr}</Text>

@@ -35,4 +35,12 @@ export const colors = {
   // Gradient Colors
   gradientStart: "#360B38",
   gradientEnd: "#9B20A2",
+
+  // Splash specific gradients
+  splashGradientStart: "#9C27C5",
+  splashGradientEnd: "#24002F",
+
+  // CTA gradients
+  ctaGradientStart: "#7C3AED",
+  ctaGradientEnd: "#5B0BB5",
 };

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import Button from '../ui/Button';
 import { X } from 'lucide-react-native';
@@ -29,7 +30,7 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories = [
   const [progressMax, setProgressMax] = useState(initialProgress);
   const [activeCategorySlug, setActiveCategorySlug] = useState(initialFilters?.categorySlug ?? DEFAULTS.categorySlug);
   const [sort, setSort] = useState(initialSort);
-  const [sliding, setSliding] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const chipList = useMemo(() => {
     if (Array.isArray(categories) && categories.length) return categories;
@@ -59,6 +60,8 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories = [
     setActiveCategorySlug(slugFromInitial);
     setSort(initialFilters?.sort ?? DEFAULTS.sort);
   }, [initialFilters, categoryMap]);
+
+  const scrollPaddingBottom = useMemo(() => 140 + insets.bottom, [insets.bottom]);
 
   const apply = () => {
     const selectedCategory = categoryMap.get(activeCategorySlug) || null;
@@ -93,9 +96,10 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories = [
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!sliding}
+        keyboardShouldPersistTaps="handled"
+        directionalLockEnabled
         nestedScrollEnabled
       >
         <View style={styles.section}>
@@ -114,8 +118,6 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories = [
             thumbTintColor={'#ddd'}
             value={entryFeeMax}
             onValueChange={setEntryFeeMax}
-            onSlidingStart={() => setSliding(true)}
-            onSlidingComplete={() => setSliding(false)}
             tapToSeek
             style={styles.slider}
           />
@@ -142,8 +144,6 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories = [
             thumbTintColor={'#ddd'}
             value={progressMax}
             onValueChange={setProgressMax}
-            onSlidingStart={() => setSliding(true)}
-            onSlidingComplete={() => setSliding(false)}
             tapToSeek
             style={styles.slider}
           />
@@ -209,7 +209,7 @@ export default function FiltersSheet({ onClose, onApply, onReset, categories = [
 const styles = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 16, backgroundColor: colors.primary, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
   headerTitle: { color: colors.white, fontWeight: '800', fontSize: 22 },
-  scrollContent: { paddingHorizontal: 16, paddingBottom: 140, paddingTop: 8 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 
   section: { paddingVertical: 12 },
   title: { color: colors.white, fontWeight: '700', fontSize: 16 },

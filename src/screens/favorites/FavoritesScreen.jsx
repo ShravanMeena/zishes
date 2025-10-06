@@ -157,7 +157,7 @@ export default function FavoritesScreen({ navigation }) {
         available={coins || 0}
         required={requiredCoins}
         onClose={() => setInsufficientOpen(false)}
-        onBuy={() => { setInsufficientOpen(false); navigation.navigate('Wallet', { screen: 'BuyCoins' }); }}
+        onBuy={() => { setInsufficientOpen(false); navigation.navigate('Wallet'); }}
       />
       <AppModal
         visible={soldOutOpen}

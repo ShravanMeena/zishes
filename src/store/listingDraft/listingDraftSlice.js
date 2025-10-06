@@ -10,6 +10,7 @@ const DRAFT_KEY = 'listing_draft_v1';
 
 const initialState = {
   loaded: false,
+  originCountry: null,
   isDirty: false,
   photos: [],
   details: {
@@ -82,9 +83,9 @@ export const saveDraftFromStore = createAsyncThunk('listingDraft/saveCurrent', a
   return true;
 });
 
-export const clearDraftStorage = createAsyncThunk('listingDraft/clear', async () => {
+export const clearDraftStorage = createAsyncThunk('listingDraft/clear', async (nextCountry = null) => {
   await AsyncStorage.removeItem(DRAFT_KEY);
-  return true;
+  return { nextCountry };
 });
 
 // Save the current draft as a new entry in the drafts list
@@ -92,7 +93,7 @@ export const saveCurrentAsNewDraft = createAsyncThunk('listingDraft/saveNewDraft
   const rootState = getState();
   const draftState = rootState.listingDraft;
   const userCountry = rootState?.auth?.user?.address?.country;
-  const toSave = { ...draftState, isDirty: false };
+  const toSave = { ...draftState, isDirty: false, originCountry: userCountry || draftState.originCountry || null };
   const saved = await saveNewDraft({
     name: name || draftState?.details?.name || 'Untitled Item',
     data: toSave,
@@ -169,14 +170,30 @@ const slice = createSlice({
       state.submitError = null;
       state.lastResponse = null;
     },
-    resetDraft(state) {
-      Object.assign(state, initialState);
+    resetDraft(state, action) {
+      const overrides = action?.payload || {};
+      const next = { ...initialState, ...overrides };
+      next.loaded = overrides.loaded ?? true;
+      if (overrides.originCountry !== undefined) {
+        next.originCountry = overrides.originCountry;
+      } else if (state.originCountry && (next.originCountry === null || next.originCountry === undefined)) {
+        next.originCountry = state.originCountry;
+      }
+      Object.assign(state, next);
+    },
+    setOriginCountry(state, action) {
+      state.originCountry = action.payload || null;
     },
     // Load full draft data programmatically (e.g., Continue from Drafts)
     loadFromDraft(state, action) {
       const payload = action.payload || {};
       const merged = { ...initialState, ...payload };
       merged.loaded = true;
+      if (payload.originCountry !== undefined) {
+        merged.originCountry = payload.originCountry;
+      } else if (state.originCountry) {
+        merged.originCountry = state.originCountry;
+      }
       Object.assign(state, merged);
     },
     setPendingLeaveRoute(state, action) {
@@ -190,6 +207,11 @@ const slice = createSlice({
         if (action.payload) {
           const merged = { ...initialState, ...action.payload };
           merged.isDirty = action.payload.isDirty || false;
+          if (action.payload.originCountry !== undefined) {
+            merged.originCountry = action.payload.originCountry;
+          } else if (state.originCountry) {
+            merged.originCountry = state.originCountry;
+          }
           Object.assign(state, merged);
         }
       })
@@ -199,8 +221,9 @@ const slice = createSlice({
       .addCase(saveDraft.fulfilled, (state) => {
         state.isDirty = false;
       })
-      .addCase(clearDraftStorage.fulfilled, (state) => {
-        Object.assign(state, { ...initialState, loaded: true });
+      .addCase(clearDraftStorage.fulfilled, (state, action) => {
+        const nextCountry = action.payload?.nextCountry ?? null;
+        Object.assign(state, { ...initialState, loaded: true, originCountry: nextCountry });
       })
       .addCase(saveCurrentAsNewDraft.fulfilled, (state) => {
         state.isDirty = false;
@@ -225,6 +248,7 @@ export const {
   setSubmitResult,
   clearSubmitState,
   resetDraft,
+  setOriginCountry,
   loadFromDraft,
   setPendingLeaveRoute,
 } = slice.actions;
@@ -258,6 +282,7 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
   const { listingDraft, auth } = getState();
   const token = auth?.token;
   if (!token) return rejectWithValue('You must be logged in.');
+  const userCountry = auth?.user?.address?.country || listingDraft.originCountry || null;
 
   const photos = Array.isArray(listingDraft.photos) ? listingDraft.photos : [];
   const details = listingDraft.details || {};
@@ -281,6 +306,7 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
     policies.dispute,
     policies.antifraud,
     policies.agreeAll,
+    policies.listingExtensionAck,
   ].every(Boolean);
   if (!requiredTermsTrue) return rejectWithValue('Please accept all terms in Policies tab.');
 
@@ -312,7 +338,12 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
         imageUrls.push(uri);
         step += 1; update();
       } else {
-        const up = await uploadImage({ uri, token });
+        const up = await uploadImage({
+          uri,
+          token,
+          name: p?.name,
+          type: p?.type,
+        });
         if (!up?.url) throw new Error('Image upload failed');
         imageUrls.push(up.url);
         step += 1; update();
@@ -393,7 +424,7 @@ export const publishListing = createAsyncThunk('listingDraft/publish', async (_,
       if (doc) dispatch(setUser(doc));
     } catch (_) {}
     // Clear draft on success
-    await dispatch(clearDraftStorage());
+    await dispatch(clearDraftStorage(userCountry));
     dispatch(setSubmitProgress(1));
     dispatch(setSubmitStage('success'));
     dispatch(setSubmitting(false));

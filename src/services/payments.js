@@ -57,10 +57,9 @@ export async function getStripeKey() {
   return data;
 }
 
-export async function createStripeSubscriptionSession({ planId, successUrl, cancelUrl }) {
+export async function createStripeTopupIntent({ planId }) {
   if (!planId) throw new Error('planId is required');
-  if (!successUrl || !cancelUrl) throw new Error('successUrl and cancelUrl are required');
-  const data = await request('/payments/stripe/subscribe', { method: 'POST', data: { planId, successUrl, cancelUrl } });
+  const data = await request('/payments/stripe/topup', { method: 'POST', data: { planId } });
   return data;
 }
 
@@ -78,6 +77,6 @@ export default {
   cancelRazorpaySubscription,
   // Stripe
   getStripeKey,
-  createStripeSubscriptionSession,
+  createStripeTopupIntent,
   createStripeAccountSession,
 };

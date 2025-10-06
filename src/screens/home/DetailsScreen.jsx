@@ -394,7 +394,7 @@ export default function DetailsScreen({ route, navigation }) {
         available={availableCoins}
         required={Number(item?.coinPerPlay || 0)}
         onClose={() => setInsufficientOpen(false)}
-        onBuy={() => { setInsufficientOpen(false); navigation.navigate('BuyCoins'); }}
+        onBuy={() => { setInsufficientOpen(false); navigation.navigate('Wallet'); }}
       />
       <AppModal
         visible={soldOutOpen}

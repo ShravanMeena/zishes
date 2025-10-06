@@ -27,16 +27,28 @@ export default function BottomSheet({ visible, onClose, children, height, full =
   }, [visible, computedH, translateY]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      propagateSwipe
+    >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
-      <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: 'height', default: undefined })}>
+      <KeyboardAvoidingView
+        style={styles.avoider}
+        behavior={Platform.select({ ios: 'padding', android: 'height', default: undefined })}
+        pointerEvents="box-none"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
+      >
         <Animated.View style={[
           styles.sheet,
           noPadding ? { paddingLeft: 0, paddingRight: 0, paddingTop: 0 } : null,
           // add extra bottom breathing room for compact sheets
-          { paddingBottom: (noPadding ? 0 : (full ? 12 : 36)) + insets.bottom },
+          { paddingBottom: (noPadding ? 0 : (full ? 12 : 72)) + insets.bottom },
           { height: computedH, transform: [{ translateY }] }
         ]}>
           <View style={{ flex: 1 }} onLayout={(e) => setContentH(e.nativeEvent.layout.height)}>
@@ -55,6 +67,7 @@ export default function BottomSheet({ visible, onClose, children, height, full =
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+  avoider: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#1F232C',
     borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, borderTopWidth: 1, borderColor: '#2E3440'
