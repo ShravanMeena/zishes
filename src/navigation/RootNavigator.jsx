@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Linking } from 'react-native';
 import { navigationRef } from './navigationRef';
 import linking from './linking';
 import { useDispatch, useSelector } from 'react-redux';
@@ -11,12 +12,16 @@ import { bootstrapAuth, setUser } from "../store/auth/authSlice";
 import { bootstrapApp } from "../store/app/appSlice";
 import { bootstrapFavorites } from "../store/favorites/favoritesSlice";
 import users from '../services/users';
+import { parseDeepLink } from '../utils/deepLinks';
 
 export default function RootNavigator() {
   const dispatch = useDispatch();
   const { token, bootstrapped: authBoot, user } = useSelector((s) => s.auth);
   const { bootstrapped: appBoot, onboardingSeen } = useSelector((s) => s.app);
   const [profileHydrated, setProfileHydrated] = useState(false);
+  const [navigationReady, setNavigationReady] = useState(false);
+  const [pendingDeepLink, setPendingDeepLink] = useState(null);
+  const initialUrlHandledRef = useRef(false);
 
   useEffect(() => {
     dispatch(bootstrapAuth());
@@ -64,6 +69,57 @@ export default function RootNavigator() {
     return () => { cancelled = true; };
   }, [token, user?.address?.country, dispatch]);
 
+  const canEnterApp = token && profileHydrated && !!user?.address?.country;
+
+  useEffect(() => {
+    const handleUrl = (incomingUrl) => {
+      if (!incomingUrl) return;
+      const payload = parseDeepLink(incomingUrl);
+      if (!payload) return;
+
+      if (navigationReady && canEnterApp) {
+        navigationRef.navigate('Home', {
+          screen: 'Details',
+          params: { id: payload.id },
+        });
+      } else {
+        setPendingDeepLink(payload);
+      }
+    };
+
+    if (!initialUrlHandledRef.current) {
+      initialUrlHandledRef.current = true;
+      Linking.getInitialURL()
+        .then((initialUrl) => {
+          if (initialUrl) handleUrl(initialUrl);
+        })
+        .catch(() => {});
+    }
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleUrl(url);
+    });
+
+    return () => {
+      if (subscription && typeof subscription.remove === 'function') {
+        subscription.remove();
+      } else if (typeof subscription === 'function') {
+        subscription();
+      }
+    };
+  }, [canEnterApp, navigationReady]);
+
+  useEffect(() => {
+    if (!pendingDeepLink) return;
+    if (!navigationReady || !canEnterApp) return;
+
+    navigationRef.navigate('Home', {
+      screen: 'Details',
+      params: { id: pendingDeepLink.id },
+    });
+    setPendingDeepLink(null);
+  }, [pendingDeepLink, navigationReady, canEnterApp]);
+
   if (!authBoot || !appBoot) return <Splash />;
 
   if (token && !profileHydrated) {
@@ -71,7 +127,11 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef} linking={linking}>
+    <NavigationContainer
+      ref={navigationRef}
+      linking={linking}
+      onReady={() => setNavigationReady(true)}
+    >
       {token
         ? (
             // Avoid flashing Country screen before user is loaded.

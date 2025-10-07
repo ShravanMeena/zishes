@@ -59,8 +59,8 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
   }, [baseRules, fetchedRules]);
 
   const gameTitle = useMemo(() => {
-    return item?.game?.name || item?.title || item?.name || 'Game';
-  }, [item?.game?.name, item?.title, item?.name]);
+    return item?.game?.name || item?.gameType || item?.raw?.game?.name || 'Game';
+  }, [item?.game?.name, item?.gameType, item?.raw?.game?.name]);
 
   const instructions = useMemo(() => {
     return item?.game?.instructions || item?.game?.description || item?.description || 'Instructions will appear here once provided.';
@@ -80,7 +80,7 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
     { key: 'prize', Icon: Gift, text: 'Prize → The listed item is the prize.' },
   ]), [entryFeeText]);
 
-  const howToPlayUrl = 'https://www.youtube.com/shorts/aZw7b4OUM3g';
+  const howToPlayUrl = item?.game?.howToPlay
 
   const openHowToPlay = () => {
     if (WebViewComponent) {
@@ -148,13 +148,13 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
         </LinearGradient>
       </View>
 
-      <TouchableOpacity activeOpacity={0.9} style={styles.howToPlayButton} onPress={openHowToPlay}>
+  {howToPlayUrl &&    <TouchableOpacity activeOpacity={0.9} style={styles.howToPlayButton} onPress={openHowToPlay}>
         <LinearGradient colors={[colors.accent, colors.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.howToPlayGradient}>
           <PlayCircle size={20} color={colors.white} style={{ marginRight: 12 }} />
           <Text style={styles.howToPlayText}>How to Play?</Text>
         </LinearGradient>
       </TouchableOpacity>
-
+}
       {/* <View style={styles.instructionsCard}>
         <Text style={styles.instructionsText}>{instructions}</Text>
       </View> */}

@@ -42,7 +42,6 @@ export async function createRazorpaySubscription({ planId, totalCount, customerN
 
 export async function getRazorpayActiveSubscription() {
   const data = await request('/payments/razorpay/subscription');
-  console.log(data,"datadatadatadatadatadatadatadata")
   return data;
 }
 

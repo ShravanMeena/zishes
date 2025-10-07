@@ -21,6 +21,8 @@ import LeaderboardScreen from '../screens/profile/LeaderboardScreen';
 import PolicyViewerScreen from '../screens/misc/PolicyViewerScreen';
 import DraftsScreen from '../screens/profile/DraftsScreen';
 import CountrySelectScreen from '../screens/auth/CountrySelectScreen';
+import DetailsScreen from '../screens/home/DetailsScreen';
+import UnityScreen from '../screens/home/UnityScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -48,6 +50,12 @@ export default function ProfileStack() {
       <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Stack.Screen name="PolicyViewer" component={PolicyViewerScreen} />
       <Stack.Screen name="CountrySelect" component={CountrySelectScreen} />
+      <Stack.Screen name="Details" component={DetailsScreen} />
+      <Stack.Screen
+        name="UnityGame"
+        component={UnityScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
     </Stack.Navigator>
   );
 }

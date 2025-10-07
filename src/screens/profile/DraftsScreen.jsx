@@ -128,14 +128,14 @@ export default function DraftsScreen() {
         ) : null}
         ListHeaderComponentStyle={hiddenCount > 0 ? { marginBottom: 16 } : null}
         renderItem={renderItem}
-        ListEmptyComponent={!loading ? (
-          <View style={styles.empty}> 
-            <Text style={styles.emptyText}>{hiddenCount > 0 ? 'Drafts hidden for this country' : 'No drafts yet'}</Text>
-            <Text style={styles.emptySub}>
-              {hiddenCount > 0 ? LOCKED_MESSAGE : 'Save a draft from Sell screen to see it here.'}
-            </Text>
-          </View>
-        ) : null}
+        // ListEmptyComponent={!loading ? (
+        //   <View style={styles.empty}> 
+        //     <Text style={styles.emptyText}>{hiddenCount > 0 ? 'Drafts hidden for this country' : 'No drafts yet'}</Text>
+        //     <Text style={styles.emptySub}>
+        //       {hiddenCount > 0 ? LOCKED_MESSAGE : 'Save a draft from Sell screen to see it here.'}
+        //     </Text>
+        //   </View>
+        // ) : null}
       />
     </SafeAreaView>
   );

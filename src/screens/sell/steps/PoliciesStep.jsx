@@ -8,23 +8,7 @@ import BottomSheet from '../../../components/common/BottomSheet';
 import { WEB_ORIGIN } from '../../../config/links';
 import appConfigService from '../../../services/appConfig';
 
-const FALLBACK_POLICY_DOCS = {
-  listing: {
-    title: 'Accept Listing Standards',
-    url: `${WEB_ORIGIN}/legal/prohibited-items`,
-    description: 'Understand the quality, condition, and verification requirements for items listed on Zishes.',
-  },
-  dispute: {
-    title: 'Dispute Resolution Policy',
-    url: `${WEB_ORIGIN}/legal/seller-agreement`,
-    description: 'Review how buyer and seller disputes are handled, including escalation paths and timelines.',
-  },
-  antifraud: {
-    title: 'Anti-Fraud Policy',
-    url: `${WEB_ORIGIN}/legal/aml-kyc-policy`,
-    description: 'Learn about our anti-money laundering (AML) and know-your-customer (KYC) safeguards.',
-  },
-};
+const FALLBACK_POLICY_KEYS = ['listing', 'dispute', 'antifraud'];
 
 const TERMS_URL = `${WEB_ORIGIN}/legal/terms-and-conditions`;
 const PRIVACY_URL = `${WEB_ORIGIN}/legal/privacy-policy`;
@@ -34,7 +18,8 @@ export default function PoliciesStep() {
   const { policies, agreeAll } = useSelector((s) => ({ policies: s.listingDraft.policies, agreeAll: s.listingDraft.policies.agreeAll }));
   const toggle = (key) => dispatch(updatePolicies({ [key]: !policies[key] }));
   const [policySheet, setPolicySheet] = useState(null);
-  const [policyDocs, setPolicyDocs] = useState(FALLBACK_POLICY_DOCS);
+  const [policyDocs, setPolicyDocs] = useState([]);
+
   const WebViewComp = useMemo(() => {
     try {
       const { WebView } = require('react-native-webview');
@@ -56,38 +41,18 @@ export default function PoliciesStep() {
       try {
         const data = await appConfigService.getAppConfig();
         const links = Array.isArray(data?.otherLinks) ? data.otherLinks : [];
-        console.log(links,"linkslinks")
         const marketPolicies = links.filter((link) => (link?.tab || '').toLowerCase() === 'market_policies');
-        if (!alive || !marketPolicies.length) return;
-        setPolicyDocs((prev) => {
-          const next = { ...prev };
-          marketPolicies.forEach((item) => {
-            const normalizedTitle = (item?.title || '').toLowerCase();
-            const doc = {
-              title: item?.title?.trim?.() || prev.listing.title,
-              url: sanitizeUrl(item?.url) || sanitizeUrl(prev.listing.url),
-              description: (item?.description || '').trim() || prev.listing.description,
-            };
-            if (normalizedTitle.includes('dispute')) {
-              next.dispute = {
-                ...doc,
-                title: doc.title,
-                url: sanitizeUrl(item?.url) || sanitizeUrl(prev.dispute.url),
-                description: (item?.description || '').trim() || prev.dispute.description,
-              };
-            } else if (normalizedTitle.includes('fraud') || normalizedTitle.includes('aml') || normalizedTitle.includes('kyc')) {
-              next.antifraud = {
-                ...doc,
-                title: doc.title,
-                url: sanitizeUrl(item?.url) || sanitizeUrl(prev.antifraud.url),
-                description: (item?.description || '').trim() || prev.antifraud.description,
-              };
-            } else if (normalizedTitle.includes('listing') || normalizedTitle.includes('standard')) {
-              next.listing = doc;
-            }
-          });
-          return next;
+        if (!alive) return;
+        const docs = marketPolicies.map((item, index) => {
+          const key = FALLBACK_POLICY_KEYS[index] || `policy_${index}`;
+          return {
+            key,
+            title: item?.title?.trim?.() || `Policy ${index + 1}`,
+            url: sanitizeUrl(item?.url),
+            description: (item?.description || '').trim() || null,
+          };
         });
+        setPolicyDocs(docs);
       } catch (err) {
         if (__DEV__) {
           console.warn('[PoliciesStep] Failed to load marketplace policies:', err?.message || err);
@@ -98,17 +63,36 @@ export default function PoliciesStep() {
       alive = false;
     };
   }, [sanitizeUrl]);
-  const openPolicy = useCallback((key) => {
-    const doc = policyDocs[key];
+
+  useEffect(() => {
+    const updates = {};
+    let hasUpdates = false;
+    const activeKeys = new Set(policyDocs.map((doc) => doc.key));
+    policyDocs.forEach((doc) => {
+      if (policies[doc.key] === undefined) {
+        updates[doc.key] = false;
+        hasUpdates = true;
+      }
+    });
+    FALLBACK_POLICY_KEYS.forEach((fallbackKey) => {
+      if (!activeKeys.has(fallbackKey) && policies[fallbackKey] !== true) {
+        updates[fallbackKey] = true;
+        hasUpdates = true;
+      }
+    });
+    if (hasUpdates) {
+      dispatch(updatePolicies(updates));
+    }
+  }, [policyDocs, policies, dispatch]);
+  const openPolicy = useCallback((doc) => {
     if (!doc?.url) return;
     setPolicySheet(doc);
-  }, [policyDocs]);
+  }, []);
   const closePolicy = useCallback(() => setPolicySheet(null), []);
-  const ReadMore = ({ policyKey }) => {
-    const doc = policyDocs[policyKey];
+  const ReadMore = ({ doc }) => {
     if (!doc?.url) return null;
     return (
-      <TouchableOpacity onPress={() => openPolicy(policyKey)}>
+      <TouchableOpacity onPress={() => openPolicy(doc)}>
         <Text style={styles.readMore}>Read More</Text>
       </TouchableOpacity>
     );
@@ -116,39 +100,24 @@ export default function PoliciesStep() {
 
   const sheetHeight = useMemo(() => Math.round(Dimensions.get('window').height * 0.82), []);
 
-  console.log(policyDocs,"policyDocspolicyDocs")
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }}>
       {/* Marketplace Policies */}
       <View style={[styles.card, { backgroundColor: '#252545' }]}> 
         <Text style={styles.cardTitle}>Marketplace Policies</Text>
-
-      <PolicyItem
-        title={policyDocs.listing?.title || 'Accept Listing Standards'}
-        checked={policies.listing}
-        onToggle={() => toggle('listing')}
-        description={policyDocs.listing?.description}
-      >
-          <ReadMore policyKey="listing" />
-        </PolicyItem>
-
-        <PolicyItem
-          title={policyDocs.dispute?.title || 'Agree to Dispute Resolution Policy'}
-          checked={policies.dispute}
-          onToggle={() => toggle('dispute')}
-          description={policyDocs.dispute?.description}
-        >
-          <ReadMore policyKey="dispute" />
-        </PolicyItem>
-
-        <PolicyItem
-          title={policyDocs.antifraud?.title || 'Confirm Anti-Fraud Policy'}
-          checked={policies.antifraud}
-          onToggle={() => toggle('antifraud')}
-          description={policyDocs.antifraud?.description}
-        >
-          <ReadMore policyKey="antifraud" />
-        </PolicyItem>
+        {policyDocs.length ? policyDocs.map((doc) => (
+          <PolicyItem
+            key={doc.key}
+            title={doc.title}
+            checked={!!policies[doc.key]}
+            onToggle={() => toggle(doc.key)}
+            description={doc.description}
+          >
+            <ReadMore doc={doc} />
+          </PolicyItem>
+        )) : (
+          <Text style={[styles.policyEmpty, { marginTop: 16 }]}>Marketplace policies will appear here soon.</Text>
+        )}
       </View>
 
       {/* Terms & Privacy */}
@@ -207,7 +176,7 @@ function PolicyItem({ title, checked, onToggle, description, children }) {
       </TouchableOpacity>
       {(description || children) ? (
         <View style={styles.policyMeta}>
-          {/* {!!description && <Text style={styles.policyDescription}>{description}</Text>} */}
+          {!!description && <Text style={styles.policyDescription}>{description}</Text>}
           {children}
         </View>
       ) : null}
@@ -240,6 +209,7 @@ const styles = StyleSheet.create({
   policyMeta: { marginLeft: 40, marginTop: 6 },
   policyDescription: { color: colors.textSecondary, marginBottom: 4, lineHeight: 18 },
   readMore: { color: colors.accent, fontWeight: '700' },
+  policyEmpty: { color: colors.textSecondary },
   consentCard: { backgroundColor: '#2B2F39', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#343B49' },
   consentTxt: { color: colors.white, flex: 1, flexWrap: 'wrap' },
   link: { color: '#7B79FF', fontWeight: '700' },

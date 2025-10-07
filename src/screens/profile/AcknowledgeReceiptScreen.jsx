@@ -27,7 +27,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const ensureCamera = useCameraPermission();
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [images, setImages] = useState([]); // array of { uri }
+  const [images, setImages] = useState([]); 
   const [preview, setPreview] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [date, setDate] = useState('');
@@ -44,6 +44,10 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const [rating, setRating] = useState(0);
   const [pickupAddresses, setPickupAddresses] = useState(() => buildEmptyPickupAddresses());
   const [productCountry, setProductCountry] = useState('');
+  const [reviewOptions, setReviewOptions] = useState([]);
+  const [loadingReviewOptions, setLoadingReviewOptions] = useState(false);
+  const [reviewTags, setReviewTags] = useState([]);
+  const [reviewComment, setReviewComment] = useState('');
 
   const banner = useMemo(() => {
     const title = item?.product?.name || item?.game?.name || item?.tournament?.game?.name || 'Item';
@@ -91,6 +95,28 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoadingReviewOptions(true);
+        const opts = await reviews.getOptions();
+        if (!alive) return;
+        setReviewOptions(Array.isArray(opts) ? opts : []);
+      } catch (e) {
+        if (!alive) return;
+        setReviewOptions([]);
+      } finally {
+        if (alive) setLoadingReviewOptions(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const toggleReviewTag = (tag) => {
+    setReviewTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  };
+
   const submit = async () => {
     setError(null);
     const productId = getProductId();
@@ -136,7 +162,13 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         const sellerId = f?.seller || f?.product?.user || (typeof f?.product?.user === 'object' ? f.product.user?._id : null);
         const prodId = f?.product?._id || productId;
         if (sellerId && prodId && rating && rating > 0) {
-          await reviews.createReview({ seller: sellerId, product: prodId, rating: Math.round(rating), comment: comment || undefined });
+          await reviews.createReview({
+            seller: sellerId,
+            product: prodId,
+            rating: Math.round(rating),
+            quickFeedback: reviewTags,
+            comment: reviewComment?.trim() ? reviewComment.trim() : undefined,
+          });
         }
       } catch (e) {
         // non-blocking
@@ -217,12 +249,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         {/* Existing acknowledgement details (if any). View-only with Edit button */}
         {(!loading && stage === 'idle') && mode === 'view' && fulfillment ? (
           <View style={{ backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12, marginBottom: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.sectionTitle}>Acknowledgement Details</Text>
-              <TouchableOpacity onPress={() => setMode('edit')} style={[styles.btn, { height: 36, paddingHorizontal: 12 }, styles.primary]}>
-                <Text style={styles.btnTxt}>Edit</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.sectionTitle}>Acknowledgement Details</Text>
             {fulfillment?.winner ? (
               <DetailRow label="Winner" value={`${fulfillment.winner.username || fulfillment.winner._id}${fulfillment.winner.verified ? ' ✓' : ''}`} />
             ) : null}
@@ -250,7 +277,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
                 </View>
               </View>
             ) : null}
-            {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
+            {/* {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
               <View style={{ marginTop: 12 }}>
                 <Text style={styles.sectionTitle}>Pickup Addresses</Text>
                 {hasAddress(fulfillment?.pickupAddresses?.seller) ? (
@@ -268,7 +295,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
                   />
                 ) : null}
               </View>
-            ) : null}
+            ) : null} */}
             {fulfillment?.received ? (
               <TouchableOpacity
                 style={[styles.btn, styles.primary, { marginTop: 10 }]}
@@ -320,7 +347,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           </>
         ) : null}
 
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {/* {(mode === 'edit' && stage === 'idle' && !loading) ? (
           <View style={styles.addressCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={styles.sectionTitle}>Pickup Addresses (optional)</Text>
@@ -340,9 +367,9 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
               productCountry={productCountry}
             />
           </View>
-        ) : null}
+        ) : null} */}
 
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {/* {(mode === 'edit' && stage === 'idle' && !loading) ? (
           <>
             <Text style={styles.sectionTitle}>Video Proof (Optional)</Text>
             <TextInput
@@ -356,7 +383,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
               style={styles.input}
             />
           </>
-        ) : null}
+        ) : null} */}
 
         {/* Comment + Review */}
         {(mode === 'edit' && stage === 'idle' && !loading) ? (
@@ -371,14 +398,45 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
               numberOfLines={4}
               style={[styles.input, { height: 110, textAlignVertical: 'top' }]}
             />
-            <Text style={styles.sectionTitle}>Leave a Review</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              {[1,2,3,4,5].map((i) => (
-                <TouchableOpacity key={i} onPress={() => setRating(i)} style={{ padding: 4 }}>
-                  <Text style={{ fontSize: 20 }}>{i <= rating ? '⭐️' : '☆'}</Text>
+            <Text style={styles.sectionTitle}>Seller Review</Text>
+            <Text style={styles.sectionSubTitle}>Rate your experience</Text>
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <TouchableOpacity key={i} onPress={() => setRating(i)} style={styles.starButton} accessibilityRole="button">
+                  <Text style={[styles.star, i <= rating ? styles.starActive : styles.starInactive]}>
+                    {i <= rating ? '★' : '☆'}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={styles.sectionSubTitle}>Quick feedback (optional)</Text>
+            {loadingReviewOptions ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
+            ) : (
+              <View style={styles.tagsWrap}>
+                {reviewOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    onPress={() => toggleReviewTag(opt)}
+                    style={[styles.tag, reviewTags.includes(opt) && styles.tagActive]}
+                  >
+                    <Text style={[styles.tagTxt, reviewTags.includes(opt) && styles.tagTxtActive]}>
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <Text style={styles.sectionSubTitle}>Review comment (optional)</Text>
+            <TextInput
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              placeholder="Share any additional thoughts about the seller"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={4}
+              style={[styles.input, styles.reviewInput]}
+            />
           </>
         ) : null}
 
@@ -472,11 +530,23 @@ const styles = StyleSheet.create({
   infoTxt: { color: colors.textSecondary },
 
   sectionTitle: { color: colors.white, fontWeight: '800', fontSize: 16, marginVertical: 8 },
+  sectionSubTitle: { color: colors.textSecondary, fontSize: 14, marginTop: 4, marginBottom: 8 },
   input: { backgroundColor: '#1E2128', borderWidth: 1, borderColor: '#3A4051', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, color: colors.white },
   select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selTxt: { color: colors.white },
   uploadRow: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   uploadTxt: { color: colors.white, fontWeight: '800' },
+  starRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  starButton: { padding: 4 },
+  star: { fontSize: 24 },
+  starActive: { color: '#F7C948' },
+  starInactive: { color: colors.textSecondary },
+  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  tag: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  tagActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  tagTxt: { color: colors.white, fontWeight: '700', fontSize: 12 },
+  tagTxtActive: { color: colors.white },
+  reviewInput: { textAlignVertical: 'top', minHeight: 100 },
   addressCard: { backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12, marginTop: 16 },
   addressHint: { color: colors.textSecondary, fontSize: 12 },
   addressLabel: { color: colors.white, fontWeight: '700', marginBottom: 4 },

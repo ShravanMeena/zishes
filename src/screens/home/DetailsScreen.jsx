@@ -267,12 +267,19 @@ export default function DetailsScreen({ route, navigation }) {
   }, [calcReady, item, now]);
 
   const showEndedUI = useMemo(() => isEnded, [isEnded]);
+  const handleBackPress = () => {
+    if (navigation?.canGoBack?.()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('HomeIndex');
+    }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+        <TouchableOpacity onPress={handleBackPress} style={styles.headerBtn}>
           <ChevronLeft size={22} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{item?.title || '{text}'}</Text>

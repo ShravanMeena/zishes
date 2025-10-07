@@ -248,7 +248,7 @@ export default function UploadProofScreen({ route, navigation }) {
                 </View>
               </View>
             ) : null}
-            {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
+            {/* {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
               <View style={{ marginTop: 12 }}>
                 <Text style={styles.sectionTitle}>Pickup Addresses</Text>
                 {hasAddress(fulfillment?.pickupAddresses?.seller) ? (
@@ -266,7 +266,7 @@ export default function UploadProofScreen({ route, navigation }) {
                   />
                 ) : null}
               </View>
-            ) : null}
+            ) : null} */}
           </View>
         )}
 
@@ -337,7 +337,7 @@ export default function UploadProofScreen({ route, navigation }) {
           </>
         ) : null}
 
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {/* {(mode === 'edit' && stage === 'idle' && !loading) ? (
           <View style={[styles.card, { marginTop: 12 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={styles.sectionTitle}>Pickup Addresses (optional)</Text>
@@ -357,7 +357,7 @@ export default function UploadProofScreen({ route, navigation }) {
               productCountry={productCountry}
             />
           </View>
-        ) : null}
+        ) : null} */}
 
         {(mode === 'edit' && stage === 'idle' && !loading) ? (<View style={[styles.card, { marginTop: 16 }]}> 
           <Text style={styles.label}>Delivery Date</Text>
