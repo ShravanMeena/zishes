@@ -80,8 +80,8 @@ android {
         applicationId "com.zishes"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
-        versionName "2.0.9"
+        versionCode 31
+        versionName "3.0.1"
     }
     signingConfigs {
         debug {

@@ -11,7 +11,7 @@ require Pod::Executable.execute_command('node', ['-p',
 pod 'react-native-razorpay', :path => '../node_modules/react-native-razorpay'
 
 # Firebase/Notifee require newer iOS. Set explicit minimum.
-platform :ios, '15.0'
+platform :ios, '16.0'
 prepare_react_native_project!
 
 # If you are using a `react-native-flipper` your iOS build will fail when `NO_FLIPPER=1` is set.
@@ -38,6 +38,12 @@ target 'unityapp' do
   pod 'FirebaseCore', :modular_headers => true
   pod 'FirebaseCoreInternal', :modular_headers => true
   pod 'FirebaseInstallations', :modular_headers => true
+  pod 'FirebaseABTesting', '12.3.0', :modular_headers => true
+  pod 'FirebaseInAppMessaging', '12.3.0-beta', :modular_headers => true
+  pod 'FirebaseMessaging', '12.3.0', :modular_headers => true
+  pod 'nanopb', :modular_headers => true
+  # HyperKYC framework depends on Google's Material Components library
+  pod 'MaterialComponents', '~> 124.2', :modular_headers => true
   config = use_native_modules!
 
   use_react_native!(
@@ -70,9 +76,23 @@ target 'unityapp' do
     # Ensure all pods adopt iOS 15.0+ (RNFB v23 iOS target)
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
         # Allow non-modular includes within framework modules to avoid Clang module build issues
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+
+        next unless target.name == 'react-native-unity'
+
+        unity_headers = '$(PODS_TARGET_SRCROOT)/../../../unity/builds/ios/UnityFramework.framework/Headers'
+        header_search_paths = config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
+        unless header_search_paths.include?(unity_headers)
+          config.build_settings['HEADER_SEARCH_PATHS'] = "#{header_search_paths} #{unity_headers}"
+        end
+
+        unity_framework_path = '$(PODS_TARGET_SRCROOT)/../../../unity/builds/ios'
+        framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= '$(inherited)'
+        unless framework_search_paths.include?(unity_framework_path)
+          config.build_settings['FRAMEWORK_SEARCH_PATHS'] = "#{framework_search_paths} #{unity_framework_path}"
+        end
       end
     end
   end

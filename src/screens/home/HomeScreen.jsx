@@ -143,15 +143,33 @@ export default function HomeScreen({ navigation }) {
     setRulesItem(it);
   }, [token, coins]);
 
-  const renderItem = useCallback(({ item }) => (
-    <GameCard
-      item={item}
-      now={now}
-      onCardPress={() => navigation.navigate('Details', { item })}
-      onPlay={() => requestPlay(item)}
-      onShare={() => setShareItem(item)}
-    />
-  ), [navigation, now, requestPlay]);
+  const renderItem = useCallback(({ item }) => {
+    const productId = item?.raw?._id || item?.id || item?._id;
+    const leaderboardPayload = {
+      productId,
+      item: {
+        product: { name: item?.title || item?.raw?.name || 'Leaderboard' },
+        game: item?.raw?.game || null,
+      },
+    };
+
+    return (
+      <GameCard
+        item={item}
+        now={now}
+        onCardPress={() => navigation.navigate('Details', { item })}
+        onPlay={() => requestPlay(item)}
+        onShare={() => setShareItem(item)}
+        onLeaderboard={() => {
+          if (!productId) {
+            navigation.navigate('Details', { item, startTab: 'leader' });
+            return;
+          }
+          navigation.navigate('Leaderboard', leaderboardPayload);
+        }}
+      />
+    );
+  }, [navigation, now, requestPlay]);
   const keyExtractor = useCallback((it) => it.id, []);
 
   const onRefreshAll = useCallback(async () => {

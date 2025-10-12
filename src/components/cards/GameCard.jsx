@@ -7,10 +7,17 @@ import LinearGradient from 'react-native-linear-gradient';
 import { Star, Share2, Zap, Info, Clock } from 'lucide-react-native';
 import { getEarlyTerminationContext, canShowEarlyTermination } from '../../utils/earlyTermination';
 
-function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
+function GameCard({ item, onPress, onPlay, onCardPress, onShare, onLeaderboard, now }) {
   const { faved, toggleFav, progress, endsIn, loading, handlePlay, ended, msLeft, calcReady } = useGameCard(item, now);
   const onPlayPress = useCallback(() => handlePlay(onPlay || onPress), [handlePlay, onPlay, onPress]);
   const goDetails = useCallback(() => (onCardPress || onPress)?.(item), [onCardPress, onPress, item]);
+  const goLeaderboard = useCallback(() => {
+    if (onLeaderboard) {
+      onLeaderboard(item);
+      return;
+    }
+    goDetails();
+  }, [goDetails, item, onLeaderboard]);
   // Treat tournament status OVER/UNFILLED as ended, regardless of countdown
   const tourStatus = item?.tournamentStatus || item?.tournament?.status || item?.raw?.tournament?.status;
   const statusEnded = tourStatus === 'OVER' || tourStatus === 'UNFILLED';
@@ -77,6 +84,9 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, now }) {
               ) : null}
             </View>
           </View>
+          <TouchableOpacity style={styles.leaderboardLink} onPress={goLeaderboard} activeOpacity={0.8}>
+            <Text style={styles.leaderboardText}>View Leaderboard</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
 
@@ -190,6 +200,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
+  },
+  leaderboardLink: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#343B49',
+  },
+  leaderboardText: {
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 13,
+    letterSpacing: 0.2,
   },
   badge: {
     backgroundColor: '#4C2A80',

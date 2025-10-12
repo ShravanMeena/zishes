@@ -9,6 +9,11 @@ import AppModal from "../../components/common/AppModal";
 import { Bell, ChevronRight, Gift, Settings, ClipboardList } from 'lucide-react-native';
 import users from '../../services/users';
 import { setUser } from '../../store/auth/authSlice';
+import paymentsService from '../../services/payments';
+import plansService from '../../services/plans';
+import { isIndiaCountry } from '../../utils/payments';
+import { buildPlanLookup, findPlanForSubscription } from '../../utils/plans';
+import { categorizeSubscriptionStatus } from '../../utils/subscriptionStatus';
 
 export default function ProfileScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -18,6 +23,19 @@ export default function ProfileScreen({ navigation }) {
   const [meLoading, setMeLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionError, setSubscriptionError] = useState('');
+  const [plans, setPlans] = useState([]);
+  const [plansFetched, setPlansFetched] = useState(false);
+
+  const userCountry = user?.address?.country || user?.country || null;
+  const isIndia = useMemo(() => isIndiaCountry(userCountry), [userCountry]);
+  const planLookup = useMemo(() => buildPlanLookup(plans), [plans]);
+  const subscriptionStatusInfo = useMemo(() => {
+    if (!subscription) return null;
+    return categorizeSubscriptionStatus(subscription?.status, subscription);
+  }, [subscription]);
 
   const onLogout = () => setConfirmOpen(true);
   const confirmLogout = () => { setConfirmOpen(false); dispatch(logout()); };
@@ -35,6 +53,62 @@ export default function ProfileScreen({ navigation }) {
     }
   }, [dispatch]);
 
+  const fetchSubscription = useCallback(async () => {
+    if (!isIndia) {
+      setSubscription(null);
+      setSubscriptionError('');
+      setPlans(prev => (Array.isArray(prev) && prev.length ? [] : prev));
+      setPlansFetched(prev => (prev ? false : prev));
+      return;
+    }
+    try {
+      setSubscriptionLoading(true);
+      setSubscriptionError('');
+      const data = await paymentsService.getRazorpayActiveSubscription();
+      const next = data?.subscription
+        ? {
+            ...data.subscription,
+            cancelledAt: data?.cancelledAt,
+            endsAt: data?.endsAt,
+          }
+        : null;
+      setSubscription(next);
+    } catch (err) {
+      if (err?.status === 404) {
+        setSubscription(null);
+        setSubscriptionError('');
+      } else {
+        setSubscription(null);
+        setSubscriptionError(
+          err?.message || 'Unable to load membership info.',
+        );
+      }
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }, [isIndia]);
+
+  const fetchPlans = useCallback(async () => {
+    if (!isIndia) {
+      setPlans(prev => (Array.isArray(prev) && prev.length ? [] : prev));
+      setPlansFetched(true);
+      return;
+    }
+    try {
+      const res = await plansService.listPlans({});
+      const list = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res)
+        ? res
+        : [];
+      setPlans(list);
+    } catch (_err) {
+      setPlans([]);
+    } finally {
+      setPlansFetched(true);
+    }
+  }, [isIndia]);
+
   // Fetch once if user not present. Otherwise, rely on pull-to-refresh.
   useEffect(() => {
     if (!user) {
@@ -46,14 +120,49 @@ export default function ProfileScreen({ navigation }) {
   useFocusEffect(
     React.useCallback(() => {
       fetchMe();
+      fetchSubscription();
+      if (isIndia && !plansFetched) {
+        fetchPlans();
+      }
       return undefined;
-    }, [fetchMe])
+    }, [fetchMe, fetchSubscription, fetchPlans, isIndia, plansFetched])
   );
+
+  useEffect(() => {
+    fetchSubscription();
+  }, [fetchSubscription]);
+
+  useEffect(() => {
+    if (!subscription || subscription?.plan?.name) return;
+    if (!planLookup || planLookup.size === 0) return;
+    const resolved = findPlanForSubscription(subscription, planLookup);
+    if (!resolved) return;
+    setSubscription(prev => {
+      if (!prev) return prev;
+      if (prev.plan && prev.plan.name) return prev;
+      const mergedPlan = prev.plan ? { ...prev.plan, ...resolved } : resolved;
+      return { ...prev, plan: mergedPlan };
+    });
+  }, [subscription, planLookup]);
+
+  useEffect(() => {
+    if (!isIndia) return;
+    if (!subscription) return;
+    if (subscription?.plan?.name) return;
+    if (plansFetched) return;
+    fetchPlans();
+  }, [isIndia, subscription, plansFetched, fetchPlans]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await fetchMe(); } finally { setRefreshing(false); }
-  }, [fetchMe]);
+    try {
+      const tasks = [fetchMe(), fetchSubscription()];
+      if (isIndia) tasks.push(fetchPlans());
+      await Promise.all(tasks);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchMe, fetchSubscription, fetchPlans, isIndia]);
 
   const avatarSource = useMemo(() => {
     const remote = user?.avatar || user?.avatarUrl || user?.image;
@@ -67,6 +176,67 @@ export default function ProfileScreen({ navigation }) {
       return { uri: 'https://i.pravatar.cc/150?img=3' };
     }
   }, [user, avatarError]);
+
+  const planName = useMemo(
+    () => subscription?.plan?.name || subscription?.plan_id || '',
+    [subscription],
+  );
+  const membershipValueStyle = [styles.membershipValue];
+  let membershipValueText = 'No active membership';
+  if (!isIndia) {
+    membershipValueText = 'Membership available only in India';
+    membershipValueStyle.push(styles.membershipMuted);
+  } else if (subscriptionLoading) {
+    membershipValueText = 'Checking membership…';
+    membershipValueStyle.push(styles.membershipMuted);
+  } else if (subscriptionError) {
+    membershipValueText = subscriptionError;
+    membershipValueStyle.push(styles.membershipErrorText);
+  } else if (planName) {
+    membershipValueText = planName;
+  } else {
+    membershipValueStyle.push(styles.membershipMuted);
+  }
+
+  const membershipStatusText =
+    isIndia &&
+    !subscriptionLoading &&
+    !subscriptionError &&
+    subscriptionStatusInfo &&
+    subscriptionStatusInfo.label &&
+    subscriptionStatusInfo.label !== 'Unknown'
+      ? subscriptionStatusInfo.label
+      : null;
+
+  const membershipBadge = useMemo(() => {
+    if (!planName) return null;
+    const normal = planName.toLowerCase();
+    if (normal.includes('gold')) {
+      return {
+        label: 'Gold',
+        color: '#FFD700',
+        backgroundColor: 'rgba(255, 215, 0, 0.12)',
+        borderColor: 'rgba(255, 215, 0, 0.45)',
+      };
+    }
+    if (normal.includes('premium')) {
+      return {
+        label: 'Premium',
+        color: '#9C6CFF',
+        backgroundColor: 'rgba(156, 108, 255, 0.16)',
+        borderColor: 'rgba(156, 108, 255, 0.45)',
+      };
+    }
+    if (normal.includes('silver')) {
+      return {
+        label: 'Silver',
+        color: '#C0C0C0',
+        backgroundColor: 'rgba(192, 192, 192, 0.16)',
+        borderColor: 'rgba(192, 192, 192, 0.45)',
+      };
+    }
+    return null;
+  }, [planName]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -89,6 +259,8 @@ export default function ProfileScreen({ navigation }) {
             <View style={[styles.avatar, styles.skelCircle]} />
             <View style={[styles.skelLineLg, { marginTop: 6 }]} />
             <View style={[styles.skelLineSm, { marginTop: 8 }]} />
+            <View style={[styles.skelLineSm, { marginTop: 10, width: 180 }]} />
+            <View style={[styles.skelLineXs, { marginTop: 6, width: 120 }]} />
             <View style={[styles.skelBtn, { marginTop: 12 }]} />
           </View>
         ) : (
@@ -96,6 +268,35 @@ export default function ProfileScreen({ navigation }) {
             <Image source={avatarSource} onError={() => setAvatarError(true)} style={styles.avatar} />
             <Text style={styles.name}>{user?.username || '—'}</Text>
             <Text style={styles.handle}>{user?.email || ''}</Text>
+            <View style={styles.membershipSection}>
+              {/* <Text style={styles.membershipLabel}>Membership</Text>
+              <Text style={membershipValueStyle} numberOfLines={1} ellipsizeMode="tail">
+                {membershipValueText}
+              </Text> */}
+              {membershipBadge ? (
+                <View
+                  style={[
+                    styles.membershipBadge,
+                    {
+                      backgroundColor: membershipBadge.backgroundColor,
+                      borderColor: membershipBadge.borderColor,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.membershipBadgeText,
+                      { color: membershipBadge.color },
+                    ]}
+                  >
+                    {membershipBadge.label}
+                  </Text>
+                </View>
+              ) : null}
+              {/* {membershipStatusText ? (
+                <Text style={styles.membershipStatus}>{membershipStatusText}</Text>
+              ) : null} */}
+            </View>
             <TouchableOpacity style={styles.editBtn} onPress={() => navigation.navigate('EditProfile')}>
               <Text style={styles.editText}>Edit Profile</Text>
             </TouchableOpacity>
@@ -173,7 +374,27 @@ const styles = StyleSheet.create({
   skelCircle: { backgroundColor: 'rgba(255,255,255,0.15)' },
   skelLineLg: { width: 140, height: 18, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)' },
   skelLineSm: { width: 200, height: 12, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)' },
+  skelLineXs: { width: 120, height: 10, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
   skelBtn: { width: 120, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)' },
+  membershipSection: { alignItems: 'center', marginTop: 10 },
+  membershipLabel: { color: colors.textSecondary, fontSize: 12 },
+  membershipValue: { color: colors.white, fontWeight: '700', marginTop: 4 },
+  membershipMuted: { color: colors.textSecondary },
+  membershipErrorText: { color: '#FF7A7A' },
+  membershipStatus: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
+  membershipBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginVertical: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    
+  },
+  membershipBadgeText: {
+    fontWeight: '700',
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
   row: {
     backgroundColor: '#2B2F39', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14,
     borderWidth: 1, borderColor: '#343B49', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -2,41 +2,25 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { ChevronLeft, Filter, CheckCircle2, Trophy } from 'lucide-react-native';
+import { ChevronLeft, CheckCircle2, Trophy } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import tournaments from '../../services/tournaments';
 import { useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
+import fulfillmentsService from '../../services/fulfillments';
+import { hasAddress } from '../../utils/pickupAddresses';
 
 export default function TournamentsWonScreen({ navigation }) {
-  const currentUserId = useSelector((s) => s?.auth?.user?._id || s?.auth?.user?.id || null);
+  const authUser = useSelector((s) => s?.auth?.user || null);
+  const token = useSelector((s) => s?.auth?.token || null);
+  const currentUserId = useMemo(() => (
+    authUser?._id || authUser?.id || authUser?.userId || null
+  ), [authUser]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-
-  const fetchJoined = useCallback(async () => {
-    try {
-      setError(null);
-      setLoading(true);
-      const res = await tournaments.getJoinedTournaments({});
-      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-      setItems(list);
-    } catch (e) {
-      setItems([]);
-      setError(e?.message || 'Failed to fetch joined tournaments');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchJoined();
-  }, [fetchJoined]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try { await fetchJoined(); } finally { setRefreshing(false); }
-  }, [fetchJoined]);
+  const [fulfillmentMap, setFulfillmentMap] = useState({});
 
   const mapTitle = (it) => it?.product?.name || it?.game?.name || it?.tournament?.game?.name || 'Tournament';
   const mapDate = (it) => {
@@ -52,6 +36,81 @@ export default function TournamentsWonScreen({ navigation }) {
   const mapWinnerId = (it) => (
     it?.winner?._id || it?.winner || it?.tournament?.winner?._id || it?.tournament?.winner || null
   );
+  const mapProductId = (it) => {
+    const product = it?.product || it?.raw?.product || {};
+    return product._id || product.id || it?.productId || it?.raw?.productId || null;
+  };
+
+  const hydrateFulfillments = useCallback(async (list) => {
+    if (!token || !currentUserId || !Array.isArray(list) || list.length === 0) return;
+    const uniqueProductIds = new Set();
+    list.forEach((item) => {
+      const productId = mapProductId(item);
+      const winnerId = mapWinnerId(item);
+      if (
+        productId &&
+        winnerId &&
+        String(winnerId) === String(currentUserId)
+      ) {
+        uniqueProductIds.add(productId);
+      }
+    });
+    if (uniqueProductIds.size === 0) return;
+    try {
+      const entries = await Promise.all(
+        Array.from(uniqueProductIds).map(async (productId) => {
+          try {
+            const data = await fulfillmentsService.getByProduct(productId, { token });
+            return [productId, data];
+          } catch (err) {
+            console.warn('[TournamentsWon] Failed to fetch fulfillment', productId, err?.message);
+            return [productId, null];
+          }
+        })
+      );
+      setFulfillmentMap((prev) => {
+        const next = { ...prev };
+        entries.forEach(([productId, data]) => {
+          if (data) next[productId] = data;
+        });
+        return next;
+      });
+    } catch (err) {
+      console.warn('[TournamentsWon] Hydration error', err?.message);
+    }
+  }, [token, currentUserId]);
+
+  const fetchJoined = useCallback(async () => {
+    try {
+      setError(null);
+      setLoading(true);
+      const res = await tournaments.getJoinedTournaments({});
+      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setFulfillmentMap({});
+      setItems(list);
+      await hydrateFulfillments(list);
+    } catch (e) {
+      setItems([]);
+      setError(e?.message || 'Failed to fetch joined tournaments');
+    } finally {
+      setLoading(false);
+    }
+  }, [hydrateFulfillments]);
+
+  useEffect(() => {
+    fetchJoined();
+  }, [fetchJoined]);
+
+  useFocusEffect(
+    useCallback(() => {
+      hydrateFulfillments(items);
+    }, [items, hydrateFulfillments])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await fetchJoined(); } finally { setRefreshing(false); }
+  }, [fetchJoined]);
 
   const renderItem = ({ item }) => {
     const title = mapTitle(item);
@@ -63,6 +122,8 @@ export default function TournamentsWonScreen({ navigation }) {
     const isClosed = statusNorm === 'CLOSED' || statusNorm === 'ENDED' || statusNorm === 'OVER';
     const winnerId = mapWinnerId(item);
     const isWinner = !!(winnerId && currentUserId && String(winnerId) === String(currentUserId));
+    const productId = mapProductId(item);
+    const hydratedFulfillment = productId ? fulfillmentMap[productId] : null;
 
     const onPress = () => {
       // Navigate to product details for full-card press
@@ -70,6 +131,29 @@ export default function TournamentsWonScreen({ navigation }) {
       const prodId = product?._id || product?.id;
       const detailsItem = prodId ? { id: prodId, _id: prodId, images: product?.images || [], image: (product?.images || [])[0], title: product?.name || title } : null;
       navigation.navigate('Home', { screen: 'Details', params: { item: detailsItem } });
+    };
+    const verificationStatus = String(
+      hydratedFulfillment?.verificationStatus ||
+      hydratedFulfillment?.status ||
+      item?.raw?.fulfillment?.verificationStatus ||
+      item?.fulfillment?.verificationStatus ||
+      item?.verificationStatus ||
+      item?.fulfillmentStatus ||
+      ''
+    ).toUpperCase();
+    const isAcknowledged = verificationStatus === 'VERIFIED';
+    const receiverAddress = hydratedFulfillment?.pickupAddresses?.receiver
+      || item?.fulfillment?.pickupAddresses?.receiver
+      || item?.raw?.fulfillment?.pickupAddresses?.receiver
+      || null;
+    const hasReceiverAddress = hasAddress(receiverAddress);
+    const showAddAddress = isWinner && !isAcknowledged && !hasReceiverAddress;
+
+    const handleAddAddress = () => {
+      navigation.navigate('AcknowledgeReceipt', { item, focus: 'address' });
+    };
+    const handleAcknowledge = () => {
+      navigation.navigate('AcknowledgeReceipt', { item });
     };
 
     return (
@@ -102,16 +186,33 @@ export default function TournamentsWonScreen({ navigation }) {
               </View>
               <View style={styles.divider} />
               <Text style={styles.caption}>Congratulations! You won this tournament. Please acknowledge once you receive the item.</Text>
-              <LinearGradient
-                colors={["#F8E07E", "#EACD5E", "#D4AF37"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.primary, styles.winnerCTAGrad]}
-              >
-                <TouchableOpacity onPress={() => navigation.navigate('AcknowledgeReceipt', { item })} style={{ width: '100%', alignItems: 'center' }}>
-                  <Text style={[styles.primaryTxt, { color: '#2B2443' }]}>Acknowledge Item Received</Text>
-                </TouchableOpacity>
-              </LinearGradient>
+              {isAcknowledged ? (
+                <View style={[styles.primary, styles.acknowledgedBanner]}>
+                  <Text style={styles.acknowledgedText}>Acknowledged. Enjoy!!</Text>
+                </View>
+              ) : showAddAddress ? (
+                <LinearGradient
+                  colors={["#6D5BD0", "#8F6FF5", "#A98CFF"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.primary, styles.winnerCTAGrad]}
+                >
+                  <TouchableOpacity onPress={handleAddAddress} style={{ width: '100%', alignItems: 'center' }}>
+                    <Text style={[styles.primaryTxt, { color: '#FFFFFF' }]}>Add Delivery Address</Text>
+                  </TouchableOpacity>
+                </LinearGradient>
+              ) : (
+                <LinearGradient
+                  colors={["#F8E07E", "#EACD5E", "#D4AF37"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.primary, styles.winnerCTAGrad]}
+                >
+                  <TouchableOpacity onPress={handleAcknowledge} style={{ width: '100%', alignItems: 'center' }}>
+                    <Text style={[styles.primaryTxt, { color: '#2B2443' }]}>Acknowledge Item Received</Text>
+                  </TouchableOpacity>
+                </LinearGradient>
+              )}
               <TouchableOpacity style={[styles.primary, styles.secondaryBtn]} onPress={() => {
                 const product = item?.product || {};
                 const prodId = product?._id || product?.id;
@@ -152,6 +253,7 @@ export default function TournamentsWonScreen({ navigation }) {
     );
   };
 
+  // console.log(JSON.stringify(items[0],null,2))
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
@@ -212,6 +314,13 @@ const styles = StyleSheet.create({
   winnerBadgeGrad: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   winnerTxt: { color: '#2B2443', fontWeight: '900' },
   winnerCTAGrad: { borderRadius: 16 },
+  acknowledgedBanner: {
+    backgroundColor: '#2B2443',
+    borderRadius: 16,
+    borderWidth: 0,
+    marginTop: 12,
+  },
+  acknowledgedText: { color: '#F8E07E', fontWeight: '800' },
   secondaryBtn: { backgroundColor: '#3A4051', marginTop: 10 },
 });
 

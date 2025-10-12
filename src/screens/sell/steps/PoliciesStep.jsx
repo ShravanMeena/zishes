@@ -10,8 +10,8 @@ import appConfigService from '../../../services/appConfig';
 
 const FALLBACK_POLICY_KEYS = ['listing', 'dispute', 'antifraud'];
 
-const TERMS_URL = `${WEB_ORIGIN}/legal/terms-and-conditions`;
-const PRIVACY_URL = `${WEB_ORIGIN}/legal/privacy-policy`;
+const TERMS_URL = `${WEB_ORIGIN}/terms`;
+const PRIVACY_URL = `${WEB_ORIGIN}/privacy-policy`;
 
 export default function PoliciesStep() {
   const dispatch = useDispatch();

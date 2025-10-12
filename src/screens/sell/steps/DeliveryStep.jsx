@@ -22,7 +22,7 @@ export default function DeliveryStep() {
       <Text style={styles.title}>Choose Delivery Method</Text>
       <Text style={styles.subtitle}>Select how you'd like to deliver your item to the buyer.</Text>
 
-      <OptionCard
+      {/* <OptionCard
         icon={<Store size={22} color={colors.white} />}
         title="Local Pickup"
         desc="Winner collects item directly from your specified location at an agreed time."
@@ -40,7 +40,7 @@ export default function DeliveryStep() {
           returnKeyType="done"
           onSubmitEditing={() => Keyboard.dismiss()}
         />
-      </OptionCard>
+      </OptionCard> */}
 
       <OptionCard
         icon={<TruckIcon size={22} color={colors.white} />}

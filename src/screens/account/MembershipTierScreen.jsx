@@ -34,6 +34,11 @@ import paymentsService from '../../services/payments';
 import {fetchMyWallet} from '../../store/wallet/walletSlice';
 import {isIndiaCountry} from '../../utils/payments';
 import {
+  buildPlanLookup,
+  collectPlanKeys,
+  findPlanForSubscription,
+} from '../../utils/plans';
+import {
   categorizeSubscriptionStatus,
   ACTIVE_SUBSCRIPTION_STATUSES,
   formatStatusLabel,
@@ -63,14 +68,6 @@ function formatDate(value) {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function collectPlanKeys(plan) {
-  if (!plan) return [];
-  const {_id, id, planId, plan_id, razorpayPlanId, razorpay_plan_id} = plan;
-  return [_id, id, planId, plan_id, razorpayPlanId, razorpay_plan_id]
-    .filter(Boolean)
-    .map(String);
 }
 
 function isPlanActive(plan, activeKeySet) {
@@ -159,6 +156,7 @@ export default function MembershipTierScreen({navigation}) {
   const [plansLoading, setPlansLoading] = useState(true);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [plansError, setPlansError] = useState(null);
+  const planLookup = useMemo(() => buildPlanLookup(plans), [plans]);
   const [processingPlanId, setProcessingPlanId] = useState(null);
   const [payProcessing, setPayProcessing] = useState(false);
   const [payError, setPayError] = useState(null);
@@ -263,6 +261,25 @@ export default function MembershipTierScreen({navigation}) {
       return undefined;
     }, [loadSubscription]),
   );
+
+  useEffect(() => {
+    if (!subscription) return;
+    const planHasName = Boolean(subscription?.plan?.name);
+    const activeHasName = Boolean(activePlan?.name);
+    if (planHasName && activeHasName) return;
+    if (!planLookup || planLookup.size === 0) return;
+    const resolved = findPlanForSubscription(subscription, planLookup);
+    if (!resolved) return;
+    setSubscription(prev => {
+      if (!prev) return prev;
+      if (prev.plan && prev.plan.name) return prev;
+      const mergedPlan = prev.plan ? {...prev.plan, ...resolved} : resolved;
+      return {...prev, plan: mergedPlan};
+    });
+    if (!activeHasName && resolved) {
+      setActivePlan(resolved);
+    }
+  }, [subscription, planLookup, activePlan]);
 
   const onRefresh = useCallback(async () => {
     setPullRefreshing(true);

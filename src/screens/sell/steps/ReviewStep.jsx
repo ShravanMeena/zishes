@@ -119,7 +119,7 @@ export default function ReviewStep({ onEdit }) {
         onEdit={() => onEdit?.('details')}
       >
         <Row label="Item Name" value={details?.name || 'Not provided yet'} />
-        <Row label="Category" value={details?.category || 'Not selected yet'} />
+        <Row label="Category" value={details?.categoryLabel || details?.category || 'Not selected yet'} />
         <Row label="Condition" value={details?.condition || 'Not specified'} />
         <Row label="Quantity" value={details?.qty || '—'} />
         <Row label="Description" value={details?.description || 'No description added yet.'} stacked last />

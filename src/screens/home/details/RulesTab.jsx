@@ -51,6 +51,21 @@ export default function RulesTab({ item }) {
   }, [baseRules, fetchedRules]);
 
   const entryFee = item?.tournament?.entryFee;
+  const entryFeeText = useMemo(() => {
+    if (typeof entryFee === 'number' && !Number.isNaN(entryFee)) {
+      return `Coins are deducted from your Zish Wallet when you join (Entry Fee: ${entryFee})`;
+    }
+    return 'Coins are deducted from your Zish Wallet when you join.';
+  }, [entryFee]);
+
+  const ruleHighlights = useMemo(() => ([
+    { key: 'limited', Icon: Lock, text: 'Limited Entries → Each tournament has a fixed number of slots.' },
+    { key: 'fee', Icon: Wallet, text: entryFeeText },
+    { key: 'refunds', Icon: Undo2, text: 'Refunds → If cancelled or not filled, coins return to your Zish Wallet (no cash refunds).' },
+    { key: 'fair', Icon: Scale, text: 'Fair Play → All players and sellers must follow Zishes rules.' },
+    { key: 'prize', Icon: Gift, text: 'Prize → The listed item is the prize.' },
+  ]), [entryFeeText]);
+
   return (
     <View>
       <Text style={styles.heading}>How to Play</Text>
@@ -59,6 +74,15 @@ export default function RulesTab({ item }) {
       <View style={styles.card}>
         <Text style={styles.subHeading}>Tournament Rules</Text>
        
+
+        {ruleHighlights.map(({ key, Icon, text }) => (
+          <View key={key} style={styles.ruleRow}>
+            <View style={styles.ruleIconWrap}>
+              <Icon size={18} color={colors.white} />
+            </View>
+            <Text style={styles.ruleText}>{text}</Text>
+          </View>
+        ))}
 
         {loading ? (
           <View style={styles.loadingRow}>

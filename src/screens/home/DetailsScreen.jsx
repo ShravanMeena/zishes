@@ -39,14 +39,21 @@ export default function DetailsScreen({ route, navigation }) {
     if (isFav) dispatch(removeFavorite(item.id));
     else dispatch(addFavorite(item));
   };
-  const [index, setIndex] = useState(0);
-  const [routes] = useState([
+  const routes = useMemo(() => ([
     { key: 'desc', title: 'Description' },
     { key: 'details', title: 'Product Details' },
     { key: 'reviews', title: 'Seller Review' },
     { key: 'rules', title: 'Rules' },
     { key: 'leader', title: 'Leader Board' },
-  ]);
+  ]), []);
+  const [index, setIndex] = useState(() => {
+    const startTab = route?.params?.startTab;
+    if (startTab) {
+      const idx = routes.findIndex((r) => r.key === startTab);
+      if (idx >= 0) return idx;
+    }
+    return 0;
+  });
   const [shareOpen, setShareOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -64,6 +71,15 @@ export default function DetailsScreen({ route, navigation }) {
   const sliderRef = useRef(null);
   const now = useNow(1000);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    const startTab = route?.params?.startTab;
+    if (!startTab) return;
+    const idx = routes.findIndex((r) => r.key === startTab);
+    if (idx >= 0) {
+      setIndex(idx);
+    }
+  }, [route?.params?.startTab, routes]);
 
   const images = useMemo(() => (item?.images && item.images.length ? item.images : [item?.image, item?.image, item?.image]).filter(Boolean), [item]);
   const progress = item?.playsTotal ? Math.min(1, (item.playsCompleted || 0) / item.playsTotal) : 0;

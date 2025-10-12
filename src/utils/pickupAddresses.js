@@ -1,4 +1,6 @@
 const ADDRESS_FIELDS = ['line1', 'line2', 'landmark', 'pincode', 'city', 'state'];
+const PHONE_FIELD = 'phone';
+const ADDRESS_FIELDS_WITH_PHONE = [...ADDRESS_FIELDS, PHONE_FIELD];
 
 function createEmptyAddress(defaultCountry = '') {
   return {
@@ -8,6 +10,7 @@ function createEmptyAddress(defaultCountry = '') {
     pincode: '',
     city: '',
     state: '',
+    phone: '',
     country: defaultCountry || '',
   };
 }
@@ -31,7 +34,7 @@ export function normalizePickupAddressesForState(source, defaultCountry = '') {
 function normalizeAddressForState(sourceAddress, baseAddress, defaultCountry = '') {
   const result = { ...baseAddress };
   if (!sourceAddress) return result;
-  ADDRESS_FIELDS.forEach((key) => {
+  ADDRESS_FIELDS_WITH_PHONE.forEach((key) => {
     const value = sourceAddress[key];
     if (value !== undefined && value !== null) result[key] = String(value);
   });
@@ -57,7 +60,7 @@ export function normalizePickupAddressesForSubmit(addresses, defaultCountry = ''
 function sanitizeAddressForSubmit(address, defaultCountry = '') {
   const out = {};
   if (!address) return out;
-  ADDRESS_FIELDS.forEach((key) => {
+  ADDRESS_FIELDS_WITH_PHONE.forEach((key) => {
     const value = address[key];
     if (typeof value === 'string') {
       const trimmed = value.trim();
@@ -71,10 +74,13 @@ function sanitizeAddressForSubmit(address, defaultCountry = '') {
 
 export function hasAddress(address) {
   if (!address) return false;
-  return ADDRESS_FIELDS.some((key) => {
+  const hasBase = ADDRESS_FIELDS.some((key) => {
     const value = address[key];
     return typeof value === 'string' && value.trim().length > 0;
   });
+  if (hasBase) return true;
+  const phoneVal = address[PHONE_FIELD];
+  return typeof phoneVal === 'string' && phoneVal.trim().length > 0;
 }
 
 export function hasPickupAddresses(addresses) {
@@ -105,4 +111,3 @@ export default {
   hasPickupAddresses,
   resolveProductCountry,
 };
-

@@ -13,6 +13,7 @@ import AcknowledgeReceiptScreen from "../screens/profile/AcknowledgeReceiptScree
 import WebsiteTermsScreen from "../screens/misc/WebsiteTermsScreen";
 import HyperKycScreen from "../screens/auth/HyperKycScreen";
 import CountrySelectScreen from "../screens/auth/CountrySelectScreen";
+import LeaderboardScreen from "../screens/profile/LeaderboardScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -29,6 +30,7 @@ export default function AppStack() {
       <Stack.Screen name="TournamentsWon" component={TournamentsWonScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="AcknowledgeReceipt" component={AcknowledgeReceiptScreen} />
+      <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Stack.Screen name="WebsiteTerms" component={WebsiteTermsScreen} />
       <Stack.Screen name="HyperKyc" component={HyperKycScreen} />
       <Stack.Screen name="CountrySelect" component={CountrySelectScreen} />

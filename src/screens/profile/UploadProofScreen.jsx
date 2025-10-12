@@ -50,7 +50,16 @@ export default function UploadProofScreen({ route, navigation }) {
   const [pickingGeneral, setPickingGeneral] = useState(false);
   const [pickupAddresses, setPickupAddresses] = useState(() => buildEmptyPickupAddresses());
   const [productCountry, setProductCountry] = useState('');
+  const [addressSaving, setAddressSaving] = useState(false);
+  const [addressExpanded, setAddressExpanded] = useState(true);
 
+  const canEdit = mode === 'edit' && stage === 'idle' && !loading;
+  const draftSellerAddressFilled = hasAddress(pickupAddresses.seller);
+  const persistedSellerAddress = hasAddress(fulfillment?.pickupAddresses?.seller);
+  const addressPersisted = persistedSellerAddress;
+  const canSaveAddresses = draftSellerAddressFilled;
+  const needsAddressFirst = mode === 'edit' && !loading && !addressPersisted;
+  const showProofForm = canEdit && addressPersisted;
   const openPicker = (setter) => { setWhichSetter(() => setter); setPickerOpen(true); };
   const pickFromGallery = async () => {
     const ok = await ensureGallery();
@@ -119,6 +128,10 @@ export default function UploadProofScreen({ route, navigation }) {
     const isCourier = String(deliveryMethod).toUpperCase() === 'COURIER';
     if (isCourier && !courier?.trim()) { setError('Courier service is required for courier deliveries.'); return; }
     if (isCourier && !awb?.trim()) { setError('Tracking number is required for courier deliveries.'); return; }
+    if (!addressPersisted) {
+      setError('Please complete the seller pickup address before submitting proof.');
+      return;
+    }
     try {
       // Upload available images with progress (only new ones)
       const photos = [];
@@ -186,6 +199,41 @@ export default function UploadProofScreen({ route, navigation }) {
     }
   };
 
+  const saveAddressOnly = async () => {
+    setError(null);
+    const productId = getProductId();
+    if (!productId) { setError('Missing product id'); return; }
+    if (!canSaveAddresses) {
+      setError('Please enter the seller pickup address.');
+      return;
+    }
+    try {
+      setAddressSaving(true);
+      const normalized = normalizePickupAddressesForSubmit(pickupAddresses, productCountry);
+      if (!normalized || !normalized.seller) {
+        throw new Error('Seller pickup address is required.');
+      }
+      await fulfillments.submitSellerProof(productId, { pickupAddresses: normalized });
+      await reloadFulfillment(
+        setFulfillment,
+        setDeliveryMethod,
+        setCourier,
+        setAwb,
+        setComment,
+        setDate,
+        setExtraPhotos,
+        setPickupAddresses,
+        setProductCountry,
+        getProductId,
+        item
+      );
+    } catch (e) {
+      setError(e?.message || 'Failed to save address.');
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
   return (
     <>
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
@@ -248,30 +296,92 @@ export default function UploadProofScreen({ route, navigation }) {
                 </View>
               </View>
             ) : null}
-            {/* {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
+            {hasAddress(fulfillment?.pickupAddresses?.seller) ? (
               <View style={{ marginTop: 12 }}>
-                <Text style={styles.sectionTitle}>Pickup Addresses</Text>
-                {hasAddress(fulfillment?.pickupAddresses?.seller) ? (
-                  <AddressSummary
-                    label="Seller"
-                    value={fulfillment?.pickupAddresses?.seller}
-                    productCountry={productCountry || fulfillment?.product?.country}
-                  />
-                ) : null}
-                {hasAddress(fulfillment?.pickupAddresses?.receiver) ? (
-                  <AddressSummary
-                    label="Receiver"
-                    value={fulfillment?.pickupAddresses?.receiver}
-                    productCountry={productCountry || fulfillment?.product?.country}
-                  />
-                ) : null}
+                <Text style={styles.sectionTitle}>Pickup Address</Text>
+                <AddressSummary
+                  label="Seller pickup address"
+                  value={fulfillment?.pickupAddresses?.seller}
+                  productCountry={productCountry || fulfillment?.product?.country}
+                />
               </View>
-            ) : null} */}
+            ) : null}
           </View>
         )}
 
-        {(mode === 'edit' && stage === 'idle' && !loading) && String(deliveryMethod).toUpperCase() === 'COURIER' ? (<Text style={styles.sectionTitle}>Courier Details</Text>) : null}
-        {(mode === 'edit' && stage === 'idle' && !loading) && String(deliveryMethod).toUpperCase() === 'COURIER' ? (<View style={styles.card}>
+        {canEdit ? (
+          <View style={[styles.card, styles.addressCard]}>
+            <TouchableOpacity
+              onPress={() => setAddressExpanded((prev) => !prev)}
+              style={styles.addressHeader}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.sectionTitle}>Pickup Address</Text>
+              <ChevronDown
+                size={18}
+                color={colors.textSecondary}
+                style={{ transform: [{ rotate: addressExpanded ? '180deg' : '0deg' }] }}
+              />
+            </TouchableOpacity>
+            {productCountry ? <Text style={styles.addressHint}>Country locked to {productCountry}</Text> : null}
+            {addressExpanded ? (
+              <>
+                <AddressForm
+                  label="Seller pickup address"
+                  value={pickupAddresses.seller}
+                  onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, seller: { ...prev.seller, [field]: value } }))}
+                  productCountry={productCountry}
+                  phoneLabel="Seller contact number"
+                />
+              </>
+            ) : null}
+          </View>
+        ) : null}
+
+        {needsAddressFirst ? (
+          <>
+            <TouchableOpacity
+              style={[styles.btn, styles.primary, (addressSaving || !canSaveAddresses) && { opacity: 0.5 }]}
+              onPress={saveAddressOnly}
+              disabled={addressSaving || !canSaveAddresses}
+            >
+              {addressSaving ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator color={colors.white} />
+                  <Text style={styles.btnTxt}>Saving address…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnTxt}>Save Pickup Address</Text>
+              )}
+            </TouchableOpacity>
+            <View style={styles.addressNotice}>
+              <AlertTriangle size={16} color="#FFD053" />
+              <Text style={styles.addressNoticeTxt}>
+                Add the seller pickup address before uploading delivery proof.
+              </Text>
+            </View>
+          </>
+        ) : null}
+
+        {showProofForm ? (
+          <TouchableOpacity
+            style={[styles.btn, styles.addressUpdateBtn, (addressSaving || !canSaveAddresses) && { opacity: 0.5 }]}
+            onPress={saveAddressOnly}
+            disabled={addressSaving || !canSaveAddresses}
+          >
+            {addressSaving ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator color={colors.white} />
+                <Text style={styles.btnTxt}>Saving address…</Text>
+              </View>
+            ) : (
+              <Text style={styles.btnTxt}>Update Address</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
+
+        {showProofForm && String(deliveryMethod).toUpperCase() === 'COURIER' ? (<Text style={styles.sectionTitle}>Courier Details</Text>) : null}
+        {showProofForm && String(deliveryMethod).toUpperCase() === 'COURIER' ? (<View style={styles.card}>
           <Text style={styles.label}>AWB / Tracking Number</Text>
           <TextInput value={awb} onChangeText={setAwb} placeholder="Enter AWB or tracking number" placeholderTextColor={colors.textSecondary} style={styles.input} />
           <Text style={styles.label}>Courier</Text>
@@ -295,12 +405,12 @@ export default function UploadProofScreen({ route, navigation }) {
           ) : null}
         </View>) : null}
 
-        {(mode === 'edit' && stage === 'idle' && !loading) && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<Text style={styles.sectionTitle}>{String(deliveryMethod).toUpperCase() === 'DIGITAL' ? 'Digital Delivery' : 'In-Person Handover'}</Text>) : null}
-        {(mode === 'edit' && stage === 'idle' && !loading) && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<TouchableOpacity style={styles.uploadRow} onPress={() => { setPickingGeneral(false); openPicker(setHandover); }}>
+        {showProofForm && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<Text style={styles.sectionTitle}>{String(deliveryMethod).toUpperCase() === 'DIGITAL' ? 'Digital Delivery' : 'In-Person Handover'}</Text>) : null}
+        {showProofForm && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<TouchableOpacity style={styles.uploadRow} onPress={() => { setPickingGeneral(false); openPicker(setHandover); }}>
           <Camera size={16} color={colors.white} />
           <Text style={styles.uploadTxt}>{handover ? 'Change Handover Photo' : 'Package Handover Photo'}</Text>
         </TouchableOpacity>) : null}
-        {(mode === 'edit' && stage === 'idle' && !loading) && handover ? (
+        {showProofForm && handover ? (
           <View style={styles.thumbWrap}>
             <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.9} onPress={() => setPreview('handover')}>
               <Image source={{ uri: handover.uri }} style={styles.thumb} />
@@ -311,7 +421,7 @@ export default function UploadProofScreen({ route, navigation }) {
           </View>
         ) : null}
 
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {showProofForm ? (
           <>
             <Text style={styles.sectionTitle}>Additional Photos</Text>
             <TouchableOpacity style={styles.uploadRow} onPress={() => { setPickingGeneral(true); setWhichSetter(null); setPickerOpen(true); }}>
@@ -337,29 +447,7 @@ export default function UploadProofScreen({ route, navigation }) {
           </>
         ) : null}
 
-        {/* {(mode === 'edit' && stage === 'idle' && !loading) ? (
-          <View style={[styles.card, { marginTop: 12 }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.sectionTitle}>Pickup Addresses (optional)</Text>
-              {productCountry ? <Text style={styles.addressHint}>Country locked to {productCountry}</Text> : null}
-            </View>
-            <AddressForm
-              label="Seller pickup address"
-              value={pickupAddresses.seller}
-              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, seller: { ...prev.seller, [field]: value } }))}
-              productCountry={productCountry}
-            />
-            <View style={styles.addressDivider} />
-            <AddressForm
-              label="Receiver delivery address"
-              value={pickupAddresses.receiver}
-              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, receiver: { ...prev.receiver, [field]: value } }))}
-              productCountry={productCountry}
-            />
-          </View>
-        ) : null} */}
-
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (<View style={[styles.card, { marginTop: 16 }]}> 
+        {showProofForm ? (<View style={[styles.card, { marginTop: 16 }]}> 
           <Text style={styles.label}>Delivery Date</Text>
           <TouchableOpacity style={[styles.input, styles.select]} onPress={() => setShowDate(true)}>
             <Text style={styles.selTxt}>{date || 'Select a date'}</Text>
@@ -367,7 +455,7 @@ export default function UploadProofScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>) : null}
 
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (<>
+        {showProofForm ? (<>
         <Text style={styles.label}>Comments</Text>
         <TextInput value={comment} onChangeText={setComment} placeholder="Add any additional delivery notes here..." placeholderTextColor={colors.textSecondary} style={[styles.input, { height: 100, textAlignVertical: 'top' }]} multiline />
 
@@ -377,7 +465,7 @@ export default function UploadProofScreen({ route, navigation }) {
             <Text style={styles.errorTxt}>{error}</Text>
           </View>
         ) : null}
-        <TouchableOpacity style={[styles.btn, styles.primary, (stage !== 'idle') && { opacity: 0.9 }]} disabled={stage !== 'idle'} onPress={submit}>
+        <TouchableOpacity style={[styles.btn, styles.primary, stage !== 'idle' && { opacity: 0.5 }]} disabled={stage !== 'idle'} onPress={submit}>
           {stage === 'uploading' ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <ActivityIndicator color={colors.white} />
@@ -437,19 +525,21 @@ export default function UploadProofScreen({ route, navigation }) {
       onPrimary={() => { setSuccessOpen(false); navigation.goBack(); }}
       onRequestClose={() => setSuccessOpen(false)}
     />
-    <ImagePickerSheet
-      visible={pickerOpen}
-      onClose={() => setPickerOpen(false)}
-      onPickCamera={() => {
-        setPickerOpen(false);
-        setTimeout(() => { pickFromCamera(); }, 300);
-      }}
-      onPickGallery={() => {
-        setPickerOpen(false);
-        setTimeout(() => { pickFromGallery(); }, 300);
-      }}
-      title="Upload Photo"
-    />
+    {showProofForm ? (
+      <ImagePickerSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPickCamera={() => {
+          setPickerOpen(false);
+          setTimeout(() => { pickFromCamera(); }, 300);
+        }}
+        onPickGallery={() => {
+          setPickerOpen(false);
+          setTimeout(() => { pickFromGallery(); }, 300);
+        }}
+        title="Upload Photo"
+      />
+    ) : null}
   </>
   );
 }
@@ -489,7 +579,6 @@ const styles = StyleSheet.create({
   select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selTxt: { color: colors.white },
   addressHint: { color: colors.textSecondary, fontSize: 12 },
-  addressDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#343B49', marginVertical: 14 },
   addressLabel: { color: colors.white, fontWeight: '700', marginBottom: 4 },
   addressField: { marginTop: 10 },
   addressRow: { flexDirection: 'row', marginTop: 10 },
@@ -504,10 +593,15 @@ const styles = StyleSheet.create({
   thumbWrap: { width: 120, height: 120, borderRadius: 12, overflow: 'hidden', marginTop: 10, backgroundColor: '#1E2128', position: 'relative' },
   thumb: { width: '100%', height: '100%' },
   removeBtn: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  addressCard: { marginTop: 4 },
+  addressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  addressNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3A2F1B', borderWidth: 1, borderColor: '#B5892E', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginBottom: 12 },
+  addressNoticeTxt: { color: '#FFDFAA', fontWeight: '700', flex: 1 },
 
   btn: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
   primary: { backgroundColor: colors.primary },
   cancel: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
+  addressUpdateBtn: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
   btnTxt: { color: colors.white, fontWeight: '800' },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
@@ -556,7 +650,7 @@ function DeliveryMessage({ method, courier }) {
   return <Text style={{ color: colors.textSecondary, marginTop: 8 }}>{text}</Text>;
 }
 
-function AddressForm({ label, value, onChange, productCountry }) {
+function AddressForm({ label, value, onChange, productCountry, phoneLabel = 'Phone number' }) {
   const v = value || {};
   return (
     <View style={{ marginTop: 12 }}>
@@ -606,6 +700,14 @@ function AddressForm({ label, value, onChange, productCountry }) {
         keyboardType="default"
         onChangeText={(text) => onChange('pincode', text)}
       />
+      <TextInput
+        style={[styles.input, styles.addressField]}
+        placeholder={phoneLabel || 'Phone number'}
+        placeholderTextColor={colors.textSecondary}
+        value={v.phone || ''}
+        keyboardType="phone-pad"
+        onChangeText={(text) => onChange('phone', text)}
+      />
       <Text style={styles.addressCountry}>Country: {productCountry || v.country || '—'} (locked to listing)</Text>
     </View>
   );
@@ -622,6 +724,7 @@ function AddressSummary({ label, value, productCountry }) {
   if (v.pincode) lines.push(`Pincode: ${v.pincode}`);
   const country = v.country || productCountry;
   if (country) lines.push(`Country: ${country}`);
+  if (v.phone) lines.push(`Phone: ${v.phone}`);
 
   return (
     <View style={styles.addressSummary}>

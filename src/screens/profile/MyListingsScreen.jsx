@@ -12,6 +12,7 @@ import { mapProductToCard } from '../../utils/productMapper';
 import MyListingsSkeleton from '../../components/skeletons/MyListingsSkeleton';
 import AppModal from '../../components/common/AppModal';
 import { safeProgress, getEarlyTerminationContext, canShowEarlyTermination } from '../../utils/earlyTermination';
+import { hasAddress } from '../../utils/pickupAddresses';
 
 const STALE_REFRESH_WINDOW_MS = 2 * 60 * 1000; // only refresh automatically when data is older than this
 
@@ -124,6 +125,7 @@ export default function MyListingsScreen({ navigation, route }) {
     }
   };
 
+  console.log(JSON.stringify(items,null,2),"hshshi hais")
   const submitEarlyTermination = async () => {
     if (!cancelTarget) return;
     if (!token) {
@@ -158,6 +160,13 @@ export default function MyListingsScreen({ navigation, route }) {
     const progressPct = Math.round(safeProgress(item) * 100);
     const earlyContext = getEarlyTerminationContext(item);
     const canTerminateEarly = canShowEarlyTermination(earlyContext);
+    const fulfillment = item?.raw?.fulfillment || {};
+    const needsProofDetails = !(
+      hasAddress(fulfillment?.pickupAddresses?.seller) &&
+      hasAddress(fulfillment?.pickupAddresses?.receiver) &&
+      fulfillment?.dateOfDelivery
+    );
+    const uploadCtaLabel = needsProofDetails ? 'Complete Details' : 'Upload Proof';
     const onSupport = () => {
       const state = navigation.getState?.();
       const routeNames = Array.isArray(state?.routeNames) ? state.routeNames : [];
@@ -260,9 +269,15 @@ export default function MyListingsScreen({ navigation, route }) {
                 </TouchableOpacity>
               ) : null}
               {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
-                <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })} style={styles.footerActionButton}>
-                  <Chip label="Upload Proof" type="accent" style={styles.actionChip} />
-                </TouchableOpacity>
+                needsProofDetails ? (
+                  <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })} style={[styles.footerActionButton, styles.completeButton]}>
+                    <Text style={styles.completeButtonText}>Complete Details</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })} style={styles.footerActionButton}>
+                    <Chip label={uploadCtaLabel} type="accent" style={styles.actionChip} />
+                  </TouchableOpacity>
+                )
               ) : null}
               {String(item?.raw?.fulfillment?.verificationStatus || '').toUpperCase() === 'VERIFIED' ? (
                 <TouchableOpacity
@@ -408,6 +423,17 @@ const styles = StyleSheet.create({
   footerActionRow: { marginTop: 14 },
   footerActionInner: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
   footerActionButton: { marginRight: 8, marginTop: 10 },
+  completeButton: {
+    marginRight: 8,
+    marginTop: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeButtonText: { color: colors.white, fontWeight: '800', fontSize: 14 },
   approvalNotice: {
     marginTop: 10,
     borderRadius: 14,

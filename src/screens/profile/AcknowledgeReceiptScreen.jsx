@@ -12,6 +12,7 @@ import fulfillments from '../../services/fulfillments';
 import reviews from '../../services/reviews';
 import { uploadImage } from '../../services/uploads';
 import CongratsModal from '../../components/modals/CongratsModal';
+import { useSelector } from 'react-redux';
 import {
   createEmptyPickupAddresses as buildEmptyPickupAddresses,
   normalizePickupAddressesForState,
@@ -48,6 +49,59 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const [loadingReviewOptions, setLoadingReviewOptions] = useState(false);
   const [reviewTags, setReviewTags] = useState([]);
   const [reviewComment, setReviewComment] = useState('');
+  const [addressSaving, setAddressSaving] = useState(false);
+
+  const authUser = useSelector((s) => s.auth?.user);
+  const currentUserId = useMemo(() => extractEntityId(authUser), [authUser]);
+  const sellerId = useMemo(() => {
+    const candidates = [
+      fulfillment?.seller,
+      fulfillment?.seller?.user,
+      fulfillment?.product?.seller,
+      fulfillment?.product?.user,
+      item?.seller,
+      item?.product?.seller,
+      item?.product?.user,
+      item?.raw?.seller,
+      item?.raw?.product?.seller,
+    ];
+    return resolveFirstId(candidates);
+  }, [fulfillment, item]);
+  const winnerId = useMemo(() => {
+    const candidates = [
+      fulfillment?.winner,
+      fulfillment?.buyer,
+      fulfillment?.receiver,
+      fulfillment?.receiver?.user,
+      fulfillment?.player,
+      item?.winner,
+      item?.buyer,
+      item?.user,
+      item?.player,
+      item?.raw?.winner,
+    ];
+    return resolveFirstId(candidates);
+  }, [fulfillment, item]);
+  const isSeller = idsEqual(currentUserId, sellerId);
+  const isBuyer = idsEqual(currentUserId, winnerId);
+  const isIdle = stage === 'idle';
+  const canEditSections = isBuyer && mode === 'edit' && isIdle && !loading;
+  const canSubmit = isBuyer && mode === 'edit' && !loading;
+  const receiverAddress = fulfillment?.pickupAddresses?.receiver;
+  const sellerAddress = fulfillment?.pickupAddresses?.seller;
+  const hasReceiverAddress = hasAddress(receiverAddress);
+  const hasSellerAddress = hasAddress(sellerAddress);
+  const productCountryResolved = productCountry || fulfillment?.product?.country || item?.product?.country || '';
+  const addressPersisted = hasReceiverAddress;
+  const receiverDraftAddressExists = hasAddress(pickupAddresses?.receiver);
+  const needsAddressFirst = isBuyer && !addressPersisted;
+  const canEditAcknowledgement = canEditSections && addressPersisted;
+
+  useEffect(() => {
+    if (isSeller && mode !== 'view') {
+      setMode('view');
+    }
+  }, [isSeller, mode]);
 
   const banner = useMemo(() => {
     const title = item?.product?.name || item?.game?.name || item?.tournament?.game?.name || 'Item';
@@ -84,9 +138,8 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           item
         );
         if (!f) return;
-        const rc = f?.receiverConfirmation || f?.receiver || {};
-        const hasAck = !!(f?.received || rc?.confirmedAt || rc?.notes || rc?.videoUrl || hasPickupAddresses(f?.pickupAddresses));
-        if (hasAck) setMode('view');
+        const ackDate = f?.dateOfReceive || null;
+        if (ackDate) setMode('view');
       } catch (e) {
         // ignore for view
       } finally { setLoading(false); }
@@ -121,6 +174,10 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
     setError(null);
     const productId = getProductId();
     if (!productId) { setError('Missing product id'); return; }
+    if (!receiverDraftAddressExists) {
+      setError('Please add the delivery address before submitting.');
+      return;
+    }
     try {
       // Upload any images user selected to receiver media
       const photos = [];
@@ -147,13 +204,28 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
       const payload = {};
       if (photos.length) payload.photos = photos; // receiverMedia
       if (comment?.trim()) payload.notes = comment.trim();
+      let receiveDateIso = null;
       if (date) {
-        const d = new Date(date);
-        if (!isNaN(d.getTime())) payload.dateOfReceive = d.toISOString();
+        const parsed = new Date(date);
+        if (!Number.isNaN(parsed.getTime())) {
+          receiveDateIso = parsed.toISOString();
+        }
       }
+      if (!receiveDateIso) {
+        const now = new Date();
+        receiveDateIso = now.toISOString();
+        if (!date) {
+          try { setDate(formatDateYYYYMMDD(now)); } catch {}
+        }
+      }
+      payload.dateOfReceive = receiveDateIso;
       if (videoUrl?.trim()) payload.videoUrl = videoUrl.trim();
       const normalizedPickup = normalizePickupAddressesForSubmit(pickupAddresses, productCountry);
-      if (normalizedPickup) payload.pickupAddresses = normalizedPickup;
+      if (!normalizedPickup || !normalizedPickup.receiver) {
+        throw new Error('Delivery address missing. Please add it before submitting.');
+      }
+      payload.pickupAddresses = normalizedPickup;
+
       // videoUrl is optional and our UI collects photos; skip unless you later add video capture
       await fulfillments.submitReceiverProof(productId, payload);
       // Attempt to create a review if rating provided
@@ -195,6 +267,40 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
     }
   };
 
+  console.log(fulfillment)
+  const saveAddressOnly = async () => {
+    setError(null);
+    const productId = getProductId();
+    if (!productId) { setError('Missing product id'); return; }
+    if (!receiverDraftAddressExists) {
+      setError('Please enter the receiver delivery address.');
+      return;
+    }
+    try {
+      setAddressSaving(true);
+      const normalizedPickup = normalizePickupAddressesForSubmit(pickupAddresses, productCountry);
+      if (!normalizedPickup || !normalizedPickup.receiver) {
+        throw new Error('Receiver address is required.');
+      }
+      await fulfillments.submitReceiverProof(productId, { pickupAddresses: normalizedPickup });
+      await reloadAck(
+        setFulfillment,
+        setComment,
+        setDate,
+        setPickupAddresses,
+        setProductCountry,
+        setVideoUrl,
+        getProductId,
+        item
+      );
+    } catch (e) {
+      setError(e?.message || 'Failed to save address');
+    } finally {
+      setStage('idle');
+      setAddressSaving(false);
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
@@ -224,8 +330,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
                 item
               );
               if (f) {
-                const rc = f?.receiverConfirmation || f?.receiver || {};
-                const hasAck = !!(f?.received || rc?.confirmedAt || rc?.notes || rc?.videoUrl || hasPickupAddresses(f?.pickupAddresses));
+                const hasAck = Boolean(f?.dateOfReceive);
                 if (hasAck) setMode('view');
               }
             } finally { setRefreshing(false); }
@@ -247,7 +352,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         </View>
 
         {/* Existing acknowledgement details (if any). View-only with Edit button */}
-        {(!loading && stage === 'idle') && mode === 'view' && fulfillment ? (
+        {(!loading && stage === 'idle') && (mode === 'view' || !isBuyer) && fulfillment ? (
           <View style={{ backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12, marginBottom: 12 }}>
             <Text style={styles.sectionTitle}>Acknowledgement Details</Text>
             {fulfillment?.winner ? (
@@ -258,7 +363,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
             ) : (
               <Text style={{ color: colors.textSecondary, marginTop: 6 }}>Waiting for seller approval.</Text>
             )}
-            <DetailRow label="Date of Receive" value={formatHumanDate(fulfillment?.dateOfReceive || fulfillment?.receiverConfirmation?.confirmedAt || fulfillment?.deliveredAt)} />
+            <DetailRow label="Date of Receive" value={formatHumanDate(fulfillment?.dateOfReceive)} />
             {fulfillment?.receiverConfirmation?.notes ? (
               <DetailRow label="Notes" value={fulfillment.receiverConfirmation.notes} multiline />
             ) : null}
@@ -277,26 +382,28 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
                 </View>
               </View>
             ) : null}
-            {/* {hasPickupAddresses(fulfillment?.pickupAddresses) ? (
+            {(hasReceiverAddress || hasSellerAddress || isSeller) ? (
               <View style={{ marginTop: 12 }}>
-                <Text style={styles.sectionTitle}>Pickup Addresses</Text>
-                {hasAddress(fulfillment?.pickupAddresses?.seller) ? (
-                  <AddressSummary
-                    label="Seller"
-                    value={fulfillment?.pickupAddresses?.seller}
-                    productCountry={productCountry || fulfillment?.product?.country}
-                  />
-                ) : null}
-                {hasAddress(fulfillment?.pickupAddresses?.receiver) ? (
+                <Text style={styles.sectionTitle}>Delivery Details</Text>
+                {hasReceiverAddress ? (
                   <AddressSummary
                     label="Receiver"
-                    value={fulfillment?.pickupAddresses?.receiver}
-                    productCountry={productCountry || fulfillment?.product?.country}
+                    value={receiverAddress}
+                    productCountry={productCountryResolved}
+                  />
+                ) : (
+                  isSeller ? <Text style={styles.detailEmpty}>Receiver address has not been provided yet.</Text> : null
+                )}
+                {hasSellerAddress ? (
+                  <AddressSummary
+                    label="Seller"
+                    value={sellerAddress}
+                    productCountry={productCountryResolved}
                   />
                 ) : null}
               </View>
-            ) : null} */}
-            {fulfillment?.received ? (
+            ) : null}
+            {/* {fulfillment?.received ? (
               <TouchableOpacity
                 style={[styles.btn, styles.primary, { marginTop: 10 }]}
                 onPress={() => {
@@ -309,12 +416,12 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
               >
                 <Text style={styles.btnTxt}>Leave Seller Review</Text>
               </TouchableOpacity>
-            ) : null}
+            ) : null} */}
           </View>
         ) : null}
 
         {/* Date */}
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {canEditAcknowledgement ? (
           <>
             <Text style={styles.sectionTitle}>Delivery Date</Text>
             <TouchableOpacity style={[styles.input, styles.select]} onPress={() => setShowDate(true)}>
@@ -325,7 +432,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         ) : null}
 
         {/* Proof Images (keep optional; only in edit mode) */}
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {canEditAcknowledgement ? (
           <>
             <Text style={styles.sectionTitle}>Proof of Acknowledgement</Text>
             <TouchableOpacity style={styles.uploadRow} onPress={() => setPickerOpen(true)}>
@@ -347,29 +454,53 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           </>
         ) : null}
 
-        {/* {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {needsAddressFirst ? (
           <View style={styles.addressCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.sectionTitle}>Pickup Addresses (optional)</Text>
+              <Text style={styles.sectionTitle}>Delivery Address</Text>
               {productCountry ? <Text style={styles.addressHint}>Country locked to {productCountry}</Text> : null}
             </View>
             <AddressForm
-              label="Seller pickup address"
-              value={pickupAddresses.seller}
-              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, seller: { ...prev.seller, [field]: value } }))}
-              productCountry={productCountry}
-            />
-            <View style={styles.addressDivider} />
-            <AddressForm
               label="Receiver delivery address"
               value={pickupAddresses.receiver}
-              onChange={(field, value) => setPickupAddresses((prev) => ({ ...prev, receiver: { ...prev.receiver, [field]: value } }))}
+              onChange={(field, value) => {
+                setPickupAddresses((prev) => ({
+                  ...prev,
+                  receiver: { ...prev.receiver, [field]: value },
+                }));
+              }}
               productCountry={productCountry}
+              showPhone
+              phoneLabel="Mobile number"
             />
           </View>
-        ) : null} */}
+        ) : null}
 
-        {/* {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {needsAddressFirst ? (
+          <TouchableOpacity
+            style={[styles.btn, styles.primary, (addressSaving || !receiverDraftAddressExists) && { opacity: 0.5 }]}
+            onPress={saveAddressOnly}
+            disabled={addressSaving || !receiverDraftAddressExists}
+          >
+            {addressSaving ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator color={colors.white} />
+                <Text style={styles.btnTxt}>Saving address…</Text>
+              </View>
+            ) : (
+              <Text style={styles.btnTxt}>Save Address</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
+
+        {needsAddressFirst ? (
+          <View style={styles.addressNotice}>
+            <AlertTriangle size={16} color="#FFD053" />
+            <Text style={styles.addressNoticeTxt}>Add the receiver delivery address to continue with acknowledgement.</Text>
+          </View>
+        ) : null}
+
+        {/* {canEditSections ? (
           <>
             <Text style={styles.sectionTitle}>Video Proof (Optional)</Text>
             <TextInput
@@ -386,18 +517,8 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         ) : null} */}
 
         {/* Comment + Review */}
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {canEditAcknowledgement ? (
           <>
-            <Text style={styles.sectionTitle}>Comment (Optional)</Text>
-            <TextInput
-              value={comment}
-              onChangeText={setComment}
-              placeholder="Any additional notes for the seller"
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={4}
-              style={[styles.input, { height: 110, textAlignVertical: 'top' }]}
-            />
             <Text style={styles.sectionTitle}>Seller Review</Text>
             <Text style={styles.sectionSubTitle}>Rate your experience</Text>
             <View style={styles.starRow}>
@@ -427,7 +548,6 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
                 ))}
               </View>
             )}
-            <Text style={styles.sectionSubTitle}>Review comment (optional)</Text>
             <TextInput
               value={reviewComment}
               onChangeText={setReviewComment}
@@ -447,7 +567,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
             <Text style={styles.errorTxt}>{error}</Text>
           </View>
         ) : null}
-        {(mode === 'edit' && stage === 'idle' && !loading) ? (
+        {canSubmit && addressPersisted ? (
           <TouchableOpacity style={[styles.btn, styles.primary, (stage !== 'idle') && { opacity: 0.8 }]} onPress={submit} disabled={stage !== 'idle'}>
             {stage === 'uploading' ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -487,7 +607,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         onClose={() => setShowDate(false)}
         onConfirm={(d) => { setDate(formatDateYYYYMMDD(d)); setShowDate(false); }}
       />
-      {(mode === 'edit' && stage === 'idle' && !loading) ? (
+      {canEditAcknowledgement ? (
         <ImagePickerSheet
           visible={pickerOpen}
           onClose={() => setPickerOpen(false)}
@@ -549,6 +669,8 @@ const styles = StyleSheet.create({
   reviewInput: { textAlignVertical: 'top', minHeight: 100 },
   addressCard: { backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12, marginTop: 16 },
   addressHint: { color: colors.textSecondary, fontSize: 12 },
+  addressNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3A2F1B', borderWidth: 1, borderColor: '#B5892E', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginTop: 12 },
+  addressNoticeTxt: { color: '#FFDFAA', fontWeight: '700', flex: 1 },
   addressLabel: { color: colors.white, fontWeight: '700', marginBottom: 4 },
   addressField: { marginTop: 10 },
   addressRow: { flexDirection: 'row', marginTop: 10 },
@@ -569,6 +691,7 @@ const styles = StyleSheet.create({
   previewClose: { position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   badgeApproved: { alignSelf: 'flex-start', backgroundColor: '#2ECC71', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, marginTop: 6 },
   badgeApprovedTxt: { color: '#0B1220', fontWeight: '900' },
+  detailEmpty: { color: colors.textSecondary, marginTop: 6 },
   skeletonCard: { backgroundColor: '#1E2128', borderRadius: 12, borderWidth: 1, borderColor: '#24324A', padding: 14, marginBottom: 12 },
   skelLine: { height: 12, borderRadius: 6, backgroundColor: '#2B3548', marginTop: 10, width: '60%' },
   skelLineWide: { height: 16, borderRadius: 6, backgroundColor: '#2B3548', width: '80%' },
@@ -596,7 +719,51 @@ function formatHumanDate(iso) {
   try { return new Date(iso).toLocaleString(); } catch { return '—'; }
 }
 
-function AddressForm({ label, value, onChange, productCountry }) {
+function extractEntityId(entity) {
+  if (entity == null) return null;
+  if (typeof entity === 'string' || typeof entity === 'number') {
+    return String(entity);
+  }
+  if (typeof entity === 'object') {
+    return (
+      entity._id ||
+      entity.id ||
+      entity.userId ||
+      entity.user_id ||
+      entity.ownerId ||
+      entity.owner_id ||
+      entity.uid ||
+      null
+    );
+  }
+  return null;
+}
+
+function resolveFirstId(candidates = []) {
+  for (const candidate of candidates) {
+    const id = extractEntityId(candidate);
+    if (id) return id;
+    if (candidate && typeof candidate === 'object') {
+      const nested = extractEntityId(
+        candidate.user ||
+          candidate.owner ||
+          candidate.player ||
+          candidate.seller ||
+          candidate.buyer ||
+          candidate.account
+      );
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+function idsEqual(a, b) {
+  if (!a || !b) return false;
+  return String(a) === String(b);
+}
+
+function AddressForm({ label, value, onChange, productCountry, showPhone = false, phoneLabel = 'Phone number' }) {
   const v = value || {};
   return (
     <View style={{ marginTop: 12 }}>
@@ -646,6 +813,16 @@ function AddressForm({ label, value, onChange, productCountry }) {
         keyboardType="default"
         onChangeText={(text) => onChange('pincode', text)}
       />
+      {showPhone ? (
+        <TextInput
+          style={[styles.input, styles.addressField]}
+          placeholder={phoneLabel || 'Phone number'}
+          placeholderTextColor={colors.textSecondary}
+          value={v.phone || ''}
+          keyboardType="phone-pad"
+          onChangeText={(text) => onChange('phone', text)}
+        />
+      ) : null}
       <Text style={styles.addressCountry}>Country: {productCountry || v.country || '—'} (locked to listing)</Text>
     </View>
   );
@@ -662,6 +839,7 @@ function AddressSummary({ label, value, productCountry }) {
   if (v.pincode) lines.push(`Pincode: ${v.pincode}`);
   const country = v.country || productCountry;
   if (country) lines.push(`Country: ${country}`);
+  if (v.phone) lines.push(`Phone: ${v.phone}`);
 
   return (
     <View style={styles.addressSummary}>
@@ -691,7 +869,7 @@ async function reloadAck(
   setFulfillment(f);
   const rc = f?.receiverConfirmation || f?.receiver || {};
   if (setComment) setComment(rc?.notes || '');
-  const confirmedAt = rc?.confirmedAt || f?.dateOfReceive || f?.deliveredAt;
+  const confirmedAt = f?.dateOfReceive || rc?.dateOfReceive || rc?.confirmedAt || f?.deliveredAt;
   if (setDate) {
     if (confirmedAt) {
       try { setDate(formatDateYYYYMMDD(new Date(confirmedAt))); } catch { setDate(''); }

@@ -1,0 +1,62 @@
+diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt
+index 0000000..1111111 100644
+--- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt
++++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt
+@@ -1,11 +1,9 @@
+ package com.swmansion.rnscreens
+ 
+-import com.facebook.react.BaseReactPackage
+ import com.facebook.react.bridge.NativeModule
+ import com.facebook.react.bridge.ReactApplicationContext
+ import com.facebook.react.module.annotations.ReactModuleList
+-import com.facebook.react.module.model.ReactModuleInfo
+-import com.facebook.react.module.model.ReactModuleInfoProvider
++import com.facebook.react.ReactPackage
+ import com.facebook.react.uimanager.ViewManager
+ import com.swmansion.rnscreens.utils.ScreenDummyLayoutHelper
+ 
+@@ -16,7 +14,7 @@
+         ScreensModule::class,
+     ],
+ )
+-class RNScreensPackage : BaseReactPackage() {
++class RNScreensPackage : ReactPackage {
+     // We just retain it here. This object helps us tackle jumping content when using native header.
+     // See: https://github.com/software-mansion/react-native-screens/pull/2169
+     private var screenDummyLayoutHelper: ScreenDummyLayoutHelper? = null
+@@ -42,33 +40,9 @@
+         )
+     }
+ 
+-    override fun getModule(
+-        s: String,
+-        reactApplicationContext: ReactApplicationContext,
+-    ): NativeModule? {
+-        when (s) {
+-            ScreensModule.NAME -> return ScreensModule(reactApplicationContext)
+-        }
+-        return null
+-    }
++    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
++        listOf(ScreensModule(reactContext))
+ 
+-    override fun getReactModuleInfoProvider(): ReactModuleInfoProvider =
+-        ReactModuleInfoProvider {
+-            val moduleInfos: MutableMap<String, ReactModuleInfo> = HashMap()
+-            val isTurboModule = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+-            moduleInfos[ScreensModule.NAME] =
+-                ReactModuleInfo(
+-                    ScreensModule.NAME,
+-                    ScreensModule.NAME,
+-                    false, // canOverrideExistingModule
+-                    false, // needsEagerInit
+-                    true, // hasConstants
+-                    false, // isCxxModule
+-                    isTurboModule,
+-                )
+-            moduleInfos
+-        }
+-
+     companion object {
+         const val TAG = "RNScreensPackage"
+     }

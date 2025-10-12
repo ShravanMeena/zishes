@@ -17,6 +17,7 @@ const initialState = {
     name: '',
     description: '',
     category: '',
+    categoryLabel: '',
     condition: '',
     qty: '',
     productId: '7654738920xxx',

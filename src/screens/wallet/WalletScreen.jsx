@@ -28,6 +28,8 @@ import {
   isIndiaCountry,
 } from '../../utils/payments';
 import {categorizeSubscriptionStatus} from '../../utils/subscriptionStatus';
+import {hasAddress} from '../../utils/pickupAddresses';
+import {buildPlanLookup, findPlanForSubscription} from '../../utils/plans';
 import RazorpayCheckout from 'react-native-razorpay';
 import AppModal from '../../components/common/AppModal';
 import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
@@ -76,6 +78,7 @@ export default function WalletScreen({navigation}) {
   const [selectedPack, setSelectedPack] = useState(null);
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(false);
+  const planLookup = useMemo(() => buildPlanLookup(plans), [plans]);
   const [ledger, setLedger] = useState([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState(null);
@@ -193,6 +196,20 @@ export default function WalletScreen({navigation}) {
   useEffect(() => {
     fetchSubscription();
   }, [fetchSubscription]);
+
+  useEffect(() => {
+    if (!subscription) return;
+    if (subscription?.plan?.name) return;
+    if (!planLookup || planLookup.size === 0) return;
+    const resolved = findPlanForSubscription(subscription, planLookup);
+    if (!resolved) return;
+    setSubscription(prev => {
+      if (!prev) return prev;
+      if (prev.plan && prev.plan.name) return prev;
+      const mergedPlan = prev.plan ? {...prev.plan, ...resolved} : resolved;
+      return {...prev, plan: mergedPlan};
+    });
+  }, [subscription, planLookup]);
 
   useFocusEffect(
     useCallback(() => {
@@ -878,24 +895,51 @@ export default function WalletScreen({navigation}) {
                         <Text style={styles.smallBtnText}>Withdraw</Text>
                       </TouchableOpacity>
                     ) : over ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.smallBtn,
-                          {backgroundColor: colors.primary},
-                        ]}
-                        onPress={() =>
-                          navigation.navigate('UploadProof', {
-                            item: {
-                              id: w.id,
-                              _id: w.id,
-                              raw: w.raw,
-                              title: w.title,
-                              image: w.image,
-                            },
-                          })
-                        }>
-                        <Text style={styles.smallBtnText}>Upload Proof</Text>
-                      </TouchableOpacity>
+                      (() => {
+                        const fulfillment = w?.raw?.fulfillment || {};
+                        const needsProofDetails =
+                          !(
+                            hasAddress(fulfillment?.pickupAddresses?.seller) &&
+                            hasAddress(fulfillment?.pickupAddresses?.receiver) &&
+                            fulfillment?.dateOfDelivery
+                          );
+                        if (needsProofDetails) {
+                          return (
+                            <TouchableOpacity
+                              style={[styles.smallBtn, styles.completeSmallBtn]}
+                              onPress={() =>
+                                navigation.navigate('UploadProof', {
+                                  item: {
+                                    id: w.id,
+                                    _id: w.id,
+                                    raw: w.raw,
+                                    title: w.title,
+                                    image: w.image,
+                                  },
+                                })
+                              }>
+                              <Text style={styles.completeSmallBtnText}>Complete Details</Text>
+                            </TouchableOpacity>
+                          );
+                        }
+                        return (
+                          <TouchableOpacity
+                            style={[styles.smallBtn, {backgroundColor: colors.primary}]}
+                            onPress={() =>
+                              navigation.navigate('UploadProof', {
+                                item: {
+                                  id: w.id,
+                                  _id: w.id,
+                                  raw: w.raw,
+                                  title: w.title,
+                                  image: w.image,
+                                },
+                              })
+                            }>
+                            <Text style={styles.smallBtnText}>Upload Proof</Text>
+                          </TouchableOpacity>
+                        );
+                      })()
                     ) : null}
                   </View>
                 </View>
@@ -1380,6 +1424,13 @@ const styles = StyleSheet.create({
   chipText: {color: colors.white, fontWeight: '700'},
   smallBtn: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10},
   smallBtnText: {color: colors.white, fontWeight: '700'},
+  completeSmallBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+  },
+  completeSmallBtnText: {color: colors.white, fontWeight: '800'},
   rowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#3A4051',
