@@ -125,7 +125,6 @@ export default function MyListingsScreen({ navigation, route }) {
     }
   };
 
-  console.log(JSON.stringify(items,null,2),"hshshi hais")
   const submitEarlyTermination = async () => {
     if (!cancelTarget) return;
     if (!token) {
@@ -161,12 +160,16 @@ export default function MyListingsScreen({ navigation, route }) {
     const earlyContext = getEarlyTerminationContext(item);
     const canTerminateEarly = canShowEarlyTermination(earlyContext);
     const fulfillment = item?.raw?.fulfillment || {};
-    const needsProofDetails = !(
-      hasAddress(fulfillment?.pickupAddresses?.seller) &&
-      hasAddress(fulfillment?.pickupAddresses?.receiver) &&
-      fulfillment?.dateOfDelivery
-    );
-    const uploadCtaLabel = needsProofDetails ? 'Complete Details' : 'Upload Proof';
+    const sellerEvents = extractSellerEvents(fulfillment);
+    const sellerEventSet = new Set(sellerEvents);
+    const sellerAddressEvent = sellerEventSet.has('ADDRESS_FILLED');
+    const sellerProofEvent = sellerEventSet.has('PROOF_GIVEN');
+    const tournamentStatus = String(item?.tournamentStatus || '').toUpperCase();
+    const tournamentOver = tournamentStatus === 'OVER';
+    const sellerAddressPersisted = hasAddress(fulfillment?.pickupAddresses?.seller) || sellerAddressEvent;
+    const showSellerAddAddress = tournamentOver && !sellerAddressPersisted && !sellerProofEvent;
+    const showSellerUploadProof = tournamentOver && sellerAddressPersisted && !sellerProofEvent;
+    const sellerProofSubmitted = tournamentOver && sellerProofEvent;
     const onSupport = () => {
       const state = navigation.getState?.();
       const routeNames = Array.isArray(state?.routeNames) ? state.routeNames : [];
@@ -198,7 +201,7 @@ export default function MyListingsScreen({ navigation, route }) {
     };
 
     return (
-      <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.push('Details', { item, from: 'MyListings' })} style={styles.card}>
+      <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Details', { item, from: 'MyListings' })} style={styles.card}>
         <Image source={{ uri: item.image }} style={styles.thumb} />
         <View style={{ flex: 1 }}>
           <View style={styles.headerRow}>
@@ -220,9 +223,10 @@ export default function MyListingsScreen({ navigation, route }) {
                     </>
                   )
                 : (
-                    <TouchableOpacity onPress={() => handleEdit(item)} disabled={checkingId === item.id} style={styles.actionChipTouchable}>
-                      <Chip label={checkingId === item.id ? 'Opening…' : 'Edit'} type="accent" style={[styles.actionChip, checkingId === item.id && { opacity: 0.7 }]} />
-                    </TouchableOpacity>
+                  <></>
+                    // <TouchableOpacity onPress={() => handleEdit(item)} disabled={checkingId === item.id} style={styles.actionChipTouchable}>
+                    //   <Chip label={checkingId === item.id ? 'Opening…' : 'Edit'} type="accent" style={[styles.actionChip, checkingId === item.id && { opacity: 0.7 }]} />
+                    // </TouchableOpacity>
                   )}
             </View>
           </View>
@@ -268,16 +272,29 @@ export default function MyListingsScreen({ navigation, route }) {
                   <Text style={styles.earlyButtonText}>End Early</Text>
                 </TouchableOpacity>
               ) : null}
-              {(String(item?.tournamentStatus || '').toUpperCase() === 'OVER') ? (
-                needsProofDetails ? (
-                  <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })} style={[styles.footerActionButton, styles.completeButton]}>
-                    <Text style={styles.completeButtonText}>Complete Details</Text>
+              {tournamentOver ? (
+                showSellerAddAddress ? (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('UploadProof', { item, focus: 'address' })}
+                    style={[styles.footerActionButton, styles.completeButton]}
+                  >
+                    <Text style={styles.completeButtonText}>Add Address</Text>
                   </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity onPress={() => navigation.navigate('UploadProof', { item })} style={styles.footerActionButton}>
-                    <Chip label={uploadCtaLabel} type="accent" style={styles.actionChip} />
+                ) : showSellerUploadProof ? (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('UploadProof', { item, focus: 'proof' })}
+                    style={[styles.footerActionButton, styles.completeButton]}
+                  >
+                    <Text style={styles.completeButtonText}>Upload Proof</Text>
                   </TouchableOpacity>
-                )
+                ) : sellerProofSubmitted ? (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('UploadProof', { item, focus: 'proof' })}
+                    style={[styles.footerActionButton, styles.proofSubmittedBadge]}
+                  >
+                    <Text style={styles.proofSubmittedText}>Proof submitted – view details</Text>
+                  </TouchableOpacity>
+                ) : null
               ) : null}
               {String(item?.raw?.fulfillment?.verificationStatus || '').toUpperCase() === 'VERIFIED' ? (
                 <TouchableOpacity
@@ -434,6 +451,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   completeButtonText: { color: colors.white, fontWeight: '800', fontSize: 14 },
+  proofSubmittedBadge: {
+    marginRight: 8,
+    marginTop: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#2B2F39',
+    borderWidth: 1,
+    borderColor: '#3A4051',
+  },
+  proofSubmittedText: { color: colors.textSecondary, fontWeight: '700', fontSize: 13 },
   approvalNotice: {
     marginTop: 10,
     borderRadius: 14,
@@ -481,7 +509,7 @@ function deriveApprovalState(item) {
       notice: {
         tone: 'Pending',
         title: 'We are reviewing your product.',
-        detail: 'Hang tight — approvals typically complete within a some time.',
+        detail: 'Please hang tight — approvals usually take a little time to complete.',
       },
     };
   }
@@ -594,6 +622,30 @@ function formatListingPrice(product) {
     const prefix = currencySymbol || (fallbackCurrency === 'INR' ? '₹' : `${fallbackCurrency} `);
     return `${prefix}${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
   }
+}
+
+function extractSellerEvents(fulfillment) {
+  const collected = [];
+  const collect = (value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (entry != null && entry !== '') collected.push(entry);
+      });
+    }
+  };
+  if (fulfillment) {
+    const root = fulfillment.events;
+    if (root) {
+      collect(root);
+      collect(root?.seller);
+      collect(root?.seller?.events);
+    }
+    collect(fulfillment?.seller?.events);
+    collect(fulfillment?.seller);
+    collect(fulfillment?.sellerEvents);
+  }
+  return collected.map((ev) => String(ev).toUpperCase());
 }
 
 function timeLeft(item) {

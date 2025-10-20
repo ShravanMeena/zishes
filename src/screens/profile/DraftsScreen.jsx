@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { getAllDrafts, deleteDraft } from '../../store/listingDraft/draftsStorage';
 import Button from '../../components/ui/Button';
 import { useSelector } from 'react-redux';
@@ -40,6 +40,12 @@ export default function DraftsScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const normalizedCountry = useMemo(() => String(userCountry || '').trim().toLowerCase(), [userCountry]);
   const { visibleDrafts, hiddenCount } = useMemo(() => {
@@ -79,7 +85,7 @@ export default function DraftsScreen() {
       <View style={styles.btnRow}>
         <Button
           title="Edit"
-          onPress={() => navigation.navigate('Sell', { draftData: item.data })}
+          onPress={() => navigation.navigate('Sell', { draftData: item.data, draftId: item.id })}
           fullWidth={false}
           style={styles.btn}
         />

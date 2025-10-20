@@ -30,12 +30,12 @@ const initialState = {
     game: '', // store selected game id (ObjectId string)
     gameName: '', // friendly name for UI display
     // New fields to support backend flow
-    earlyTerminationEnabled: true,
+    earlyTerminationEnabled: false,
     earlyTerminationThresholdPct: 80,
     platinumOnly: false,
   },
   delivery: {
-    method: 'pickup',
+    method: '',
     pickupNote: '',
   },
   policies: {
@@ -93,12 +93,17 @@ export const clearDraftStorage = createAsyncThunk('listingDraft/clear', async (n
 export const saveCurrentAsNewDraft = createAsyncThunk('listingDraft/saveNewDraft', async ({ name }, { getState }) => {
   const rootState = getState();
   const draftState = rootState.listingDraft;
-  const userCountry = rootState?.auth?.user?.address?.country;
-  const toSave = { ...draftState, isDirty: false, originCountry: userCountry || draftState.originCountry || null };
+  const countrySource =
+    rootState?.auth?.user?.address?.country ||
+    rootState?.app?.country ||
+    draftState?.originCountry ||
+    null;
+  const originCountry = countrySource ? String(countrySource).trim() : null;
+  const toSave = { ...draftState, isDirty: false, originCountry: originCountry || null };
   const saved = await saveNewDraft({
     name: name || draftState?.details?.name || 'Untitled Item',
     data: toSave,
-    originCountry: userCountry,
+    originCountry,
   });
   return saved;
 });

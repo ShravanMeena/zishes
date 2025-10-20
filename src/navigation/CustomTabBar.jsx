@@ -6,11 +6,19 @@ import { Home, User, CreditCard, Heart, ShoppingBag } from 'lucide-react-native'
 import { colors } from '../theme/colors';
 import { useSelector, useDispatch } from 'react-redux';
 import { setPendingLeaveRoute } from '../store/listingDraft/listingDraftSlice';
+import { StackActions } from '@react-navigation/native';
 
 export default function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
   const isDirty = useSelector((s) => s.listingDraft.isDirty);
   const dispatch = useDispatch();
+  const lastTapRef = useRef({});
+  const DOUBLE_TAP_DELAY = 320;
+  const ROOT_SCREENS = useMemo(() => ({
+    Home: 'HomeIndex',
+    Wallet: 'WalletHome',
+    Profile: 'ProfileHome',
+  }), []);
 
   // Respect per-screen request to hide tab bar (e.g., Unity)
   const shouldHide = useMemo(() => {
@@ -35,6 +43,22 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
 
   const height = 58 + insets.bottom;
 
+  const resetTabToRoot = (route) => {
+    const descriptorNav = descriptors[route.key]?.navigation;
+    const rootScreen = ROOT_SCREENS[route.name] || null;
+    try {
+      descriptorNav?.dispatch?.(StackActions.popToTop());
+    } catch (_) {}
+    if (rootScreen) {
+      navigation.navigate(route.name, {
+        screen: rootScreen,
+        params: { __tabReset: Date.now() },
+      });
+    } else {
+      navigation.navigate(route.name);
+    }
+  };
+
   const onPress = (route, isFocused) => {
     const currentRoute = state.routes[state.index];
     // If leaving Sell with unsaved changes, prompt there and block navigation
@@ -46,12 +70,26 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
       }
       return;
     }
+
+    const now = Date.now();
+    const lastTap = lastTapRef.current[route.key] || 0;
+    const isDoubleTap = isFocused && now - lastTap < DOUBLE_TAP_DELAY;
+    lastTapRef.current[route.key] = now;
+
     const event = navigation.emit({
       type: 'tabPress',
       target: route.key,
       canPreventDefault: true,
+      data: { isDoubleTap },
     });
-    if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
+    if (event.defaultPrevented) return;
+
+    if (isDoubleTap) {
+      resetTabToRoot(route);
+      return;
+    }
+
+    if (!isFocused) navigation.navigate(route.name);
   };
 
   const renderIcon = (name, color, size = 22) => {

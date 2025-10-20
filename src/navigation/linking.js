@@ -16,9 +16,17 @@ const linking = {
       // AppTabs root
       Home: {
         screens: {
-          Details: 'item/:id',
-          // optional mapping for home index
           HomeIndex: 'home',
+          Details: 'item/:id',
+          Leaderboard: 'leaderboard/:tournamentId/:productId?',
+          AcknowledgeReceipt: 'acknowledgement/:tournamentId/:productId?',
+          // optional mapping for home index
+        },
+      },
+      Wallet: {
+        screens: {
+          WalletHome: 'wallet',
+          UploadProof: 'upload-proof/:productId',
         },
       },
     },

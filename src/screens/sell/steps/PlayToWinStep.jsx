@@ -206,18 +206,6 @@ export default function PlayToWinStep() {
       {/* Payout Details */}
       <PayoutDetails expectedPrice={parseFloat(form.expectedPrice) || 0} currencyConfig={currencyConfig} />
 
-      <View style={styles.kycCard}>
-        <Text style={styles.kycText}>
-          I agree to carry out my KYC as per government regulations while withdrawing from my money wallet.
-        </Text>
-        <TouchableOpacity
-          accessibilityRole="link"
-          onPress={() => Linking.openURL('https://www.hyperverge.co/kyc').catch(() => {})}
-        >
-          <Text style={styles.kycLink}>Read more</Text>
-        </TouchableOpacity>
-      </View>
-
       <PickerModal
         visible={showGame}
         title="Select Game"

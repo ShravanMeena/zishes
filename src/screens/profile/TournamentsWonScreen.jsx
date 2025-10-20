@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, RefreshControl } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, RefreshControl, Alert, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { ChevronLeft, CheckCircle2, Trophy } from 'lucide-react-native';
@@ -10,7 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import fulfillmentsService from '../../services/fulfillments';
 import { hasAddress } from '../../utils/pickupAddresses';
 
-export default function TournamentsWonScreen({ navigation }) {
+export default function TournamentsWonScreen({ navigation, route }) {
   const authUser = useSelector((s) => s?.auth?.user || null);
   const token = useSelector((s) => s?.auth?.token || null);
   const currentUserId = useMemo(() => (
@@ -21,6 +21,7 @@ export default function TournamentsWonScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [fulfillmentMap, setFulfillmentMap] = useState({});
+  const lastForceKeyRef = useRef(null);
 
   const mapTitle = (it) => it?.product?.name || it?.game?.name || it?.tournament?.game?.name || 'Tournament';
   const mapDate = (it) => {
@@ -40,6 +41,28 @@ export default function TournamentsWonScreen({ navigation }) {
     const product = it?.product || it?.raw?.product || {};
     return product._id || product.id || it?.productId || it?.raw?.productId || null;
   };
+
+  const extractReceiverEvents = useCallback((fulfillment, fallbackItem) => {
+    const lists = [];
+    const pushIfArray = (val) => {
+      if (Array.isArray(val)) lists.push(val);
+    };
+    if (fulfillment) {
+      pushIfArray(fulfillment?.events?.receiver?.events);
+      pushIfArray(fulfillment?.events?.receiver);
+      pushIfArray(fulfillment?.receiver?.events);
+      pushIfArray(fulfillment?.receiverEvents);
+      pushIfArray(fulfillment?.events);
+    }
+    if (fallbackItem) {
+      pushIfArray(fallbackItem?.fulfillment?.events?.receiver?.events);
+      pushIfArray(fallbackItem?.fulfillment?.events?.receiver);
+      pushIfArray(fallbackItem?.fulfillment?.receiver?.events);
+      pushIfArray(fallbackItem?.fulfillment?.receiverEvents);
+    }
+    const merged = lists.flat().filter(Boolean);
+    return merged.map((ev) => String(ev).toUpperCase());
+  }, []);
 
   const hydrateFulfillments = useCallback(async (list) => {
     if (!token || !currentUserId || !Array.isArray(list) || list.length === 0) return;
@@ -103,8 +126,33 @@ export default function TournamentsWonScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      hydrateFulfillments(items);
-    }, [items, hydrateFulfillments])
+      const forceKey = route?.params?.forceRefreshKey;
+      if (forceKey && lastForceKeyRef.current !== forceKey) {
+        lastForceKeyRef.current = forceKey;
+        fetchJoined();
+        if (route?.params) {
+          const nextParams = { ...route.params };
+          delete nextParams.forceRefreshKey;
+          navigation.setParams?.(nextParams);
+        }
+      } else {
+        hydrateFulfillments(items);
+      }
+
+      const handleBackPress = () => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('ProfileHome');
+        }
+        return true;
+      };
+
+      const sub = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+      return () => {
+        sub.remove();
+      };
+    }, [route?.params?.forceRefreshKey, route?.params, fetchJoined, hydrateFulfillments, items, navigation])
   );
 
   const onRefresh = useCallback(async () => {
@@ -126,11 +174,20 @@ export default function TournamentsWonScreen({ navigation }) {
     const hydratedFulfillment = productId ? fulfillmentMap[productId] : null;
 
     const onPress = () => {
-      // Navigate to product details for full-card press
       const product = item?.product || {};
       const prodId = product?._id || product?.id;
-      const detailsItem = prodId ? { id: prodId, _id: prodId, images: product?.images || [], image: (product?.images || [])[0], title: product?.name || title } : null;
-      navigation.navigate('Home', { screen: 'Details', params: { item: detailsItem } });
+      if (!prodId) {
+        Alert.alert('Unavailable', 'Unable to open tournament details for this item.');
+        return;
+      }
+      const detailsItem = {
+        id: prodId,
+        _id: prodId,
+        images: product?.images || [],
+        image: (product?.images || [])[0],
+        title: product?.name || title,
+      };
+      navigation.push('Details', { item: detailsItem, origin: 'TournamentsWon' });
     };
     const verificationStatus = String(
       hydratedFulfillment?.verificationStatus ||
@@ -142,12 +199,18 @@ export default function TournamentsWonScreen({ navigation }) {
       ''
     ).toUpperCase();
     const isAcknowledged = verificationStatus === 'VERIFIED';
+    const receiverEvents = extractReceiverEvents(hydratedFulfillment, item);
+    const receiverEventSet = new Set(receiverEvents);
+    const addressFilledEvent = receiverEventSet.has('ADDRESS_FILLED');
+    const proofGivenEvent = receiverEventSet.has('PROOF_GIVEN');
     const receiverAddress = hydratedFulfillment?.pickupAddresses?.receiver
       || item?.fulfillment?.pickupAddresses?.receiver
       || item?.raw?.fulfillment?.pickupAddresses?.receiver
       || null;
-    const hasReceiverAddress = hasAddress(receiverAddress);
-    const showAddAddress = isWinner && !isAcknowledged && !hasReceiverAddress;
+    const hasReceiverAddress = hasAddress(receiverAddress) || addressFilledEvent;
+    const showProofSubmitted = isWinner && !isAcknowledged && proofGivenEvent;
+    const showAddAddress = isWinner && !isAcknowledged && !hasReceiverAddress && !proofGivenEvent;
+    const showAcknowledgeButton = isWinner && !isAcknowledged && !showAddAddress && !showProofSubmitted;
 
     const handleAddAddress = () => {
       navigation.navigate('AcknowledgeReceipt', { item, focus: 'address' });
@@ -190,6 +253,17 @@ export default function TournamentsWonScreen({ navigation }) {
                 <View style={[styles.primary, styles.acknowledgedBanner]}>
                   <Text style={styles.acknowledgedText}>Acknowledged. Enjoy!!</Text>
                 </View>
+              ) : showProofSubmitted ? (
+                <LinearGradient
+                  colors={["#F8E07E", "#EACD5E", "#D4AF37"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.primary, styles.winnerCTAGrad]}
+                >
+                  <TouchableOpacity onPress={handleAcknowledge} style={{ width: '100%', alignItems: 'center' }}>
+                    <Text style={[styles.primaryTxt, { color: '#2B2443' }]}>Acknowledgement submitted – view details</Text>
+                  </TouchableOpacity>
+                </LinearGradient>
               ) : showAddAddress ? (
                 <LinearGradient
                   colors={["#6D5BD0", "#8F6FF5", "#A98CFF"]}
@@ -201,7 +275,7 @@ export default function TournamentsWonScreen({ navigation }) {
                     <Text style={[styles.primaryTxt, { color: '#FFFFFF' }]}>Add Delivery Address</Text>
                   </TouchableOpacity>
                 </LinearGradient>
-              ) : (
+              ) : showAcknowledgeButton ? (
                 <LinearGradient
                   colors={["#F8E07E", "#EACD5E", "#D4AF37"]}
                   start={{ x: 0, y: 0 }}
@@ -212,12 +286,16 @@ export default function TournamentsWonScreen({ navigation }) {
                     <Text style={[styles.primaryTxt, { color: '#2B2443' }]}>Acknowledge Item Received</Text>
                   </TouchableOpacity>
                 </LinearGradient>
-              )}
-              <TouchableOpacity style={[styles.primary, styles.secondaryBtn]} onPress={() => {
-                const product = item?.product || {};
-                const prodId = product?._id || product?.id;
-                if (prodId) navigation.navigate('Leaderboard', { productId: prodId, item });
-              }}>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.primary, styles.secondaryBtn]}
+                onPress={() => {
+                  const product = item?.product || {};
+                  const prodId = product?._id || product?.id;
+                  if (prodId) {
+                    navigation.push('Leaderboard', { productId: prodId, item });
+                  }
+                }}>
                 <Text style={[styles.primaryTxt]}>View Leaderboard</Text>
               </TouchableOpacity>
             </View>
@@ -240,11 +318,15 @@ export default function TournamentsWonScreen({ navigation }) {
             </View>
             <View style={styles.divider} />
               <Text style={styles.caption}>Track your joined tournaments here.</Text>
-              <TouchableOpacity style={[styles.primary, styles.secondaryBtn]} onPress={() => {
-                const product = item?.product || {};
-                const prodId = product?._id || product?.id;
-                if (prodId) navigation.navigate('Leaderboard', { productId: prodId, item });
-              }}>
+              <TouchableOpacity
+                style={[styles.primary, styles.secondaryBtn]}
+                onPress={() => {
+                  const product = item?.product || {};
+                  const prodId = product?._id || product?.id;
+                  if (prodId) {
+                    navigation.push('Leaderboard', { productId: prodId, item });
+                  }
+                }}>
                 <Text style={[styles.primaryTxt]}>View Leaderboard</Text>
               </TouchableOpacity>
           </View>
@@ -254,10 +336,18 @@ export default function TournamentsWonScreen({ navigation }) {
   };
 
   // console.log(JSON.stringify(items[0],null,2))
+  const handleHeaderBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('ProfileHome');
+  }, [navigation]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft color={colors.white} size={20} /></TouchableOpacity>
+        <TouchableOpacity onPress={handleHeaderBack} style={styles.iconBtn}><ChevronLeft color={colors.white} size={20} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Tournaments Played</Text>
         <View style={styles.iconSpacer} />
       </View>

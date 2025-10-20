@@ -41,6 +41,7 @@ export default function SellScreen({ navigation, route }) {
   const pendingLeaveToRoute = useSelector((s) => s.listingDraft.ui.pendingLeaveToRoute);
   const details = useSelector((s) => s.listingDraft.details);
   const policies = useSelector((s) => s.listingDraft.policies);
+  const delivery = useSelector((s) => s.listingDraft.delivery);
   const draftOriginCountry = useSelector((s) => s.listingDraft.originCountry);
   const userCountry = useSelector((s) => s.auth?.user?.address?.country || s.app?.country || null);
 
@@ -84,11 +85,29 @@ export default function SellScreen({ navigation, route }) {
     return false;
   }, [policiesAccepted]);
 
+  const deliverySelected = useMemo(() => {
+    const method = (delivery?.method || '').trim();
+    return method.length > 0;
+  }, [delivery?.method]);
+
+  const ensureDeliverySelected = useCallback(() => {
+    if (deliverySelected) return true;
+    setDialog({
+      title: 'Delivery Required',
+      message: 'Please choose a delivery option or add pickup details before continuing.',
+      primary: { label: 'OK' },
+    });
+    return false;
+  }, [deliverySelected]);
+
   const attemptSetIndex = useCallback((nextIndex) => {
     if (nextIndex === index) return;
     const movingForward = nextIndex > index;
     const currentKey = routes[index]?.key;
     if (movingForward && currentKey === 'policies' && !ensurePoliciesAccepted()) {
+      return;
+    }
+    if (movingForward && currentKey === 'delivery' && !ensureDeliverySelected()) {
       return;
     }
     if (movingForward && currentKey === 'play' && !listingExtensionAck) {
@@ -102,7 +121,7 @@ export default function SellScreen({ navigation, route }) {
     if (nextIndex >= 0 && nextIndex < routes.length) {
       setIndex(nextIndex);
     }
-  }, [index, routes, ensurePoliciesAccepted, listingExtensionAck]);
+  }, [index, routes, ensurePoliciesAccepted, ensureDeliverySelected, listingExtensionAck]);
 
   const goNext = useCallback(() => {
     if (index < routes.length - 1) {
@@ -150,6 +169,7 @@ export default function SellScreen({ navigation, route }) {
         if (lower.includes('photo')) goTo('photos');
         else if (lower.includes('description') || lower.includes('name') || lower.includes('quantity')) goTo('details');
         else if (lower.includes('gameplay') || lower.includes('end date') || lower.includes('game') || lower.includes('price per')) goTo('play');
+        else if (lower.includes('delivery') || lower.includes('pickup')) goTo('delivery');
         else if (lower.includes('terms')) goTo('policies');
 
         setDialog({
@@ -167,19 +187,37 @@ export default function SellScreen({ navigation, route }) {
   const closeDialog = useCallback(() => setDialog(null), []);
 
   const initializedRef = useRef(false);
+  const loadedDraftRef = useRef(null);
+  const loadedDraftKeyRef = useRef(null);
 
   // Initialize: reset by default; prefill only if draftData is provided.
   useEffect(() => {
     const draftData = route?.params?.draftData;
-    if (draftData && !initializedRef.current) {
-      dispatch(loadFromDraft(draftData));
-      initializedRef.current = true;
+    if (draftData) {
+      const draftKey =
+        route?.params?.draftId ??
+        route?.params?.editingProductId ??
+        draftData?.id ??
+        draftData?.draftId ??
+        draftData?.details?.productId ??
+        null;
+      const alreadyLoaded =
+        loadedDraftRef.current === draftData ||
+        (draftKey != null && loadedDraftKeyRef.current === draftKey);
+      if (!alreadyLoaded) {
+        dispatch(loadFromDraft(draftData));
+        loadedDraftRef.current = draftData;
+        loadedDraftKeyRef.current = draftKey;
+        initializedRef.current = true;
+      } else {
+        loadedDraftRef.current = draftData;
+        loadedDraftKeyRef.current = draftKey;
+      }
       return;
     }
 
-    if (draftData) {
-      return;
-    }
+    loadedDraftRef.current = null;
+    loadedDraftKeyRef.current = null;
 
     if (!userCountry) {
       if (!initializedRef.current) {
@@ -446,7 +484,13 @@ export default function SellScreen({ navigation, route }) {
           if (submitStage === 'success') {
             setHideSubmitModal(true);
             try { dispatch(clearSubmitState()); } catch {}
-            navigation.navigate('Profile', { screen: 'MyListings', params: { forceRefresh: Date.now() } });
+            const tabsNav = navigation.getParent?.();
+            const params = { screen: 'MyListings', params: { forceRefresh: Date.now() } };
+            if (tabsNav?.navigate) {
+              tabsNav.navigate('Profile', params);
+            } else {
+              navigation.navigate('Profile', params);
+            }
           } else if (submitStage === 'error') {
             onPrimary(); // retry
           }

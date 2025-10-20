@@ -1926,7 +1926,7 @@ PODS:
     - RCT-Folly (= 2022.05.16.00)
     - React-Core
     - React-RCTImage
-  - RNSVG (15.14.0):
+  - RNSVG (13.9.0):
     - React-Core
   - SocketRocket (0.6.1)
   - Stripe (23.27.6):
@@ -2350,7 +2350,7 @@ SPEC CHECKSUMS:
   RNGoogleSignin: 2792145770d2bbd5656bf91c5c83db4cadb5ebe0
   RNNotifee: 5e3b271e8ea7456a36eec994085543c9adca9168
   RNScreens: 3ce54903891fd6281865ad3e7cfe4c2bb438c70c
-  RNSVG: a18cb1c4e15b5ca20d941fa2d063d3d3ded8a76b
+  RNSVG: 67c430ac7a54043cac37f6bd7bc94f8e22d8a64a
   SocketRocket: f32cd54efbe0f095c4d7594881e52619cfe80b17
   Stripe: 9fec845645e39f371e6898926d096fd9c2feb5a5
   stripe-react-native: 4d22dfe6c98fbafb77b875c7a9bbf47ca227680f

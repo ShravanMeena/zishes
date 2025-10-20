@@ -21,6 +21,7 @@ export default function DeliveryStep() {
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 140 }} keyboardShouldPersistTaps="always">
       <Text style={styles.title}>Choose Delivery Method</Text>
       <Text style={styles.subtitle}>Select how you'd like to deliver your item to the buyer.</Text>
+      <Text style={styles.notice}>Selecting a delivery option is required before you can publish.</Text>
 
       {/* <OptionCard
         icon={<Store size={22} color={colors.white} />}
@@ -86,6 +87,7 @@ function OptionCard({ icon, title, desc, selected, onPress, children, badge, dis
 const styles = StyleSheet.create({
   title: { color: colors.white, fontWeight: '800', fontSize: 24 },
   subtitle: { color: colors.textSecondary, marginTop: 8, marginBottom: 14 },
+  notice: { color: '#FFB347', fontWeight: '600', marginBottom: 16 },
 
   card: { backgroundColor: '#2B2F39', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#343B49', marginBottom: 14 },
   cardActive: { borderColor: colors.accent, shadowColor: colors.accent, shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 0 } },

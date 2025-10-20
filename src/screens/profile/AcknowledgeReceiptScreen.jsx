@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ScrollView, ActivityIndicator, RefreshControl, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
@@ -39,7 +39,6 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const [error, setError] = useState(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [fulfillment, setFulfillment] = useState(null);
-  const [mode, setMode] = useState('edit'); // 'view' | 'edit'
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rating, setRating] = useState(0);
@@ -50,6 +49,16 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const [reviewTags, setReviewTags] = useState([]);
   const [reviewComment, setReviewComment] = useState('');
   const [addressSaving, setAddressSaving] = useState(false);
+
+  const redirectToMyTournaments = useCallback(() => {
+    const forceRefreshKey = `tourn-${Date.now()}`;
+    const parentNav = navigation.getParent?.();
+    if (parentNav?.navigate) {
+      parentNav.navigate('Profile', { screen: 'TournamentsWon', params: { forceRefreshKey } });
+    } else {
+      navigation.navigate('TournamentsWon', { forceRefreshKey });
+    }
+  }, [navigation]);
 
   const authUser = useSelector((s) => s.auth?.user);
   const currentUserId = useMemo(() => extractEntityId(authUser), [authUser]);
@@ -85,29 +94,27 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
   const isSeller = idsEqual(currentUserId, sellerId);
   const isBuyer = idsEqual(currentUserId, winnerId);
   const isIdle = stage === 'idle';
-  const canEditSections = isBuyer && mode === 'edit' && isIdle && !loading;
-  const canSubmit = isBuyer && mode === 'edit' && !loading;
   const receiverAddress = fulfillment?.pickupAddresses?.receiver;
   const sellerAddress = fulfillment?.pickupAddresses?.seller;
   const hasReceiverAddress = hasAddress(receiverAddress);
   const hasSellerAddress = hasAddress(sellerAddress);
+  const receiverEvents = useMemo(
+    () => extractReceiverEvents(fulfillment, item?.fulfillment, item),
+    [fulfillment, item]
+  );
+  const receiverEventSet = useMemo(() => new Set(receiverEvents), [receiverEvents]);
+  const receiverAddressEvent = receiverEventSet.has('ADDRESS_FILLED');
+  const receiverProofEvent = receiverEventSet.has('PROOF_GIVEN');
   const productCountryResolved = productCountry || fulfillment?.product?.country || item?.product?.country || '';
-  const addressPersisted = hasReceiverAddress;
+  const addressPersisted = hasReceiverAddress || receiverAddressEvent;
   const receiverDraftAddressExists = hasAddress(pickupAddresses?.receiver);
-  const needsAddressFirst = isBuyer && !addressPersisted;
-  const canEditAcknowledgement = canEditSections && addressPersisted;
+  const showAddressForm = isBuyer && !addressPersisted && !receiverProofEvent;
+  const showAckForm = isBuyer && addressPersisted && !receiverProofEvent;
+  const canEditAcknowledgement = showAckForm && isIdle && !loading;
+  const canSubmit = showAckForm && isIdle && !loading;
+  const showProofSubmittedBanner = isBuyer && receiverProofEvent;
+  const showDetailsCard = (!loading && stage === 'idle') && fulfillment && receiverProofEvent;
 
-  useEffect(() => {
-    if (isSeller && mode !== 'view') {
-      setMode('view');
-    }
-  }, [isSeller, mode]);
-
-  const banner = useMemo(() => {
-    const title = item?.product?.name || item?.game?.name || item?.tournament?.game?.name || 'Item';
-    const image = (Array.isArray(item?.product?.images) && item.product.images[0]) || item?.game?.thumbnail || item?.tournament?.game?.thumbnail;
-    return { title, image };
-  }, [item]);
 
   const pickFromGallery = async () => {
     const ok = await ensureGallery();
@@ -138,8 +145,6 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           item
         );
         if (!f) return;
-        const ackDate = f?.dateOfReceive || null;
-        if (ackDate) setMode('view');
       } catch (e) {
         // ignore for view
       } finally { setLoading(false); }
@@ -245,20 +250,8 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
       } catch (e) {
         // non-blocking
       }
-      setSuccessOpen(true);
-      try {
-        const f = await reloadAck(
-          setFulfillment,
-          setComment,
-          setDate,
-          setPickupAddresses,
-          setProductCountry,
-          setVideoUrl,
-          getProductId,
-          item
-        );
-        if (f) setMode('view');
-      } catch {}
+      redirectToMyTournaments();
+      return;
     } catch (e) {
       setError(e?.message || 'Failed to submit acknowledgement');
     } finally {
@@ -267,7 +260,6 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
     }
   };
 
-  console.log(fulfillment)
   const saveAddressOnly = async () => {
     setError(null);
     const productId = getProductId();
@@ -283,16 +275,8 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         throw new Error('Receiver address is required.');
       }
       await fulfillments.submitReceiverProof(productId, { pickupAddresses: normalizedPickup });
-      await reloadAck(
-        setFulfillment,
-        setComment,
-        setDate,
-        setPickupAddresses,
-        setProductCountry,
-        setVideoUrl,
-        getProductId,
-        item
-      );
+      redirectToMyTournaments();
+      return;
     } catch (e) {
       setError(e?.message || 'Failed to save address');
     } finally {
@@ -305,7 +289,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Acknowledge Receipt</Text>
+        <Text style={styles.headerTitle}>{showAddressForm ? 'Add Delivery Address' : 'Acknowledge Receipt'}</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Notifications' })}>
           <Bell size={18} color={colors.white} />
         </TouchableOpacity>
@@ -329,30 +313,18 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
                 getProductId,
                 item
               );
-              if (f) {
-                const hasAck = Boolean(f?.dateOfReceive);
-                if (hasAck) setMode('view');
+              if (f && f.dateOfReceive) {
+                try { setDate(formatDateYYYYMMDD(new Date(f.dateOfReceive))); } catch {}
               }
             } finally { setRefreshing(false); }
           }}
           tintColor={colors.white}
         />}
       >
-        {/* Content renders below; full-screen loader overlays while loading */}
-        {/* Banner */}
-        <View style={styles.banner}>
-          <Image source={{ uri: banner.image }} style={styles.bannerImg} />
-          <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.bannerTitle}>{banner.title}</Text>
-            <View style={styles.infoRow}>
-              <Calendar size={14} color={colors.textSecondary} />
-              <Text style={styles.infoTxt}>Attach delivery date and proof below</Text>
-            </View>
-          </View>
-        </View>
+  
 
-        {/* Existing acknowledgement details (if any). View-only with Edit button */}
-        {(!loading && stage === 'idle') && (mode === 'view' || !isBuyer) && fulfillment ? (
+        {/* Existing acknowledgement details (if proof submitted) */}
+        {showDetailsCard ? (
           <View style={{ backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12, marginBottom: 12 }}>
             <Text style={styles.sectionTitle}>Acknowledgement Details</Text>
             {fulfillment?.winner ? (
@@ -431,7 +403,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           </>
         ) : null}
 
-        {/* Proof Images (keep optional; only in edit mode) */}
+        {/* Proof Images (optional; shown while acknowledgement form is active) */}
         {canEditAcknowledgement ? (
           <>
             <Text style={styles.sectionTitle}>Proof of Acknowledgement</Text>
@@ -454,11 +426,10 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           </>
         ) : null}
 
-        {needsAddressFirst ? (
+        {showAddressForm ? (
           <View style={styles.addressCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={styles.sectionTitle}>Delivery Address</Text>
-              {productCountry ? <Text style={styles.addressHint}>Country locked to {productCountry}</Text> : null}
             </View>
             <AddressForm
               label="Receiver delivery address"
@@ -476,7 +447,7 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           </View>
         ) : null}
 
-        {needsAddressFirst ? (
+        {showAddressForm ? (
           <TouchableOpacity
             style={[styles.btn, styles.primary, (addressSaving || !receiverDraftAddressExists) && { opacity: 0.5 }]}
             onPress={saveAddressOnly}
@@ -493,28 +464,6 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
           </TouchableOpacity>
         ) : null}
 
-        {needsAddressFirst ? (
-          <View style={styles.addressNotice}>
-            <AlertTriangle size={16} color="#FFD053" />
-            <Text style={styles.addressNoticeTxt}>Add the receiver delivery address to continue with acknowledgement.</Text>
-          </View>
-        ) : null}
-
-        {/* {canEditSections ? (
-          <>
-            <Text style={styles.sectionTitle}>Video Proof (Optional)</Text>
-            <TextInput
-              value={videoUrl}
-              onChangeText={setVideoUrl}
-              placeholder="https://example.com/proof.mp4"
-              placeholderTextColor={colors.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              style={styles.input}
-            />
-          </>
-        ) : null} */}
 
         {/* Comment + Review */}
         {canEditAcknowledgement ? (
@@ -621,8 +570,8 @@ export default function AcknowledgeReceiptScreen({ route, navigation }) {
         title="Acknowledged"
         message="Thanks! Your receipt confirmation has been recorded."
         primaryText="Done"
-        onPrimary={() => { setSuccessOpen(false); navigation.goBack(); }}
-        onRequestClose={() => setSuccessOpen(false)}
+        onPrimary={() => { setSuccessOpen(false); redirectToMyTournaments(); }}
+        onRequestClose={() => { setSuccessOpen(false); redirectToMyTournaments(); }}
       />
       {(loading || stage !== 'idle') ? (
         <View style={styles.fullscreenLoader} pointerEvents="none">
@@ -643,11 +592,6 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
 
-  banner: { backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 10, flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  bannerImg: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#333' },
-  bannerTitle: { color: colors.white, fontWeight: '800' },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  infoTxt: { color: colors.textSecondary },
 
   sectionTitle: { color: colors.white, fontWeight: '800', fontSize: 16, marginVertical: 8 },
   sectionSubTitle: { color: colors.textSecondary, fontSize: 14, marginTop: 4, marginBottom: 8 },
@@ -671,6 +615,8 @@ const styles = StyleSheet.create({
   addressHint: { color: colors.textSecondary, fontSize: 12 },
   addressNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3A2F1B', borderWidth: 1, borderColor: '#B5892E', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginTop: 12 },
   addressNoticeTxt: { color: '#FFDFAA', fontWeight: '700', flex: 1 },
+  submittedNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1E2B3A', borderWidth: 1, borderColor: '#34506D', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginTop: 12 },
+  submittedNoticeTxt: { color: '#CDE0FF', fontWeight: '700', flex: 1 },
   addressLabel: { color: colors.white, fontWeight: '700', marginBottom: 4 },
   addressField: { marginTop: 10 },
   addressRow: { flexDirection: 'row', marginTop: 10 },
@@ -761,6 +707,31 @@ function resolveFirstId(candidates = []) {
 function idsEqual(a, b) {
   if (!a || !b) return false;
   return String(a) === String(b);
+}
+
+function extractReceiverEvents(...sources) {
+  const collected = [];
+  const collect = (maybe) => {
+    if (!maybe) return;
+    if (Array.isArray(maybe)) {
+      maybe.forEach((ev) => {
+        if (ev != null && ev !== '') collected.push(ev);
+      });
+    }
+  };
+  sources.forEach((source) => {
+    if (!source) return;
+    const eventsRoot = source?.events;
+    if (eventsRoot) {
+      collect(eventsRoot);
+      collect(eventsRoot?.receiver);
+      collect(eventsRoot?.receiver?.events);
+    }
+    collect(source?.receiver?.events);
+    collect(source?.receiver);
+    collect(source?.receiverEvents);
+  });
+  return collected.map((ev) => String(ev).toUpperCase());
 }
 
 function AddressForm({ label, value, onChange, productCountry, showPhone = false, phoneLabel = 'Phone number' }) {

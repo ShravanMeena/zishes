@@ -6,10 +6,10 @@ import { useSelector } from 'react-redux';
 import { formatCurrency as formatCurrencyByCountry, formatNumber as formatNumberByCountry, getCurrencyConfig } from '../../../utils/currency';
 
 const DELIVERY_LABELS = {
-  pickup: 'Local Pickup',
+  // pickup: 'Local Pickup',
   courier: 'Courier Delivery',
-  domestic: 'Courier Delivery (Domestic)',
-  intl: 'Courier Delivery (International)',
+  // domestic: 'Courier Delivery (Domestic)',
+  // intl: 'Courier Delivery (International)',
   digital: 'Digital Delivery',
 };
 

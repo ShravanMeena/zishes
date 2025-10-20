@@ -17,6 +17,104 @@ export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async () => {
   return { token: token || null, refreshToken: refreshToken || null };
 });
 
+const DEFAULT_AUTH_ERRORS = {
+  login: 'Unable to sign you in. Please try again.',
+  signup: 'Unable to create your account right now. Please try again.',
+};
+
+function humanizeValidationMessage(msg) {
+  if (!msg || typeof msg !== 'string') return null;
+  const normalized = msg.trim();
+  if (!normalized) return null;
+
+  const lower = normalized.toLowerCase();
+  if (lower.includes('email') && lower.includes('password') && lower.includes('required')) {
+    return 'Please enter your email and password.';
+  }
+  if (lower.includes('signinreq') || lower.includes('signupreq')) {
+    if (lower.includes('email') && lower.includes('required')) return 'Email is required.';
+    if (lower.includes('password') && lower.includes('required')) return 'Password is required.';
+    if (lower.includes('email') && lower.includes('failed')) return 'Please enter a valid email address.';
+  }
+  if (lower.includes('email') && lower.includes('required')) return 'Email is required.';
+  if (lower.includes('password') && lower.includes('required')) return 'Password is required.';
+  if (lower.includes('password') && (lower.includes('min') || lower.includes('least'))) return 'Password must meet the minimum length requirement.';
+  if (lower.includes('email') && lower.includes('valid')) return 'Please enter a valid email address.';
+  if (lower.includes('already') && lower.includes('exists')) return 'An account with this email already exists.';
+  if (lower.includes('verification') && lower.includes('required')) return 'Please verify your email before signing in.';
+  if (lower.includes('incorrect') && lower.includes('password')) return 'Incorrect email or password. Please try again.';
+  if (lower.includes('credentials')) return 'Incorrect email or password. Please try again.';
+  if (normalized.length > 0 && normalized.length <= 140) return normalized;
+  return null;
+}
+
+function normalizeAuthError(err, context = 'login') {
+  const fallback = DEFAULT_AUTH_ERRORS[context] || DEFAULT_AUTH_ERRORS.login;
+  if (!err) return fallback;
+  const status = err?.status;
+  const rawMessage = typeof err?.message === 'string' ? err.message : '';
+
+  if (status === 401) return 'Incorrect email or password. Please try again.';
+  if (status === 403 && /verify/i.test(rawMessage)) return 'Please verify your email before signing in.';
+  if (status >= 500) return 'Our servers are having trouble. Please try again shortly.';
+
+  const candidates = [];
+  const data = err?.data;
+  if (typeof rawMessage === 'string' && rawMessage) candidates.push(rawMessage);
+  if (typeof data === 'string') candidates.push(data);
+  if (data && typeof data === 'object') {
+    ['message', 'error', 'detail', 'title', 'description'].forEach((key) => {
+      const value = data?.[key];
+      if (typeof value === 'string') candidates.push(value);
+    });
+    if (Array.isArray(data)) {
+      data.forEach((value) => {
+        if (typeof value === 'string') candidates.push(value);
+      });
+    }
+    const errs = data?.errors;
+    if (errs) {
+      if (Array.isArray(errs)) {
+        errs.forEach((value) => {
+          if (typeof value === 'string') candidates.push(value);
+          else if (value && typeof value === 'object') {
+            if (typeof value.message === 'string') candidates.push(value.message);
+            if (typeof value.error === 'string') candidates.push(value.error);
+          }
+        });
+      } else if (typeof errs === 'object') {
+        Object.values(errs).forEach((value) => {
+          if (Array.isArray(value)) {
+            value.forEach((v) => {
+              if (typeof v === 'string') candidates.push(v);
+            });
+          } else if (typeof value === 'string') {
+            candidates.push(value);
+          }
+        });
+      }
+    }
+  }
+
+  for (const msg of candidates) {
+    const friendly = humanizeValidationMessage(msg);
+    if (friendly) return friendly;
+  }
+
+  if ((status === 400 || status === 422) && rawMessage && /required/i.test(rawMessage)) {
+    if (/email/i.test(rawMessage) && /password/i.test(rawMessage)) {
+      return 'Please enter your email and password.';
+    }
+    return 'Please fill in the required fields.';
+  }
+
+  if (rawMessage && rawMessage.length > 0 && rawMessage.length <= 120 && !/sign(in|up)req/i.test(rawMessage)) {
+    return rawMessage;
+  }
+
+  return fallback;
+}
+
 export const login = createAsyncThunk('auth/login', async ({ email, password }, { rejectWithValue }) => {
   try {
     const result = await api.login({ email, password });
@@ -32,7 +130,10 @@ export const login = createAsyncThunk('auth/login', async ({ email, password }, 
     ]);
     return { token: accessToken, refreshToken: refreshToken || null, user: { email, provider: 'password' } };
   } catch (err) {
-    return rejectWithValue(err.message || 'Login failed');
+    if (__DEV__) {
+      console.warn('[Auth] Login failed', err?.message || err, err?.data);
+    }
+    return rejectWithValue(normalizeAuthError(err, 'login'));
   }
 });
 
@@ -64,7 +165,10 @@ export const signup = createAsyncThunk('auth/signup', async ({ email, password }
     }
     return { token: accessToken, refreshToken: refreshToken || null, user: { email, provider: 'password' } };
   } catch (err) {
-    return rejectWithValue(err.message || 'Signup failed');
+    if (__DEV__) {
+      console.warn('[Auth] Signup failed', err?.message || err, err?.data);
+    }
+    return rejectWithValue(normalizeAuthError(err, 'signup'));
   }
 });
 

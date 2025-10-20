@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, FlatList, TouchableOpacity, useWindowDimensions, RefreshControl, DeviceEventEmitter, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TabView, TabBar } from 'react-native-tab-view';
@@ -16,6 +16,7 @@ import { getProductById } from '../../services/products';
 import tournaments from '../../services/tournaments';
 import { fetchMyWallet } from '../../store/wallet/walletSlice';
 import AppModal from '../../components/common/AppModal';
+import { getCountryRestriction, buildCountryRestrictionMessage } from '../../utils/countryAccess';
 import { ChevronLeft, Bell, Star, Share2 } from 'lucide-react-native';
 import DescriptionTab from './details/DescriptionTab';
 import ProductDetailsTab from './details/ProductDetailsTab';
@@ -33,6 +34,7 @@ export default function DetailsScreen({ route, navigation }) {
   const favItems = useSelector((s) => s.favorites.items);
   const [item, setItem] = useState(initialItem);
   const token = useSelector((s) => s.auth.token);
+  const userCountry = useSelector((s) => s.auth?.user?.address?.country || s.app?.country || null);
   const isFav = !!favItems.find((it) => it.id === item?.id);
   const toggleFav = () => {
     if (!item) return;
@@ -66,6 +68,8 @@ export default function DetailsScreen({ route, navigation }) {
   const [alreadyOpen, setAlreadyOpen] = useState(false);
   const [alreadyMsg, setAlreadyMsg] = useState('');
   const [joining, setJoining] = useState(false);
+  const [countryWarningOpen, setCountryWarningOpen] = useState(false);
+  const [countryWarningMsg, setCountryWarningMsg] = useState('');
   const { width, height: screenH } = useWindowDimensions();
   const [slide, setSlide] = useState(0);
   const sliderRef = useRef(null);
@@ -83,8 +87,16 @@ export default function DetailsScreen({ route, navigation }) {
 
   const images = useMemo(() => (item?.images && item.images.length ? item.images : [item?.image, item?.image, item?.image]).filter(Boolean), [item]);
   const progress = item?.playsTotal ? Math.min(1, (item.playsCompleted || 0) / item.playsTotal) : 0;
+  const countryRestriction = useMemo(() => getCountryRestriction(item, userCountry), [item, userCountry]);
+  const isCountryRestricted = !!countryRestriction?.restricted;
+  const countryRestrictionMessage = isCountryRestricted ? buildCountryRestrictionMessage(countryRestriction.productCountry) : '';
 
   const playNow = async () => {
+    if (isCountryRestricted) {
+      setCountryWarningMsg(countryRestrictionMessage);
+      setCountryWarningOpen(true);
+      return;
+    }
     const available = token ? Number(storeCoins || 0) : 0;
     setAvailableCoins(available);
     const required = Number(item?.coinPerPlay || 0);
@@ -99,6 +111,13 @@ export default function DetailsScreen({ route, navigation }) {
       setJoining(true);
       if (!token) { setSoldOutMsg('Login required'); setSoldOutOpen(true); return; }
       const data = await getProductById(item?.id || item?._id, token);
+      const latestRestriction = getCountryRestriction(data, userCountry);
+      if (latestRestriction.restricted) {
+        setRulesOpen(false);
+        setCountryWarningMsg(buildCountryRestrictionMessage(latestRestriction.productCountry));
+        setCountryWarningOpen(true);
+        return;
+      }
       const status = data?.tournament?.status || data?.tournamentStatus;
       const playsCompleted = Number(data?.playsCompleted ?? data?.tournament?.playsCompleted ?? 0);
       const playsTotal = Number(data?.playsTotal ?? data?.tournament?.playsTotal ?? 0);
@@ -136,7 +155,7 @@ export default function DetailsScreen({ route, navigation }) {
         Alert.alert("No Game Found!")
         return
       }
-      navigation.navigate('UnityGame', { scene: item.raw.game.tabcode || 'Game1', tournamentId: tId, productId: item?.id || item?._id });
+      navigation.navigate('UnityGame', { scene: item.raw.game.tabcode || 'Game1', tournamentId: tId, productId: item?.id || item?._id, onlyTutorial: false });
     } catch (e) {
       setRulesOpen(false);
       setSoldOutMsg(e?.message || 'Unable to verify availability');
@@ -283,6 +302,41 @@ export default function DetailsScreen({ route, navigation }) {
   }, [calcReady, item, now]);
 
   const showEndedUI = useMemo(() => isEnded, [isEnded]);
+  const isApproved = useMemo(
+    () => String(item?.approvalStatus || '').toUpperCase() === 'APPROVED',
+    [item?.approvalStatus]
+  );
+  const productId = useMemo(() => item?.raw?._id || item?.id || item?._id || null, [item]);
+  const sceneCode = useMemo(() => item?.raw?.game?.tabcode || item?.game?.tabcode || null, [item]);
+  const leaderTabIndex = useMemo(() => routes.findIndex((r) => r.key === 'leader'), [routes]);
+  const goLeaderboard = useCallback(() => {
+    if (productId) {
+      navigation.navigate('Leaderboard', {
+        productId,
+        item: {
+          product: { name: item?.title || item?.name || item?.raw?.name || 'Leaderboard' },
+          game: item?.raw?.game || item?.game || null,
+        },
+      });
+      return;
+    }
+    if (leaderTabIndex >= 0) {
+      setIndex(leaderTabIndex);
+    }
+  }, [productId, navigation, item, leaderTabIndex, setIndex]);
+  const startTutorial = useCallback(() => {
+    if (!sceneCode) {
+      Alert.alert('No Game Found', 'Tutorial is unavailable for this game.');
+      return;
+    }
+    navigation.navigate('UnityGame', {
+      scene: sceneCode,
+      tournamentId: null,
+      productId: productId || item?.id || null,
+      onlyTutorial: true,
+    });
+  }, [sceneCode, navigation, productId, item?.id]);
+  const showTutorialButton = !!sceneCode;
   const handleBackPress = () => {
     if (navigation?.canGoBack?.()) {
       navigation.goBack();
@@ -372,8 +426,25 @@ export default function DetailsScreen({ route, navigation }) {
         </View>
 
         <View style={{ paddingHorizontal: 16, marginTop: 12, marginBottom: 12 }}>
+          <View style={styles.actionsRow}>
+            <TouchableOpacity style={styles.leaderboardBtn} onPress={goLeaderboard} activeOpacity={0.85}>
+              <Text style={styles.leaderboardBtnText}>View Leaderboard</Text>
+            </TouchableOpacity>
+            {showTutorialButton ? (
+              <TouchableOpacity style={styles.howToPlayBtn} onPress={startTutorial} activeOpacity={0.85}>
+                <Text style={styles.howToPlayText}>How to Play</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           {calcReady ? (
-            <Button title={showEndedUI ? 'Game End' : 'Play Now'} onPress={playNow} disabled={showEndedUI} />
+            <Button
+              title={showEndedUI ? 'Game End' : 'Play Now'}
+              onPress={playNow}
+              disabled={showEndedUI || !isApproved || isCountryRestricted}
+            />
+          ) : null}
+          {isCountryRestricted && countryRestrictionMessage ? (
+            <Text style={styles.countryWarningText}>{countryRestrictionMessage}</Text>
           ) : null}
         </View>
 
@@ -412,6 +483,15 @@ export default function DetailsScreen({ route, navigation }) {
       />
       <ImageViewerSheet visible={viewerOpen} onClose={() => setViewerOpen(false)} images={images} initialIndex={viewerIndex} />
       <RulesModal visible={rulesOpen} onCancel={() => setRulesOpen(false)} onConfirm={confirmPlay} item={item} confirmLoading={joining} />
+      <AppModal
+        visible={countryWarningOpen}
+        title="Country Restricted"
+        message={countryWarningMsg || 'Please update your country to play for this item.'}
+        confirmText="OK"
+        cancelText="Close"
+        onConfirm={() => setCountryWarningOpen(false)}
+        onCancel={() => setCountryWarningOpen(false)}
+      />
       <InsufficientCoinsModal
         visible={insufficientOpen}
         available={availableCoins}
@@ -461,8 +541,14 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusTitle: { color: colors.white, fontWeight: '700' },
   statusPct: { color: colors.white, fontWeight: '700' },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  leaderboardBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#343B49', marginRight: 12 },
+  leaderboardBtnText: { color: colors.accent, fontWeight: '700', fontSize: 14, letterSpacing: 0.2 },
+  howToPlayBtn: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 16, borderWidth: 1, borderColor: '#4B5365' },
+  howToPlayText: { color: colors.white, fontWeight: '600', fontSize: 14, letterSpacing: 0.2 },
   endsIn: { color: colors.white, marginTop: 10 },
   endedMsg: { color: colors.error, marginTop: 10, fontWeight: '700' },
+  countryWarningText: { color: colors.warning, marginTop: 10, fontWeight: '700' },
   tabsRow: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
   tab: { color: colors.white, backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#3A4051', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginRight: 10, textAlign: 'center' },
   tabActive: { backgroundColor: '#3A2B52', borderColor: colors.accent },

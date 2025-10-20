@@ -7,7 +7,6 @@ import NotificationsScreen from "../screens/notifications/NotificationsScreen";
 import PaymentMethodsScreen from "../screens/wallet/PaymentMethodsScreen";
 import BuyCoinsScreen from "../screens/wallet/BuyCoinsScreen";
 import MyListingsScreen from "../screens/profile/MyListingsScreen";
-import TournamentsWonScreen from "../screens/profile/TournamentsWonScreen";
 import EditProfileScreen from "../screens/account/EditProfileScreen";
 import AcknowledgeReceiptScreen from "../screens/profile/AcknowledgeReceiptScreen";
 import WebsiteTermsScreen from "../screens/misc/WebsiteTermsScreen";
@@ -27,7 +26,6 @@ export default function AppStack() {
       <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
       <Stack.Screen name="BuyCoins" component={BuyCoinsScreen} />
       <Stack.Screen name="MyListings" component={MyListingsScreen} />
-      <Stack.Screen name="TournamentsWon" component={TournamentsWonScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="AcknowledgeReceipt" component={AcknowledgeReceiptScreen} />
       <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />

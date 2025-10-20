@@ -27,6 +27,7 @@ import {
   isGatewaySupportedForCountry,
   isIndiaCountry,
 } from '../../utils/payments';
+import {getCurrencyConfig} from '../../utils/currency';
 import {categorizeSubscriptionStatus} from '../../utils/subscriptionStatus';
 import {hasAddress} from '../../utils/pickupAddresses';
 import {buildPlanLookup, findPlanForSubscription} from '../../utils/plans';
@@ -64,6 +65,30 @@ export default function WalletScreen({navigation}) {
     [authCountry, appCountry],
   );
   const isIndia = useMemo(() => isIndiaCountry(country), [country]);
+  const currencyConfig = useMemo(() => {
+    if (country) return getCurrencyConfig(country);
+    return isIndia ? getCurrencyConfig('IN') : getCurrencyConfig('AE');
+  }, [country, isIndia]);
+  const preferredCurrencyCode = currencyConfig.code || (isIndia ? 'INR' : 'AED');
+  const formatMoney = useCallback(
+    value => {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num <= 0) return `${preferredCurrencyCode} —`;
+      const hasDecimals = Math.abs(num % 1) > 0.00001;
+      try {
+        const locale = currencyConfig.locale || (isIndia ? 'en-IN' : 'en-US');
+        const formatted = new Intl.NumberFormat(locale, {
+          minimumFractionDigits: hasDecimals ? 2 : 0,
+          maximumFractionDigits: 2,
+        }).format(num);
+        return `${preferredCurrencyCode} ${formatted}`;
+      } catch (err) {
+        const decimals = hasDecimals ? 2 : 0;
+        return `${preferredCurrencyCode} ${num.toFixed(decimals)}`;
+      }
+    },
+    [preferredCurrencyCode, currencyConfig.locale, isIndia],
+  );
   const {initPaymentSheet, presentPaymentSheet} = useStripe();
   const [wallet, setWallet] = useState({
     availableZishCoins: 0,
@@ -272,11 +297,7 @@ export default function WalletScreen({navigation}) {
           const amountNum = Number(
             p?.expectedPrice ?? p?.price ?? p?.amount ?? 0,
           );
-          const currency = p?.currencyCode || p?.currency || 'INR';
-          const amount =
-            amountNum > 0
-              ? `${currency} ${amountNum.toLocaleString()}`
-              : `${currency} —`;
+          const amount = formatMoney(amountNum);
           const rawStatus = String(
             p?.withdrawalStatus ||
               p?.payoutStatus ||
@@ -325,7 +346,7 @@ export default function WalletScreen({navigation}) {
     } finally {
       setWithdrawalsLoading(false);
     }
-  }, [token]);
+  }, [token, formatMoney]);
 
   useEffect(() => {
     fetchWithdrawals();
@@ -874,11 +895,11 @@ export default function WalletScreen({navigation}) {
                     ) : null}
                     {over && !receiverApproved ? (
                       <Text style={{color: colors.textSecondary, marginTop: 4}}>
-                        Waiting for winner to approve receipt.
+                        Waiting for winner to upload address.
                       </Text>
                     ) : null}
                   </View>
-                  <View style={{alignItems: 'flex-end'}}>
+                  <View style={styles.withdrawActions}>
                     <StatusChip status={isVerified ? 'verified' : w.status} />
                     {isVerified ? (
                       <TouchableOpacity
@@ -897,13 +918,12 @@ export default function WalletScreen({navigation}) {
                     ) : over ? (
                       (() => {
                         const fulfillment = w?.raw?.fulfillment || {};
-                        const needsProofDetails =
-                          !(
-                            hasAddress(fulfillment?.pickupAddresses?.seller) &&
-                            hasAddress(fulfillment?.pickupAddresses?.receiver) &&
-                            fulfillment?.dateOfDelivery
-                          );
-                        if (needsProofDetails) {
+                        const sellerEvents = extractSellerEvents(fulfillment);
+                        const sellerEventSet = new Set(sellerEvents);
+                        const sellerAddressEvent = sellerEventSet.has('ADDRESS_FILLED');
+                        const sellerProofEvent = sellerEventSet.has('PROOF_GIVEN');
+                        const sellerAddressPersisted = hasAddress(fulfillment?.pickupAddresses?.seller) || sellerAddressEvent;
+                        if (!sellerAddressPersisted && !sellerProofEvent) {
                           return (
                             <TouchableOpacity
                               style={[styles.smallBtn, styles.completeSmallBtn]}
@@ -916,31 +936,55 @@ export default function WalletScreen({navigation}) {
                                     title: w.title,
                                     image: w.image,
                                   },
+                                  focus: 'address',
                                 })
                               }>
                               <Text style={styles.completeSmallBtnText}>Complete Details</Text>
                             </TouchableOpacity>
                           );
                         }
-                        return (
-                          <TouchableOpacity
-                            style={[styles.smallBtn, {backgroundColor: colors.primary}]}
-                            onPress={() =>
-                              navigation.navigate('UploadProof', {
-                                item: {
-                                  id: w.id,
-                                  _id: w.id,
-                                  raw: w.raw,
-                                  title: w.title,
+                        if (!sellerProofEvent) {
+                          return (
+                            <TouchableOpacity
+                              style={[styles.smallBtn, {backgroundColor: colors.primary}]}
+                              onPress={() =>
+                                navigation.navigate('UploadProof', {
+                                  item: {
+                                    id: w.id,
+                                    _id: w.id,
+                                    raw: w.raw,
+                                    title: w.title,
                                   image: w.image,
                                 },
+                                focus: 'proof',
                               })
                             }>
                             <Text style={styles.smallBtnText}>Upload Proof</Text>
                           </TouchableOpacity>
                         );
-                      })()
-                    ) : null}
+                      }
+                      return (
+                        <TouchableOpacity
+                          style={[styles.smallBtn, styles.proofSubmittedSmallBtn]}
+                          onPress={() =>
+                            navigation.navigate('UploadProof', {
+                              item: {
+                                id: w.id,
+                                _id: w.id,
+                                raw: w.raw,
+                                title: w.title,
+                                image: w.image,
+                              },
+                              focus: 'proof',
+                            })
+                          }>
+                          <Text style={styles.proofSubmittedSmallBtnText} numberOfLines={2}>
+                            Proof submitted – view details
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })()
+                  ) : null}
                   </View>
                 </View>
               );
@@ -1261,6 +1305,31 @@ function ActionButton({status, onPress}) {
   );
 }
 
+function extractSellerEvents(...sources) {
+  const collected = [];
+  const collect = value => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(entry => {
+        if (entry != null && entry !== '') collected.push(entry);
+      });
+    }
+  };
+  sources.forEach(source => {
+    if (!source) return;
+    const root = source?.events;
+    if (root) {
+      collect(root);
+      collect(root?.seller);
+      collect(root?.seller?.events);
+    }
+    collect(source?.seller?.events);
+    collect(source?.seller);
+    collect(source?.sellerEvents);
+  });
+  return collected.map(ev => String(ev).toUpperCase());
+}
+
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: colors.black},
   header: {
@@ -1386,14 +1455,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#343B49',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginHorizontal: 12,
     marginTop: 10,
   },
   withdrawRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
+  },
+  withdrawActions: {
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    minWidth: 110,
+    paddingLeft: 10,
   },
   thumb: {
     width: 48,
@@ -1419,18 +1495,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   chipText: {color: colors.white, fontWeight: '700'},
-  smallBtn: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10},
+  smallBtn: {paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10},
   smallBtnText: {color: colors.white, fontWeight: '700'},
   completeSmallBtn: {
     paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 12,
     backgroundColor: colors.primary,
   },
   completeSmallBtnText: {color: colors.white, fontWeight: '800'},
+  proofSubmittedSmallBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3A4051',
+    backgroundColor: '#222838',
+    alignItems: 'center',
+    maxWidth: 168,
+  },
+  proofSubmittedSmallBtnText: {
+    color: colors.textSecondary,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   rowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#3A4051',

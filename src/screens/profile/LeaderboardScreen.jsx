@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, Crown } from 'lucide-react-native';
 import { useSelector } from 'react-redux';
 import { getLeaderboard } from '../../services/leaderboard';
 
@@ -16,11 +17,21 @@ export default function LeaderboardScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-
-  const fetchBoard = useCallback(async () => {
-    if (!productId) { setRows([]); setLoading(false); return; }
-    setError(null);
+  const [expandedScoreIndex, setExpandedScoreIndex] = useState(null);
+  const hasFetchedRef = useRef(false);
+  useEffect(() => {
+    hasFetchedRef.current = false;
     setLoading(true);
+  }, [productId]);
+
+  const fetchBoard = useCallback(async ({ silent = false } = {}) => {
+    if (!productId) {
+      setRows([]);
+      if (!silent) setLoading(false);
+      return;
+    }
+    setError(null);
+    if (!silent) setLoading(true);
     try {
       const data = await getLeaderboard(productId, { token, limit: 100, page: 1, count: true });
       setRows(Array.isArray(data?.data) ? data.data : []);
@@ -28,15 +39,21 @@ export default function LeaderboardScreen({ navigation, route }) {
       setRows([]);
       setError(e?.message || 'Failed to load leaderboard');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [productId, token]);
 
-  useEffect(() => { fetchBoard(); }, [fetchBoard]);
+  useFocusEffect(
+    useCallback(() => {
+      const silent = hasFetchedRef.current;
+      fetchBoard({ silent });
+      hasFetchedRef.current = true;
+    }, [fetchBoard])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await fetchBoard(); } finally { setRefreshing(false); }
+    try { await fetchBoard({ silent: true }); } finally { setRefreshing(false); }
   }, [fetchBoard]);
 
   const getDisplayName = (rawUser) => {
@@ -47,12 +64,28 @@ export default function LeaderboardScreen({ navigation, route }) {
   };
 
   const renderItem = ({ item: r, index }) => {
+    const isTop = index === 0;
     const isMe = currentUserId && (String(r?.user?._id || r?.user) === String(currentUserId));
+    const textStyles = [styles.rank, isTop && styles.topText, isMe && styles.meText];
+    const nameStyles = [styles.user, isTop && styles.topText, isMe && styles.meText];
+    const scoreStyles = [styles.score, isTop && styles.topText, isMe && styles.meText];
+
     return (
-      <View style={[styles.row, isMe && styles.meRow]}>
-        <Text style={[styles.rank, isMe && styles.meRank]}>{index + 1}</Text>
-        <Text style={[styles.user, isMe && styles.meUser]}>{getDisplayName(r.user)}</Text>
-        <Text style={[styles.score, isMe && styles.meScore]}>{String(r.score ?? '-')}</Text>
+      <View style={[styles.row, isMe && styles.meRow, isTop && styles.topRow]}>
+        <View style={styles.rankWrap}>
+          {isTop ? <Crown size={20} color="#F6C343" style={styles.crown} /> : null}
+          <Text style={textStyles}>{index + 1}</Text>
+        </View>
+        <Text style={nameStyles}>{getDisplayName(r.user)}</Text>
+        <TouchableOpacity onPress={() => setExpandedScoreIndex(expandedScoreIndex === index ? null : index)} activeOpacity={0.75}>
+          <Text style={scoreStyles}>
+            {expandedScoreIndex === index
+              ? String(r.score ?? '-')
+              : typeof r.score === 'number'
+              ? r.score.toFixed(2)
+              : String(r.score ?? '-')}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -95,19 +128,20 @@ const styles = StyleSheet.create({
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
 
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343B49', marginBottom: 8 },
-  hRank: { width: 32, color: colors.textSecondary, fontWeight: '700' },
+  hRank: { width: 64, color: colors.textSecondary, fontWeight: '700' },
   hUser: { flex: 1, color: colors.textSecondary, fontWeight: '700' },
   hScore: { width: 80, color: colors.textSecondary, fontWeight: '700', textAlign: 'right' },
 
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderRadius: 12, paddingHorizontal: 8 },
   sep: { height: 1, backgroundColor: '#2E3440' },
-  rank: { width: 32, color: colors.white, fontWeight: '900' },
+  rankWrap: { width: 64, flexDirection: 'row', alignItems: 'center' },
+  crown: { marginRight: 6 },
+  rank: { color: colors.white, fontWeight: '900', textAlign: 'left' },
   user: { flex: 1, color: colors.white, fontWeight: '700' },
   score: { width: 80, color: colors.white, textAlign: 'right', fontWeight: '800' },
 
-  meRow: { backgroundColor: '#2E7D3215' },
-  meRank: { color: '#D4AF37' },
-  meUser: { color: colors.accent },
-  meScore: { color: '#D4AF37' },
+  meRow: { backgroundColor: '#282F45' },
+  meText: { color: '#4C8DFF' },
+  topRow: { backgroundColor: 'rgba(246,195,67,0.12)' },
+  topText: { color: '#F6C343', fontWeight: '800' },
 });
-

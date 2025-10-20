@@ -16,11 +16,11 @@ export function getEarlyTerminationContext(item) {
   const tournament = raw?.tournament || item?.tournament || null;
   const status = String(tournament?.status || item?.tournamentStatus || '').toUpperCase();
 
-  const termsAck = !!raw?.terms?.enableEarlyTerminationAck;
   const cfg = tournament?.earlyTermination || {}; // backend config object
   const hasConfig = cfg && typeof cfg === 'object' && Object.keys(cfg).length > 0;
+  const ackEnabled = !!raw?.terms?.enableEarlyTerminationAck;
   const enabledFromConfig = hasConfig && ('enabled' in cfg) ? !!cfg.enabled : hasConfig;
-  const enabled = termsAck || enabledFromConfig;
+  const enabled = ackEnabled || enabledFromConfig;
 
   const thresholdPct = (() => {
     const pct = Number(cfg?.thresholdPct ?? cfg?.threshold);
@@ -57,6 +57,8 @@ export function getEarlyTerminationContext(item) {
 
   return {
     enabled,
+    ackEnabled,
+    config: hasConfig ? cfg : null,
     thresholdPct,
     progressPct,
     status,
@@ -67,11 +69,12 @@ export function canShowEarlyTermination(context) {
   if (!context) return false;
   const status = context.status;
   if (!status || ['OVER', 'UNFILLED', 'CANCELLED', 'COMPLETED'].includes(status)) return false;
+  if (context.ackEnabled) return true;
+  if (!context.enabled) return false;
   const meetsThreshold = Number.isFinite(context.progressPct) && Number.isFinite(context.thresholdPct)
     ? context.progressPct >= context.thresholdPct
-    : false;
-  if (!meetsThreshold && !context.enabled) return false;
-  return meetsThreshold || context.enabled;
+    : true;
+  return meetsThreshold;
 }
 
 export default {

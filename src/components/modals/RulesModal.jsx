@@ -155,9 +155,7 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
         </LinearGradient>
       </TouchableOpacity>
 }
-      {/* <View style={styles.instructionsCard}>
-        <Text style={styles.instructionsText}>{instructions}</Text>
-      </View> */}
+
 
       <View style={styles.rulesCard}>
         <Text style={styles.rulesHeading}>Tournament Rules</Text>
@@ -169,6 +167,11 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
             <Text style={styles.ruleText}>{text}</Text>
           </View>
         ))}
+        <View style={styles.ruleAckCard}>
+          <Text style={styles.ruleAckText}>
+            By confirming your order, you acknowledge that you understand and agree to these rules and instructions. If gameplay stops mid-match, only the entry fee will be credited — gameplay time is not refunded. Fees are strictly non-refundable except when tournaments are cancelled or unfilled; any such refunds are credited to your Zish Wallet.
+          </Text>
+        </View>
         {loading ? (
           <View style={styles.rulesLoadingRow}>
             <ActivityIndicator color={colors.white} />
@@ -183,9 +186,6 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
         ) : null}
       </View>
 
-      <Text style={styles.acknowledgeText}>
-        By entering, you confirm you understand the tournament rules and game instructions. Fees are non-refundable except in case of cancellation/unfilled slots, refunded to the Zish Wallet only.
-      </Text>
 
       {WebViewComponent ? (
         <Modal
@@ -235,6 +235,20 @@ const styles = StyleSheet.create({
   ruleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   ruleIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   ruleText: { color: colors.white, flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  ruleAckCard: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  ruleAckText: {
+    color: colors.white,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
   rulesLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
   additionalRules: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.18)' },
   acknowledgeText: { color: colors.white, marginBottom: 16, fontSize: 14, lineHeight: 20, fontWeight: '600' },

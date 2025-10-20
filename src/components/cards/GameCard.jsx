@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors } from '../../theme/colors';
 import ProgressBar from '../common/ProgressBar';
@@ -7,7 +7,18 @@ import LinearGradient from 'react-native-linear-gradient';
 import { Star, Share2, Zap, Info, Clock } from 'lucide-react-native';
 import { getEarlyTerminationContext, canShowEarlyTermination } from '../../utils/earlyTermination';
 
-function GameCard({ item, onPress, onPlay, onCardPress, onShare, onLeaderboard, now }) {
+function GameCard({
+  item,
+  onPress,
+  onPlay,
+  onCardPress,
+  onShare,
+  onLeaderboard,
+  onTutorial,
+  now,
+  playDisabled = false,
+  playDisabledLabel = '',
+}) {
   const { faved, toggleFav, progress, endsIn, loading, handlePlay, ended, msLeft, calcReady } = useGameCard(item, now);
   const onPlayPress = useCallback(() => handlePlay(onPlay || onPress), [handlePlay, onPlay, onPress]);
   const goDetails = useCallback(() => (onCardPress || onPress)?.(item), [onCardPress, onPress, item]);
@@ -18,6 +29,9 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, onLeaderboard, 
     }
     goDetails();
   }, [goDetails, item, onLeaderboard]);
+  const onTutorialPress = useCallback(() => {
+    onTutorial?.(item);
+  }, [onTutorial, item]);
   // Treat tournament status OVER/UNFILLED as ended, regardless of countdown
   const tourStatus = item?.tournamentStatus || item?.tournament?.status || item?.raw?.tournament?.status;
   const statusEnded = tourStatus === 'OVER' || tourStatus === 'UNFILLED';
@@ -25,6 +39,26 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, onLeaderboard, 
   const completionPercent = Number.isFinite(progress) ? Math.round(progress * 100) : 0;
   const earlyTerminationContext = getEarlyTerminationContext(item);
   const showEarlyTermination = canShowEarlyTermination(earlyTerminationContext);
+
+  useEffect(() => {
+    const config =
+      earlyTerminationContext?.config ??
+      item?.tournament?.earlyTermination ??
+      item?.raw?.tournament?.earlyTermination ??
+      null;
+    console.log('GameCard earlyTermination', item?.id, {
+      enabled: earlyTerminationContext?.enabled,
+      ackEnabled: earlyTerminationContext?.ackEnabled,
+      config,
+    });
+  }, [
+    item?.id,
+    earlyTerminationContext?.config,
+    earlyTerminationContext?.enabled,
+    earlyTerminationContext?.ackEnabled,
+    item?.tournament?.earlyTermination,
+    item?.raw?.tournament?.earlyTermination,
+  ]);
 
   return (
     <View style={styles.card}>
@@ -84,9 +118,16 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, onLeaderboard, 
               ) : null}
             </View>
           </View>
-          <TouchableOpacity style={styles.leaderboardLink} onPress={goLeaderboard} activeOpacity={0.8}>
-            <Text style={styles.leaderboardText}>View Leaderboard</Text>
-          </TouchableOpacity>
+          <View style={styles.actionsRow}>
+            <TouchableOpacity style={styles.leaderboardLink} onPress={goLeaderboard} activeOpacity={0.8}>
+              <Text style={styles.leaderboardText}>View Leaderboard</Text>
+            </TouchableOpacity>
+            {onTutorial ? (
+              <TouchableOpacity style={styles.tutorialBtn} onPress={onTutorialPress} activeOpacity={0.85}>
+                <Text style={styles.tutorialText}>How to Play</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       </TouchableOpacity>
 
@@ -94,8 +135,12 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, onLeaderboard, 
         <View style={styles.playSection}>
           {calcReady ? (
             showEndedUI ? (
-              <View style={[styles.playGrad, { backgroundColor: '#3A4051' }]}>
+              <View style={[styles.playGrad, styles.playDisabledBg]}>
                 <Text style={styles.playText}>Game End</Text>
+              </View>
+            ) : playDisabled ? (
+              <View style={[styles.playGrad, styles.playDisabledBg]}>
+                <Text style={[styles.playText, styles.playDisabledText]}>Play Now</Text>
               </View>
             ) : (
               <TouchableOpacity style={styles.playBtn} onPress={onPlayPress} activeOpacity={0.85} disabled={loading}>
@@ -109,12 +154,15 @@ function GameCard({ item, onPress, onPlay, onCardPress, onShare, onLeaderboard, 
               </TouchableOpacity>
             )
           ) : (
-            <View style={[styles.playGrad, { backgroundColor: '#3A4051', opacity: 0.5 }]} />
+            <View style={[styles.playGrad, styles.playDisabledBg, { opacity: 0.5 }]} />
           )}
           {showEarlyTermination ? (
             <View style={styles.earlyBadge}>
               <Text style={styles.earlyBadgeText}>Early termination available</Text>
             </View>
+          ) : null}
+          {playDisabled && playDisabledLabel ? (
+            <Text style={styles.playDisabledLabel}>{playDisabledLabel}</Text>
           ) : null}
         </View>
         <View style={styles.footerMeta}>
@@ -201,13 +249,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
-  leaderboardLink: {
+  actionsRow: {
     marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  leaderboardLink: {
     alignSelf: 'flex-start',
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
     backgroundColor: '#343B49',
+    marginRight: 12,
   },
   leaderboardText: {
     color: colors.accent,
@@ -238,7 +291,16 @@ const styles = StyleSheet.create({
   gameIcon: { width: '100%', height: '100%' },
   playBtn: { borderRadius: 12, overflow: 'hidden' },
   playGrad: { paddingHorizontal: 22, paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  playDisabledBg: { backgroundColor: '#3A4051' },
   playText: { color: colors.white, fontWeight: '800', fontSize: 18 },
+  playDisabledText: { color: colors.textSecondary },
+  playDisabledLabel: {
+    marginTop: 10,
+    color: colors.warning,
+    fontWeight: '700',
+    fontSize: 12,
+    textAlign: 'left',
+  },
   footerRow: {
     marginTop: 16,
     paddingHorizontal: 14,
@@ -270,6 +332,21 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '700',
     fontSize: 12,
+  },
+  tutorialBtn: {
+    marginTop: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#4B5365',
+    alignSelf: 'flex-start',
+  },
+  tutorialText: {
+    color: colors.white,
+    fontWeight: '600',
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
   gameName: {
     color: colors.white,

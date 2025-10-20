@@ -1,25 +1,27 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import { View, BackHandler } from "react-native";
 import UnityView from "@azesmway/react-native-unity";
 import GameResultModal from "../../components/GameResultModal";
 
 export default function UnityScreen({ navigation, route }) {
   const unityRef = useRef(null);
-  const { scene, tournamentId, productId } = route.params;
+  const { scene, tournamentId, productId, onlyTutorial = false } = route.params ?? {};
   const [showUnity, setShowUnity] = useState(false);
-  const [unityReady, setUnityReady] = useState(true);
+  const [unityReady, setUnityReady] = useState(false);
   const [pendingScene, setPendingScene] = useState(scene || null);
+  const [pendingOnlyTutorial, setPendingOnlyTutorial] = useState(!!onlyTutorial);
   const [sent, setSent] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState(null);
 
   useEffect(() => {
     setPendingScene(scene || null);
+    setPendingOnlyTutorial(!!onlyTutorial);
     setShowUnity(true);
     setSent(false);
     setShowResult(false);
     setResult(null);
-  }, [scene]);
+  }, [scene, onlyTutorial]);
 
   useEffect(() => {
     if (!showUnity) return;
@@ -27,16 +29,16 @@ export default function UnityScreen({ navigation, route }) {
     if (!pendingScene) return;
     if (sent) return;
     try {
-      unityRef.current?.postMessage(
+       unityRef.current?.postMessage(
         "UnityMessageManager",
         "MessageFromRN",
-        JSON.stringify({ action: "openGame", scene: pendingScene })
+        JSON.stringify({ action: "openGame", scene: pendingScene, onlyTutorial: pendingOnlyTutorial })
       );
       setSent(true);
     } catch (err) {
       console.warn("Failed to post openGame", err);
     }
-  }, [showUnity, unityReady, pendingScene, sent]);
+  }, [showUnity, unityReady, pendingScene, pendingOnlyTutorial, sent]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -50,6 +52,7 @@ export default function UnityScreen({ navigation, route }) {
     try { unityRef.current?.unloadUnity?.(); } catch {}
     setShowUnity(false);
     setPendingScene(null);
+    setPendingOnlyTutorial(false);  
     setSent(false);
     if (shouldNavigateBack) {
       navigation.goBack();
@@ -64,17 +67,35 @@ export default function UnityScreen({ navigation, route }) {
     setShowResult(true);
   };
 
-  const dismissResult = (thenClose = false) => {
+  const routeOnlyTutorial = route?.params?.onlyTutorial;
+
+  const dismissResult = useCallback((thenClose = false) => {
     setShowResult(false);
     if (thenClose) {
       // small delay to let the modal play its exit animation
       setTimeout(() => closeUnity(), 240);
     } else {
       setPendingScene(scene || pendingScene);
+      setPendingOnlyTutorial(!!(routeOnlyTutorial ?? pendingOnlyTutorial));
       setShowUnity(true);
       setSent(false);
     }
-  };
+  }, [closeUnity, scene, pendingScene, pendingOnlyTutorial, routeOnlyTutorial]);
+
+  const goToTournaments = useCallback(() => {
+    setShowResult(false);
+    closeUnity(false);
+    navigation.goBack?.();
+    const params = { screen: 'TournamentsWon', params: { forceRefreshKey: `unity-${Date.now()}` } };
+    const parent = navigation.getParent?.();
+    setTimeout(() => {
+      if (parent?.navigate) {
+        parent.navigate('Profile', params);
+      } else {
+        navigation.navigate('Profile', params);
+      }
+    }, 50);
+  }, [closeUnity, navigation]);
 
   const score = typeof result?.score === "number" ? result.score : Number(result?.score) || 0;
   const title =
@@ -104,8 +125,8 @@ export default function UnityScreen({ navigation, route }) {
                 typeof rawMessage === "string" && rawMessage.trim().length
                   ? JSON.parse(rawMessage)
                   : rawMessage;
-              console.log(msg, "msgmsgmsgmsgmsgmsg");
-              if (msg.action === "unityReady") {
+
+              if (msg.action === "unityReady" || msg.action.unityReady === "unityReady") {
                 setUnityReady(true);
                 setSent(false);
               }
@@ -129,12 +150,9 @@ export default function UnityScreen({ navigation, route }) {
         result={result}
         scene={scene}
         tournamentId={tournamentId}
-        productId={productId}
         onRequestClose={() => dismissResult(true)}
         onBack={() => dismissResult(true)}
-        onPlayAgain={() => {
-          dismissResult(false);
-        }}
+        onViewTournaments={goToTournaments}
       />
     </View>
   );

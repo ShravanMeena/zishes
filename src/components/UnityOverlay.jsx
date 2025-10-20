@@ -7,7 +7,6 @@ export default function UnityOverlay({
   visible,
   scene,
   tournamentId,
-  productId,
   onClose,
 }) {
   const unityRef = useRef(null);
@@ -124,12 +123,8 @@ export default function UnityOverlay({
         result={result}
         scene={scene}
         tournamentId={tournamentId}
-        productId={productId}
         onRequestClose={() => dismissResult(true)}
         onBack={() => dismissResult(true)}
-        onPlayAgain={() => {
-          dismissResult(false);
-        }}
       />
     </View>
   );

@@ -69,63 +69,102 @@ function parseUrlComponents(raw) {
  * - Any domain that matches WEB_ORIGIN and uses the /item/:id path
  */
 export function extractProductIdFromUrl(input) {
-  if (!input || typeof input !== 'string') return null;
-  const raw = input.trim();
-  if (!raw) return null;
-
-  const parsed = parseUrlComponents(raw);
-  if (!parsed) {
-    return null;
-  }
-
-  const { scheme } = parsed;
-  const host = normalizeHost(parsed.host);
-  const pathSegments = parsed.pathSegments;
-
-  // Merge host into segments when we receive scheme URLs without the expected host.
-  // Example: zishes://item/123 -> host=item, pathname=/123
-  let combinedSegments = pathSegments;
-  if (scheme === NORMALIZED_APP_SCHEME) {
-    if (host && host !== NORMALIZED_APP_HOST) {
-      combinedSegments = [host, ...pathSegments];
-    }
-  } else if (!pathSegments.length && host) {
-    combinedSegments = [host];
-  }
-
-  // Allow both scheme (zishes://app/item/:id) and bare scheme (zishes://item/:id)
-  const matchesAppScheme = scheme === NORMALIZED_APP_SCHEME;
-  const matchesWebOrigin = Boolean(NORMALIZED_WEB_ORIGIN) && normalizeOrigin(parsed.origin) === NORMALIZED_WEB_ORIGIN;
-  const matchesWebHost = Boolean(NORMALIZED_WEB_HOST) && host === NORMALIZED_WEB_HOST;
-
-  if (!matchesAppScheme && !matchesWebOrigin && !matchesWebHost) {
-    return null;
-  }
-
-  if (!combinedSegments.length) {
-    return null;
-  }
-
-  const [first, second] = combinedSegments;
-  if (first !== 'item' || !second) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(second);
-  } catch (_err) {
-    return second;
-  }
+  const parsed = parseDeepLink(input);
+  if (parsed?.type === 'product') return parsed.id;
+  return null;
 }
 
 /**
  * Parse a URL and return a normalized payload describing the intent.
- * Currently only supports product details.
  */
 export function parseDeepLink(url) {
-  const productId = extractProductIdFromUrl(url);
-  if (!productId) return null;
-  return { type: 'product', id: productId, url };
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  const parsed = parseUrlComponents(trimmed);
+  if (!parsed) return null;
+
+  const { scheme } = parsed;
+  const host = normalizeHost(parsed.host);
+  let combinedSegments = parsed.pathSegments;
+
+  // Merge host into segments when scheme link omits the expected host (e.g., zishes://wallet)
+  if (scheme === NORMALIZED_APP_SCHEME) {
+    if (host && host !== NORMALIZED_APP_HOST) {
+      combinedSegments = [host, ...parsed.pathSegments];
+    }
+  } else if (!combinedSegments.length && host) {
+    combinedSegments = [host];
+  }
+
+  const matchesAppScheme = scheme === NORMALIZED_APP_SCHEME;
+  const matchesWebOrigin = Boolean(NORMALIZED_WEB_ORIGIN) && normalizeOrigin(parsed.origin) === NORMALIZED_WEB_ORIGIN;
+  const matchesWebHost = Boolean(NORMALIZED_WEB_HOST) && host === NORMALIZED_WEB_HOST;
+  if (!matchesAppScheme && !matchesWebOrigin && !matchesWebHost) {
+    return null;
+  }
+
+  if (!combinedSegments.length) return null;
+
+  const normalizeSegment = (segment) => String(segment || '').trim().toLowerCase();
+  const decodeSegment = (segment) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch (_err) {
+      return segment;
+    }
+  };
+
+  const [firstRaw, secondRaw, thirdRaw] = combinedSegments;
+  const first = normalizeSegment(firstRaw);
+
+  if (['item', 'product', 'details'].includes(first)) {
+    if (!secondRaw) return null;
+    return {
+      type: 'product',
+      id: decodeSegment(secondRaw),
+      url: trimmed,
+    };
+  }
+
+  if (['wallet', 'walletscreen'].includes(first)) {
+    return {
+      type: 'wallet',
+      url: trimmed,
+    };
+  }
+
+  if (['leaderboard', 'tournament'].includes(first)) {
+    if (!secondRaw) return null;
+    return {
+      type: 'leaderboard',
+      tournamentId: decodeSegment(secondRaw),
+      productId: thirdRaw ? decodeSegment(thirdRaw) : null,
+      url: trimmed,
+    };
+  }
+
+  if (['upload-proof', 'uploadproof', 'seller-proof', 'proof'].includes(first)) {
+    if (!secondRaw) return null;
+    return {
+      type: 'uploadProof',
+      productId: decodeSegment(secondRaw),
+      url: trimmed,
+    };
+  }
+
+  if (['acknowledgement', 'acknowledge', 'ack', 'receiver', 'receipt'].includes(first)) {
+    if (!secondRaw) return null;
+    return {
+      type: 'acknowledgement',
+      tournamentId: decodeSegment(secondRaw),
+      productId: thirdRaw ? decodeSegment(thirdRaw) : null,
+      url: trimmed,
+    };
+  }
+
+  return null;
 }
 
 export default {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, Modal, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,12 +17,11 @@ import {
   normalizePickupAddressesForState,
   normalizePickupAddressesForSubmit,
   hasAddress,
-  hasPickupAddresses,
   resolveProductCountry,
 } from '../../utils/pickupAddresses';
 
 export default function UploadProofScreen({ route, navigation }) {
-  const { item } = route.params || {};
+  const { item, focus } = route.params || {};
   const ensureGallery = useGalleryPermission();
   const ensureCamera = useCameraPermission();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -41,46 +40,58 @@ export default function UploadProofScreen({ route, navigation }) {
   const [uploadPct, setUploadPct] = useState(0);
   const [error, setError] = useState(null);
   const [successOpen, setSuccessOpen] = useState(false);
+
+  const redirectToMyListings = useCallback(() => {
+    const forceRefreshKey = `ml-${Date.now()}`;
+    const parentNav = navigation.getParent?.();
+    if (parentNav?.navigate) {
+      parentNav.navigate('Profile', { screen: 'MyListings', params: { forceRefreshKey } });
+    } else {
+      navigation.navigate('MyListings', { forceRefreshKey });
+    }
+  }, [navigation]);
   const [fulfillment, setFulfillment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [mode, setMode] = useState('edit'); // 'view' | 'edit'
-  const [deliveryMethod, setDeliveryMethod] = useState('IN_PERSON'); // IN_PERSON | COURIER | DIGITAL
-  const [extraPhotos, setExtraPhotos] = useState([]); // additional seller photos
-  const [pickingGeneral, setPickingGeneral] = useState(false);
+  const [deliveryMethod, setDeliveryMethod] = useState(''); // 'courier' | 'digital'
   const [pickupAddresses, setPickupAddresses] = useState(() => buildEmptyPickupAddresses());
   const [productCountry, setProductCountry] = useState('');
   const [addressSaving, setAddressSaving] = useState(false);
-  const [addressExpanded, setAddressExpanded] = useState(true);
+  const [addressExpanded, setAddressExpanded] = useState(() => focus !== 'proof');
 
-  const canEdit = mode === 'edit' && stage === 'idle' && !loading;
   const draftSellerAddressFilled = hasAddress(pickupAddresses.seller);
-  const persistedSellerAddress = hasAddress(fulfillment?.pickupAddresses?.seller);
-  const addressPersisted = persistedSellerAddress;
   const canSaveAddresses = draftSellerAddressFilled;
-  const needsAddressFirst = mode === 'edit' && !loading && !addressPersisted;
-  const showProofForm = canEdit && addressPersisted;
+  const sellerEvents = useMemo(
+    () => extractSellerEvents(fulfillment, item?.raw?.fulfillment, item?.raw, item),
+    [fulfillment, item]
+  );
+  const sellerEventSet = useMemo(() => new Set(sellerEvents), [sellerEvents]);
+  const sellerAddressEvent = sellerEventSet.has('ADDRESS_FILLED');
+  const sellerProofEvent = sellerEventSet.has('PROOF_GIVEN');
+  const sellerAddressPersisted = hasAddress(fulfillment?.pickupAddresses?.seller) || sellerAddressEvent;
+  const addressPersisted = sellerAddressPersisted;
+  const showAddressForm = !sellerProofEvent && !sellerAddressPersisted;
+  const showProofForm = !sellerProofEvent && sellerAddressPersisted;
+  const showProofSubmittedBanner = sellerProofEvent;
+  const showSubmittedCard = (!loading && stage === 'idle' && fulfillment && sellerProofEvent);
+  const canEdit = !loading && stage === 'idle' && !sellerProofEvent;
   const openPicker = (setter) => { setWhichSetter(() => setter); setPickerOpen(true); };
   const pickFromGallery = async () => {
     const ok = await ensureGallery();
     if (!ok) return;
-    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 0 });
-    if (res?.assets?.length) {
-      if (pickingGeneral) {
-        setExtraPhotos((prev) => [...prev, ...res.assets.map(a => ({ uri: a.uri }))]);
-      } else if (whichSetter) {
-        // Use the first selection for targeted field
-        whichSetter({ uri: res.assets[0].uri });
-      }
+    const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
+    const asset = res?.assets?.[0];
+    if (asset?.uri && whichSetter) {
+      whichSetter({ uri: asset.uri });
     }
   };
   const pickFromCamera = async () => {
     const ok = await ensureCamera();
     if (!ok) return;
     const res = await launchCamera({ mediaType: 'photo', cameraType: 'back', quality: 0.9, saveToPhotos: true });
-    if (res?.assets?.length) {
-      if (pickingGeneral) setExtraPhotos((prev) => [...prev, { uri: res.assets[0].uri }]);
-      else if (whichSetter) whichSetter({ uri: res.assets[0].uri });
+    const asset = res?.assets?.[0];
+    if (asset?.uri && whichSetter) {
+      whichSetter({ uri: asset.uri });
     }
   };
 
@@ -98,21 +109,12 @@ export default function UploadProofScreen({ route, navigation }) {
           setAwb,
           setComment,
           setDate,
-          setExtraPhotos,
           setPickupAddresses,
           setProductCountry,
           getProductId,
           item
         );
         if (!f) return;
-        // Enter view mode if we already have proof data
-        const hasProof = (
-          (f?.sellerNotes) || (f?.trackingNumber) || (f?.courierService) || (f?.dateOfDelivery || f?.deliveredAt) ||
-          (f?.sellerMedia && ((f.sellerMedia.photos && f.sellerMedia.photos.length) || (f.sellerMedia.videos && f.sellerMedia.videos.length))) ||
-          (Array.isArray(f?.pickupMedia) && f.pickupMedia.length) ||
-          hasPickupAddresses(f?.pickupAddresses)
-        );
-        if (hasProof) setMode('view');
       } catch (e) {
         // ignore silently for view
       } finally { setLoading(false); }
@@ -121,6 +123,12 @@ export default function UploadProofScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!focus) return;
+    if (focus === 'address') setAddressExpanded(true);
+    if (focus === 'proof') setAddressExpanded(false);
+  }, [focus]);
+
   const submit = async () => {
     setError(null);
     const productId = getProductId();
@@ -128,14 +136,19 @@ export default function UploadProofScreen({ route, navigation }) {
     const isCourier = String(deliveryMethod).toUpperCase() === 'COURIER';
     if (isCourier && !courier?.trim()) { setError('Courier service is required for courier deliveries.'); return; }
     if (isCourier && !awb?.trim()) { setError('Tracking number is required for courier deliveries.'); return; }
+    if (isCourier && !receipt?.uri) { setError('Courier deliveries require an upload of the proof receipt.'); return; }
     if (!addressPersisted) {
       setError('Please complete the seller pickup address before submitting proof.');
+      return;
+    }
+    if (!isCourier && !handover?.uri) {
+      setError('Please upload a proof photo.');
       return;
     }
     try {
       // Upload available images with progress (only new ones)
       const photos = [];
-      const toUpload = [receipt, handover, ...extraPhotos.filter((img) => !img?.existing)].filter(Boolean);
+      const toUpload = [receipt, handover].filter((img) => img && img.uri);
       if (toUpload.length) {
         setStage('uploading');
         setUploadPct(0);
@@ -173,24 +186,8 @@ export default function UploadProofScreen({ route, navigation }) {
       if (normalizedPickup) payload.pickupAddresses = normalizedPickup;
 
       await fulfillments.submitSellerProof(productId, payload);
-      setSuccessOpen(true);
-      // Refresh fulfillment and enter view mode
-      try {
-        const f = await reloadFulfillment(
-          setFulfillment,
-          setDeliveryMethod,
-          setCourier,
-          setAwb,
-          setComment,
-          setDate,
-          setExtraPhotos,
-          setPickupAddresses,
-          setProductCountry,
-          getProductId,
-          item
-        );
-        if (f) setMode('view');
-      } catch {}
+      redirectToMyListings();
+      return;
     } catch (e) {
       setError(e?.message || 'Failed to submit proof');
     } finally {
@@ -214,19 +211,8 @@ export default function UploadProofScreen({ route, navigation }) {
         throw new Error('Seller pickup address is required.');
       }
       await fulfillments.submitSellerProof(productId, { pickupAddresses: normalized });
-      await reloadFulfillment(
-        setFulfillment,
-        setDeliveryMethod,
-        setCourier,
-        setAwb,
-        setComment,
-        setDate,
-        setExtraPhotos,
-        setPickupAddresses,
-        setProductCountry,
-        getProductId,
-        item
-      );
+      redirectToMyListings();
+      return;
     } catch (e) {
       setError(e?.message || 'Failed to save address.');
     } finally {
@@ -234,12 +220,18 @@ export default function UploadProofScreen({ route, navigation }) {
     }
   };
 
+  const headerTitle = useMemo(() => {
+    if (focus === 'address') return 'Update Delivery Address';
+    if (focus === 'proof') return 'Upload Proof of Delivery';
+    return showAddressForm && !showProofForm ? 'Update Delivery Address' : 'Upload Proof of Delivery';
+  }, [focus, showAddressForm, showProofForm]);
+
   return (
     <>
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}><ChevronLeft size={20} color={colors.white} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Upload Proof of Delivery</Text>
+        <Text style={styles.headerTitle}>{headerTitle}</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Notifications' })}>
           <Bell size={18} color={colors.white} />
         </TouchableOpacity>
@@ -250,25 +242,15 @@ export default function UploadProofScreen({ route, navigation }) {
         keyboardShouldPersistTaps="handled"
         enableOnAndroid
         extraScrollHeight={20}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); try { await reloadFulfillment(setFulfillment, setDeliveryMethod, setCourier, setAwb, setComment, setDate, setExtraPhotos, setPickupAddresses, setProductCountry, getProductId, item); } finally { setRefreshing(false); } }} tintColor={colors.white} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); try { await reloadFulfillment(setFulfillment, setDeliveryMethod, setCourier, setAwb, setComment, setDate, setPickupAddresses, setProductCountry, getProductId, item); } finally { setRefreshing(false); } }} tintColor={colors.white} />}
       >
         {/* Content renders below; full-screen loader overlays while loading */}
-        {/* Item banner */}
-        <View style={styles.banner}>
-          <Image source={{ uri: item?.image }} style={styles.bannerImg} />
-          <View style={{ marginLeft: 10 }}>
-            <Text style={styles.bannerTitle}>{item?.title || 'Item'}</Text>
-            <View style={styles.pending}><Text style={styles.pendingTxt}>Pending</Text></View>
-          </View>
-        </View>
 
-        {/* Existing proof details (if any). View-only, with Edit button */}
-        {(!loading && stage === 'idle') && mode === 'view' && fulfillment && (
+  
+        {/* Existing proof details (if any). */}
+        {showSubmittedCard && (
           <View style={styles.card}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.cardTitle}>Submitted Proof</Text>
-              <TouchableOpacity onPress={() => setMode('edit')} style={[styles.btn, { height: 36, paddingHorizontal: 12 }, styles.primary]}><Text style={styles.btnTxt}>Edit</Text></TouchableOpacity>
-            </View>
+            <Text style={styles.cardTitle}>Submitted Proof</Text>
             <DeliveryMessage method={fulfillment?.deliveryMethod} courier={fulfillment?.courierService} />
             {/* Winner info */}
             {fulfillment?.winner ? (
@@ -309,7 +291,7 @@ export default function UploadProofScreen({ route, navigation }) {
           </View>
         )}
 
-        {canEdit ? (
+        {canEdit && showAddressForm ? (
           <View style={[styles.card, styles.addressCard]}>
             <TouchableOpacity
               onPress={() => setAddressExpanded((prev) => !prev)}
@@ -323,7 +305,6 @@ export default function UploadProofScreen({ route, navigation }) {
                 style={{ transform: [{ rotate: addressExpanded ? '180deg' : '0deg' }] }}
               />
             </TouchableOpacity>
-            {productCountry ? <Text style={styles.addressHint}>Country locked to {productCountry}</Text> : null}
             {addressExpanded ? (
               <>
                 <AddressForm
@@ -338,7 +319,7 @@ export default function UploadProofScreen({ route, navigation }) {
           </View>
         ) : null}
 
-        {needsAddressFirst ? (
+        {showAddressForm ? (
           <>
             <TouchableOpacity
               style={[styles.btn, styles.primary, (addressSaving || !canSaveAddresses) && { opacity: 0.5 }]}
@@ -354,30 +335,13 @@ export default function UploadProofScreen({ route, navigation }) {
                 <Text style={styles.btnTxt}>Save Pickup Address</Text>
               )}
             </TouchableOpacity>
-            <View style={styles.addressNotice}>
+            {/* <View style={styles.addressNotice}>
               <AlertTriangle size={16} color="#FFD053" />
               <Text style={styles.addressNoticeTxt}>
                 Add the seller pickup address before uploading delivery proof.
               </Text>
-            </View>
+            </View> */}
           </>
-        ) : null}
-
-        {showProofForm ? (
-          <TouchableOpacity
-            style={[styles.btn, styles.addressUpdateBtn, (addressSaving || !canSaveAddresses) && { opacity: 0.5 }]}
-            onPress={saveAddressOnly}
-            disabled={addressSaving || !canSaveAddresses}
-          >
-            {addressSaving ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ActivityIndicator color={colors.white} />
-                <Text style={styles.btnTxt}>Saving address…</Text>
-              </View>
-            ) : (
-              <Text style={styles.btnTxt}>Update Address</Text>
-            )}
-          </TouchableOpacity>
         ) : null}
 
         {showProofForm && String(deliveryMethod).toUpperCase() === 'COURIER' ? (<Text style={styles.sectionTitle}>Courier Details</Text>) : null}
@@ -405,10 +369,10 @@ export default function UploadProofScreen({ route, navigation }) {
           ) : null}
         </View>) : null}
 
-        {showProofForm && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<Text style={styles.sectionTitle}>{String(deliveryMethod).toUpperCase() === 'DIGITAL' ? 'Digital Delivery' : 'In-Person Handover'}</Text>) : null}
-        {showProofForm && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<TouchableOpacity style={styles.uploadRow} onPress={() => { setPickingGeneral(false); openPicker(setHandover); }}>
+        {showProofForm && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<Text style={styles.sectionTitle}>Proof of Delivery</Text>) : null}
+        {showProofForm && String(deliveryMethod).toUpperCase() !== 'COURIER' ? (<TouchableOpacity style={styles.uploadRow} onPress={() => openPicker(setHandover)}>
           <Camera size={16} color={colors.white} />
-          <Text style={styles.uploadTxt}>{handover ? 'Change Handover Photo' : 'Package Handover Photo'}</Text>
+          <Text style={styles.uploadTxt}>{handover ? 'Change Proof Photo' : 'Upload Proof Photo'}</Text>
         </TouchableOpacity>) : null}
         {showProofForm && handover ? (
           <View style={styles.thumbWrap}>
@@ -419,32 +383,6 @@ export default function UploadProofScreen({ route, navigation }) {
               <X size={14} color={colors.white} />
             </Pressable>
           </View>
-        ) : null}
-
-        {showProofForm ? (
-          <>
-            <Text style={styles.sectionTitle}>Additional Photos</Text>
-            <TouchableOpacity style={styles.uploadRow} onPress={() => { setPickingGeneral(true); setWhichSetter(null); setPickerOpen(true); }}>
-              <Camera size={16} color={colors.white} />
-              <Text style={styles.uploadTxt}>{extraPhotos.length ? 'Add More Photos' : 'Add Photos'}</Text>
-            </TouchableOpacity>
-            {extraPhotos.length ? (
-              <View style={styles.attachGrid}>
-                {extraPhotos.map((img, i) => (
-                  <View key={`${img.uri}-${i}`} style={styles.gridItem}>
-                    <TouchableOpacity activeOpacity={0.9} onPress={() => setPreview(img)}>
-                      <Image source={{ uri: img.uri }} style={styles.gridThumb} resizeMode="cover" />
-                    </TouchableOpacity>
-                    {!img.existing ? (
-                      <Pressable style={styles.gridRemove} onPress={() => setExtraPhotos((prev) => prev.filter((_, idx) => idx !== i))}>
-                        <X size={12} color={colors.white} />
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </>
         ) : null}
 
         {showProofForm ? (<View style={[styles.card, { marginTop: 16 }]}> 
@@ -522,8 +460,8 @@ export default function UploadProofScreen({ route, navigation }) {
       title="Proof Uploaded"
       message="Thanks! Your delivery proof has been submitted for review."
       primaryText="Done"
-      onPrimary={() => { setSuccessOpen(false); navigation.goBack(); }}
-      onRequestClose={() => setSuccessOpen(false)}
+      onPrimary={() => { setSuccessOpen(false); redirectToMyListings(); }}
+      onRequestClose={() => { setSuccessOpen(false); redirectToMyListings(); }}
     />
     {showProofForm ? (
       <ImagePickerSheet
@@ -566,11 +504,6 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.white, fontWeight: '800', fontSize: 18 },
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
 
-  banner: { backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 10, flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  bannerImg: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#333' },
-  bannerTitle: { color: colors.white, fontWeight: '800' },
-  pending: { backgroundColor: '#FFD166', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 4 },
-  pendingTxt: { color: '#5C4100', fontWeight: '800' },
 
   sectionTitle: { color: colors.white, fontWeight: '800', fontSize: 16, marginVertical: 8 },
   card: { backgroundColor: '#2B2F39', borderRadius: 12, borderWidth: 1, borderColor: '#343B49', padding: 12, marginBottom: 12, overflow: 'hidden' },
@@ -597,11 +530,12 @@ const styles = StyleSheet.create({
   addressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   addressNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3A2F1B', borderWidth: 1, borderColor: '#B5892E', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginBottom: 12 },
   addressNoticeTxt: { color: '#FFDFAA', fontWeight: '700', flex: 1 },
+  submittedNotice: { backgroundColor: '#1E2B3A', borderWidth: 1, borderColor: '#34506D', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 12 },
+  submittedNoticeTxt: { color: '#CDE0FF', fontWeight: '700' },
 
   btn: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
   primary: { backgroundColor: colors.primary },
   cancel: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
-  addressUpdateBtn: { backgroundColor: '#2B2F39', borderWidth: 1, borderColor: '#343B49' },
   btnTxt: { color: colors.white, fontWeight: '800' },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
@@ -645,8 +579,7 @@ function DeliveryMessage({ method, courier }) {
   const m = String(method || '').toUpperCase();
   let text = '';
   if (m === 'COURIER') text = courier ? `Item to be shipped via ${courier}. Track with AWB once provided.` : 'Item will be shipped via a trusted courier. Add AWB/Tracking once shipped.';
-  else if (m === 'DIGITAL') text = 'This is a digital delivery. Share a clear proof or receipt for confirmation.';
-  else text = 'In-person handover. Upload a handover photo and the date of delivery.';
+  else text = 'Share a clear proof of delivery to confirm completion.';
   return <Text style={{ color: colors.textSecondary, marginTop: 8 }}>{text}</Text>;
 }
 
@@ -738,6 +671,31 @@ function AddressSummary({ label, value, productCountry }) {
   );
 }
 
+function extractSellerEvents(...sources) {
+  const collected = [];
+  const collect = (value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (entry != null && entry !== '') collected.push(entry);
+      });
+    }
+  };
+  sources.forEach((source) => {
+    if (!source) return;
+    const root = source?.events;
+    if (root) {
+      collect(root);
+      collect(root?.seller);
+      collect(root?.seller?.events);
+    }
+    collect(source?.seller?.events);
+    collect(source?.seller);
+    collect(source?.sellerEvents);
+  });
+  return collected.map((ev) => String(ev).toUpperCase());
+}
+
 async function reloadFulfillment(
   setFulfillment,
   setDeliveryMethod,
@@ -745,7 +703,6 @@ async function reloadFulfillment(
   setAwb,
   setComment,
   setDate,
-  setExtraPhotos,
   setPickupAddresses,
   setProductCountry,
   getProductId,
@@ -755,7 +712,7 @@ async function reloadFulfillment(
   if (!productId) return null;
   const f = await fulfillments.getByProduct(productId);
   setFulfillment(f);
-  if (setDeliveryMethod) setDeliveryMethod(f?.deliveryMethod ? String(f.deliveryMethod) : 'IN_PERSON');
+  if (setDeliveryMethod) setDeliveryMethod(f?.deliveryMethod ? String(f.deliveryMethod).toLowerCase() : '');
   if (setCourier) setCourier(f?.courierService || '');
   if (setAwb) setAwb(f?.trackingNumber || '');
   if (setComment) setComment(f?.sellerNotes || '');
@@ -767,11 +724,6 @@ async function reloadFulfillment(
       setDate('');
     }
   }
-  const existing = (f?.sellerMedia?.photos || f?.pickupMedia?.photos || [])
-    .filter(Boolean)
-    .map((url) => ({ uri: url, existing: true }));
-  if (setExtraPhotos) setExtraPhotos(existing);
-
   const productCountry = resolveProductCountry(f, item);
   if (setProductCountry) setProductCountry(productCountry || '');
   if (setPickupAddresses) {

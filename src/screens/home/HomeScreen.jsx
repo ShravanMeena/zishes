@@ -26,6 +26,7 @@ import tournaments from "../../services/tournaments";
 import { fetchMyWallet } from "../../store/wallet/walletSlice";
 import users from '../../services/users';
 import { setUser } from '../../store/auth/authSlice';
+import { getCountryRestriction, buildCountryRestrictionMessage } from '../../utils/countryAccess';
 import UnityScreenOld from "../../../UnityScreenOld";
 
 export default function HomeScreen({ navigation }) {
@@ -33,6 +34,7 @@ export default function HomeScreen({ navigation }) {
   const dispatch = useDispatch();
   const token = useSelector((s) => s.auth.token);
   const user = useSelector((s) => s.auth.user);
+  const userCountry = useSelector((s) => s.auth?.user?.address?.country || s.app?.country || null);
   const [shareItem, setShareItem] = useState(null);
   const [rulesItem, setRulesItem] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -47,6 +49,8 @@ export default function HomeScreen({ navigation }) {
   const [alreadyOpen, setAlreadyOpen] = useState(false);
   const [alreadyMsg, setAlreadyMsg] = useState('');
   const [joining, setJoining] = useState(false);
+  const [countryWarningOpen, setCountryWarningOpen] = useState(false);
+  const [countryWarningMsg, setCountryWarningMsg] = useState('');
 
   useEffect(() => {
     const slug = savedFilters?.categorySlug;
@@ -131,8 +135,14 @@ export default function HomeScreen({ navigation }) {
     return () => sub.remove();
   }, [refresh, fetchWallet]);
 
-  const requestPlay = useCallback(async (it) => {
+  const requestPlay = useCallback((it) => {
     if (!it) return;
+    const { restricted, productCountry } = getCountryRestriction(it, userCountry);
+    if (restricted) {
+      setCountryWarningMsg(buildCountryRestrictionMessage(productCountry));
+      setCountryWarningOpen(true);
+      return;
+    }
     const available = Number(coins || 0);
     const required = Number(it?.coinPerPlay || 0);
     if (!token || available < required) {
@@ -141,9 +151,24 @@ export default function HomeScreen({ navigation }) {
       return;
     }
     setRulesItem(it);
-  }, [token, coins]);
+  }, [userCountry, token, coins]);
+
+  const startTutorial = useCallback((it) => {
+    if (!it?.raw?.game?.tabcode) {
+      Alert.alert('No Game Found');
+      return;
+    }
+    navigation.navigate('UnityGame', {
+      scene: it.raw.game.tabcode,
+      tournamentId: null,
+      productId: it?.id || it?._id,
+      onlyTutorial: true,
+    });
+  }, [navigation]);
 
   const renderItem = useCallback(({ item }) => {
+    const { restricted, productCountry } = getCountryRestriction(item, userCountry);
+    const restrictionLabel = restricted ? buildCountryRestrictionMessage(productCountry) : '';
     const productId = item?.raw?._id || item?.id || item?._id;
     const leaderboardPayload = {
       productId,
@@ -159,6 +184,7 @@ export default function HomeScreen({ navigation }) {
         now={now}
         onCardPress={() => navigation.navigate('Details', { item })}
         onPlay={() => requestPlay(item)}
+        onTutorial={() => startTutorial(item)}
         onShare={() => setShareItem(item)}
         onLeaderboard={() => {
           if (!productId) {
@@ -167,9 +193,11 @@ export default function HomeScreen({ navigation }) {
           }
           navigation.navigate('Leaderboard', leaderboardPayload);
         }}
+        playDisabled={restricted}
+        playDisabledLabel={restrictionLabel}
       />
     );
-  }, [navigation, now, requestPlay]);
+  }, [userCountry, navigation, now, requestPlay, startTutorial]);
   const keyExtractor = useCallback((it) => it.id, []);
 
   const onRefreshAll = useCallback(async () => {
@@ -270,6 +298,13 @@ export default function HomeScreen({ navigation }) {
             setJoining(true);
             if (!token) { setSoldOutMsg('Login required'); setSoldOutOpen(true); return; }
             const data = await getProductById(it.id || it._id, token);
+            const latestRestriction = getCountryRestriction(data, userCountry);
+            if (latestRestriction.restricted) {
+              setRulesItem(null);
+              setCountryWarningMsg(buildCountryRestrictionMessage(latestRestriction.productCountry));
+              setCountryWarningOpen(true);
+              return;
+            }
             const status = data?.tournament?.status || data?.tournamentStatus;
             const playsCompleted = Number(data?.playsCompleted ?? data?.tournament?.playsCompleted ?? 0);
             const playsTotal = Number(data?.playsTotal ?? data?.tournament?.playsTotal ?? 0);
@@ -309,7 +344,7 @@ export default function HomeScreen({ navigation }) {
               Alert.alert("No Game Found")
               return
             }
-            navigation.navigate('UnityGame', { scene: it.raw.game.tabcode, tournamentId: tId, productId: it?.id || it?._id });
+            navigation.navigate('UnityGame', { scene: it.raw.game.tabcode, tournamentId: tId, productId: it?.id || it?._id, onlyTutorial: false });
           } catch (e) {
             setSoldOutMsg(e?.message || 'Unable to verify availability');
             setSoldOutOpen(true);
@@ -319,6 +354,16 @@ export default function HomeScreen({ navigation }) {
         }}
         item={rulesItem}
         confirmLoading={joining}
+      />
+
+      <AppModal
+        visible={countryWarningOpen}
+        title="Country Restricted"
+        message={countryWarningMsg || 'Please update your country to play for this item.'}
+        confirmText="OK"
+        cancelText="Close"
+        onConfirm={() => setCountryWarningOpen(false)}
+        onCancel={() => setCountryWarningOpen(false)}
       />
 
       <InsufficientCoinsModal

@@ -16,7 +16,7 @@ async function request(path, { method = 'GET', data, params, token } = {}) {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     try {
-      console.log('[fulfillments] response', { path, method, data: res?.data });
+      console.log('[fulfillments] response', { path, method, data: res?.data.events });
     } catch (_) {}
     return res.data;
   } catch (err) {
@@ -50,6 +50,7 @@ export async function submitSellerProof(productId, payload, { token } = {}) {
 
 export async function submitReceiverProof(productId, payload, { token } = {}) {
   if (!productId) throw new Error('productId is required');
+  console.log(payload,"payloadpayloadpayload")
   return request(`/fulfillments/product/${productId}/receiver-proof`, {
     method: 'PATCH',
     data: payload,

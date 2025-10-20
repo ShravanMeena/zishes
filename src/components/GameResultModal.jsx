@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from 'react-redux';
-import { submitScore, joinTournament } from "../services/tournaments";
-import { getProductById } from "../services/products";
-import { fetchMyWallet } from "../store/wallet/walletSlice";
+import { submitScore } from "../services/tournaments";
 import {
   Modal,
   View,
@@ -19,19 +16,13 @@ export default function GameResultModal({
   result = {},
   scene,
   tournamentId,
-  productId,
   onRequestClose, // called on system/backdrop close
   onBack, // user tapped Back button
-  onPlayAgain, // user tapped Play Again
+  onViewTournaments, // new button
 }) {
   const [isVisible, setIsVisible] = useState(visible);
   const lastSubmitKeyRef = useRef(null);
   const [submitErr, setSubmitErr] = useState(null);
-  const [playErr, setPlayErr] = useState(null);
-  const [joining, setJoining] = useState(false);
-  const dispatch = useDispatch();
-  const token = useSelector((s) => s.auth.token);
-  const coins = useSelector((s) => s.wallet.availableZishCoins);
 
   // Animated values scoped to this component
   const overlayOpacity = useMemo(() => new Animated.Value(0), []);
@@ -127,24 +118,17 @@ export default function GameResultModal({
     return Number(result?.score) || 0;
   })();
   const title = "Congratulations!";
-    console.log("chlllaa")
 
   // Auto-submit score when modal opens the first time
   useEffect(() => {
-    console.log(isVisible, "result modal visible")
     if (!isVisible) return;
     setSubmitErr(null);
-    console.log("chlllaa")
     const key = `${tournamentId || ''}|${Number(score)}`;
     if (lastSubmitKeyRef.current === key) return;
     (async () => {
       try {
-    console.log(tournamentId,"chlllaa 2")
-
         if (tournamentId && Number.isFinite(Number(score))) {
-        const result =   await submitScore(tournamentId, Number(score));
-    console.log(result, "chlllaa 3")
-
+          await submitScore(tournamentId, Number(score));
           lastSubmitKeyRef.current = key;
         }
       } catch (e) {
@@ -289,62 +273,17 @@ export default function GameResultModal({
                 marginRight: 10,
               }}
               activeOpacity={0.85}
-              onPress={() => (onBack ? onBack() : onRequestClose && onRequestClose())}
+              onPress={() => {
+                if (onViewTournaments) onViewTournaments();
+                else if (onBack) onBack();
+                else if (onRequestClose) onRequestClose();
+              }}
             >
-              <Text style={{ color: "#CFE0FF", textAlign: "center", fontWeight: "600" }}>Back</Text>
+              <Text style={{ color: "#CFE0FF", textAlign: "center", fontWeight: "600" }}>
+                {onViewTournaments ? "Tournaments" : "Back"}
+              </Text>
             </TouchableOpacity>
-
-            {/* <TouchableOpacity
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                borderRadius: 12,
-                backgroundColor: joining ? "#3A4051" : (score >= 70 ? "#2ECC71" : score >= 50 ? "#4DA3FF" : "#6C77FF"),
-              }}
-              activeOpacity={0.9}
-              onPress={async () => {
-                if (!onPlayAgain || joining) return;
-                setPlayErr(null);
-                try {
-                  if (!token) throw new Error('Login required');
-                  // quick wallet check
-                  const required = Number(result?.coinPerPlay || 0); // may not be present; fallback later
-                  if (Number(coins || 0) <= 0 && required > 0) throw new Error('Insufficient coins');
-
-                  if (!productId) throw new Error('Missing product');
-                  setJoining(true);
-                  const fresh = await getProductById(productId, token);
-                  const status = fresh?.tournament?.status || fresh?.tournamentStatus;
-                  const playsCompleted = Number(fresh?.playsCompleted ?? fresh?.tournament?.playsCompleted ?? 0);
-                  const playsTotal = Number(fresh?.playsTotal ?? fresh?.tournament?.playsTotal ?? 0);
-                  const full = playsTotal > 0 && playsCompleted >= playsTotal;
-                  const ended = status === 'OVER' || status === 'UNFILLED';
-                  if (ended || full) throw new Error('No seats left or game ended.');
-                  const tId = fresh?.tournament?._id || tournamentId;
-                  if (!tId) throw new Error('Tournament unavailable');
-                  try {
-                    await joinTournament(tId, token);
-                  } catch (e) {
-                    if (e?.status === 402 || e?.data?.error === 'INSUFFICIENT_FUNDS') {
-                      throw new Error('Insufficient coins');
-                    }
-                    throw e;
-                  }
-                  try { dispatch(fetchMyWallet()); } catch {}
-                  onPlayAgain();
-                } catch (e) {
-                  setPlayErr(e?.message || 'Unable to start new play');
-                } finally {
-                  setJoining(false);
-                }
-              }}
-            >
-              <Text style={{ color: "#0B1220", textAlign: "center", fontWeight: "700" }}>{joining ? 'Please wait...' : 'Play Again'}</Text>
-            </TouchableOpacity> */}
           </View>
-          {playErr ? (
-            <Text style={{ color: "#FF7A7A", textAlign: 'center', marginTop: 10 }}>{playErr}</Text>
-          ) : null}
         </Animated.View>
       </Animated.View>
     </Modal>
