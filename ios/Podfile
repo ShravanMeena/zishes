@@ -95,5 +95,67 @@ target 'unityapp' do
         end
       end
     end
+
+    # React Native 0.73.11 generates both React-Core.common-RCTI18nStrings and
+    # React-Core.common-CoreModulesHeaders-RCTI18nStrings targets, which try to
+    # write the same RCTI18nStrings.bundle output when archiving. Rename the
+    # headers variant so it no longer collides with the primary bundle.
+    duplicate_bundle_fix = {
+      'React-Core.common-CoreModulesHeaders-RCTI18nStrings' => 'RCTI18nStrings-CoreModulesHeaders'
+    }
+
+    installer.pods_project.targets.each do |target|
+      new_product_name = duplicate_bundle_fix[target.name]
+      next unless new_product_name
+
+      target.build_configurations.each do |config|
+        config.build_settings['PRODUCT_NAME'] = new_product_name
+        config.build_settings['WRAPPER_NAME'] = "#{new_product_name}.bundle"
+      end
+
+      product_ref = target.respond_to?(:product_reference) ? target.product_reference : nil
+      next unless product_ref
+
+      product_ref.name = "#{new_product_name}.bundle"
+      product_ref.path = "#{new_product_name}.bundle"
+    end
+
+    # Remove the renamed bundle from the generated copy-resources scripts so
+    # Xcode no longer expects the original path.
+    support_files = [
+      'Pods/Target Support Files/Pods-unityapp/Pods-unityapp-resources.sh',
+      'Pods/Target Support Files/Pods-unityapp/Pods-unityapp-resources-Debug-input-files.xcfilelist',
+      'Pods/Target Support Files/Pods-unityapp/Pods-unityapp-resources-Release-input-files.xcfilelist',
+      'Pods/Target Support Files/Pods-unityapp-unityappTests/Pods-unityapp-unityappTests-resources.sh',
+      'Pods/Target Support Files/Pods-unityapp-unityappTests/Pods-unityapp-unityappTests-resources-Debug-input-files.xcfilelist',
+      'Pods/Target Support Files/Pods-unityapp-unityappTests/Pods-unityapp-unityappTests-resources-Release-input-files.xcfilelist',
+    ]
+
+    duplicate_resource_fragment = 'React-Core.common-CoreModulesHeaders/RCTI18nStrings.bundle'
+
+    support_files.each do |relative_path|
+      path = File.join(__dir__, relative_path)
+      next unless File.exist?(path)
+
+      original = File.read(path)
+      next unless original.include?(duplicate_resource_fragment)
+
+      Pod::UI.puts "Resolving duplicate RCTI18nStrings resource in #{relative_path}"
+      updated = original.gsub(duplicate_resource_fragment, 'React-Core.common-CoreModulesHeaders/RCTI18nStrings-CoreModulesHeaders.bundle')
+      File.write(path, updated)
+    end
+
+    installer.aggregate_targets.each do |aggregate_target|
+      next unless aggregate_target.name.start_with?('Pods-unityapp')
+
+      resource_map = aggregate_target.instance_variable_get('@resource_paths_by_config')
+      if resource_map
+        resource_map.each do |config, resources|
+          resource_map[config] = resources.map do |resource|
+            resource.include?(duplicate_resource_fragment) ? resource.gsub(duplicate_resource_fragment, 'React-Core.common-CoreModulesHeaders/RCTI18nStrings-CoreModulesHeaders.bundle') : resource
+          end
+        end
+      end
+    end
   end
 end

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { CommonActions, NavigationContainer } from "@react-navigation/native";
+import { CommonActions, NavigationContainer, TabActions } from "@react-navigation/native";
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { BackHandler, Linking } from 'react-native';
 import { navigationRef } from './navigationRef';
@@ -16,7 +16,7 @@ import { parseDeepLink } from '../utils/deepLinks';
 
 export default function RootNavigator() {
   const dispatch = useDispatch();
-  const { token, bootstrapped: authBoot, user } = useSelector((s) => s.auth);
+  const { token, bootstrapped: authBoot, user, guest } = useSelector((s) => s.auth);
   const { bootstrapped: appBoot, onboardingSeen } = useSelector((s) => s.app);
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [navigationReady, setNavigationReady] = useState(false);
@@ -32,36 +32,30 @@ export default function RootNavigator() {
         navigationRef.navigate('Home', { screen: 'Details', params: { id: payload.id } });
         break;
       case 'leaderboard':
-        if (payload.tournamentId) {
-          navigationRef.navigate('Home', {
-            screen: 'Leaderboard',
-            params: {
-              tournamentId: payload.tournamentId,
-              productId: payload.productId || null,
-            },
-          });
-        } else if (payload.productId) {
-          navigationRef.navigate('Home', { screen: 'Details', params: { id: payload.productId } });
-        }
+        navigationRef.navigate('Profile', {
+          screen: 'TournamentsWon',
+          params: {
+            focusTournamentId: payload.tournamentId || null,
+            focusProductId: payload.productId || null,
+          },
+        });
         break;
       case 'uploadProof':
-        navigationRef.navigate('Wallet', {
-          screen: 'UploadProof',
-          params: { productId: payload.productId, focus: 'proof' },
+        navigationRef.navigate('Profile', {
+          screen: 'MyListings',
+          params: {
+            focusProductId: payload.productId || null,
+          },
         });
         break;
       case 'acknowledgement':
-        if (payload.tournamentId) {
-          navigationRef.navigate('Home', {
-            screen: 'AcknowledgeReceipt',
-            params: {
-              tournamentId: payload.tournamentId,
-              productId: payload.productId || null,
-            },
-          });
-        } else if (payload.productId) {
-          navigationRef.navigate('Home', { screen: 'Details', params: { id: payload.productId } });
-        }
+        navigationRef.navigate('Profile', {
+          screen: 'TournamentsWon',
+          params: {
+            focusTournamentId: payload.tournamentId || null,
+            focusProductId: payload.productId || null,
+          },
+        });
         break;
       default:
         break;
@@ -114,33 +108,66 @@ export default function RootNavigator() {
     return () => { cancelled = true; };
   }, [token, user?.address?.country, dispatch]);
 
-  const canEnterApp = token && profileHydrated && !!user?.address?.country;
+  const canEnterApp = (token && profileHydrated && !!user?.address?.country) || guest;
 
   const handleHardwareBack = useCallback(() => {
     if (!navigationRef.isReady()) {
       return false;
     }
 
+    const rootState = navigationRef.getRootState();
+    if (!rootState) {
+      return false;
+    }
+
+    const findStackWithHistory = (state) => {
+      if (!state) return null;
+      const { type, key, index = 0, routes = [] } = state;
+      const focusedRoute = routes[index];
+
+      if ((type === 'stack' || type === 'drawer') && routes.length > 0) {
+        if (index > 0) {
+          return { stackKey: key, routeKey: focusedRoute?.key ?? null };
+        }
+        if (focusedRoute?.state) {
+          return findStackWithHistory(focusedRoute.state);
+        }
+        return null;
+      }
+
+      if (focusedRoute?.state) {
+        return findStackWithHistory(focusedRoute.state);
+      }
+
+      return null;
+    };
+
+    const stackInfo = findStackWithHistory(rootState);
+    if (stackInfo?.stackKey && stackInfo?.routeKey) {
+      const handled = navigationRef.dispatch({
+        ...CommonActions.goBack(),
+        source: stackInfo.routeKey,
+        target: stackInfo.stackKey,
+      });
+      if (handled) {
+        return true;
+      }
+    }
+
     if (navigationRef.canGoBack()) {
-      navigationRef.dispatch(CommonActions.goBack());
+      navigationRef.goBack();
       return true;
     }
 
-    const rootState = navigationRef.getRootState();
-    if (rootState) {
-      const history = Array.isArray(rootState?.history) ? rootState.history : [];
-      if (rootState?.type === 'tab' && history.length > 1) {
+    if (rootState?.type === 'tab') {
+      const history = Array.isArray(rootState.history) ? rootState.history : [];
+      if (history.length > 1) {
         const previousEntry = history[history.length - 2];
         if (previousEntry?.type === 'route') {
           const targetRoute = rootState.routes?.find((route) => route.key === previousEntry.key);
           if (targetRoute) {
             navigationRef.dispatch(
-              CommonActions.navigate({
-                name: targetRoute.name,
-                key: targetRoute.key,
-                params: targetRoute.params,
-                merge: true,
-              })
+              TabActions.jumpTo(targetRoute.name, targetRoute.params)
             );
             return true;
           }
@@ -216,7 +243,9 @@ export default function RootNavigator() {
             // Avoid flashing Country screen before user is loaded.
             (!user?.address?.country ? <CountryRequiredGateway /> : <AppTabs />)
           )
-        : (onboardingSeen ? <AuthStack /> : <OnboardingGateway />)}
+        : guest
+          ? <AppTabs />
+          : (onboardingSeen ? <AuthStack /> : <OnboardingGateway />)}
     </NavigationContainer>
   );
 }

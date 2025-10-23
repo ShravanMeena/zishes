@@ -14,10 +14,11 @@ import plansService from '../../services/plans';
 import { isIndiaCountry } from '../../utils/payments';
 import { buildPlanLookup, findPlanForSubscription } from '../../utils/plans';
 import { categorizeSubscriptionStatus } from '../../utils/subscriptionStatus';
+import LoginRequired from "../../components/auth/LoginRequired";
 
 export default function ProfileScreen({ navigation }) {
   const dispatch = useDispatch();
-  const { user } = useSelector((s) => s.auth);
+  const { user, token } = useSelector((s) => s.auth);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const [meLoading, setMeLoading] = useState(false);
@@ -41,6 +42,7 @@ export default function ProfileScreen({ navigation }) {
   const confirmLogout = () => { setConfirmOpen(false); dispatch(logout()); };
 
   const fetchMe = useCallback(async () => {
+    if (!token) return;
     try {
       setMeLoading(true);
       const me = await users.getMe();
@@ -51,9 +53,14 @@ export default function ProfileScreen({ navigation }) {
     } finally {
       setMeLoading(false);
     }
-  }, [dispatch]);
+  }, [dispatch, token]);
 
   const fetchSubscription = useCallback(async () => {
+    if (!token) {
+      setSubscription(null);
+      setSubscriptionError('');
+      return;
+    }
     if (!isIndia) {
       setSubscription(null);
       setSubscriptionError('');
@@ -86,9 +93,14 @@ export default function ProfileScreen({ navigation }) {
     } finally {
       setSubscriptionLoading(false);
     }
-  }, [isIndia]);
+  }, [isIndia, token]);
 
   const fetchPlans = useCallback(async () => {
+    if (!token) {
+      setPlans([]);
+      setPlansFetched(false);
+      return;
+    }
     if (!isIndia) {
       setPlans(prev => (Array.isArray(prev) && prev.length ? [] : prev));
       setPlansFetched(true);
@@ -107,30 +119,33 @@ export default function ProfileScreen({ navigation }) {
     } finally {
       setPlansFetched(true);
     }
-  }, [isIndia]);
+  }, [isIndia, token]);
 
   // Fetch once if user not present. Otherwise, rely on pull-to-refresh.
   useEffect(() => {
+    if (!token) return;
     if (!user) {
       fetchMe();
     }
-  }, [user, fetchMe]);
+  }, [token, user, fetchMe]);
 
   // Refresh every time the screen gains focus (e.g., switching to Profile tab)
   useFocusEffect(
     React.useCallback(() => {
+      if (!token) return undefined;
       fetchMe();
       fetchSubscription();
       if (isIndia && !plansFetched) {
         fetchPlans();
       }
       return undefined;
-    }, [fetchMe, fetchSubscription, fetchPlans, isIndia, plansFetched])
+    }, [fetchMe, fetchSubscription, fetchPlans, isIndia, plansFetched, token])
   );
 
   useEffect(() => {
+    if (!token) return;
     fetchSubscription();
-  }, [fetchSubscription]);
+  }, [fetchSubscription, token]);
 
   useEffect(() => {
     if (!subscription || subscription?.plan?.name) return;
@@ -146,14 +161,15 @@ export default function ProfileScreen({ navigation }) {
   }, [subscription, planLookup]);
 
   useEffect(() => {
-    if (!isIndia) return;
+    if (!token || !isIndia) return;
     if (!subscription) return;
     if (subscription?.plan?.name) return;
     if (plansFetched) return;
     fetchPlans();
-  }, [isIndia, subscription, plansFetched, fetchPlans]);
+  }, [token, isIndia, subscription, plansFetched, fetchPlans]);
 
   const onRefresh = useCallback(async () => {
+    if (!token) return;
     setRefreshing(true);
     try {
       const tasks = [fetchMe(), fetchSubscription()];
@@ -162,7 +178,7 @@ export default function ProfileScreen({ navigation }) {
     } finally {
       setRefreshing(false);
     }
-  }, [fetchMe, fetchSubscription, fetchPlans, isIndia]);
+  }, [fetchMe, fetchSubscription, fetchPlans, isIndia, token]);
 
   const avatarSource = useMemo(() => {
     const remote = user?.avatar || user?.avatarUrl || user?.image;
@@ -237,6 +253,17 @@ export default function ProfileScreen({ navigation }) {
     }
     return null;
   }, [planName]);
+
+  if (!token) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.black }} edges={['top']}>
+        <LoginRequired
+          title="Sign in to view your profile"
+          message="Log in to manage your account, review your stats, and update preferences."
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

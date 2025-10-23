@@ -167,11 +167,7 @@ export default function RulesModal({ visible, onCancel, onConfirm, title = 'Tour
             <Text style={styles.ruleText}>{text}</Text>
           </View>
         ))}
-        <View style={styles.ruleAckCard}>
-          <Text style={styles.ruleAckText}>
-            By confirming your order, you acknowledge that you understand and agree to these rules and instructions. If gameplay stops mid-match, only the entry fee will be credited — gameplay time is not refunded. Fees are strictly non-refundable except when tournaments are cancelled or unfilled; any such refunds are credited to your Zish Wallet.
-          </Text>
-        </View>
+      
         {loading ? (
           <View style={styles.rulesLoadingRow}>
             <ActivityIndicator color={colors.white} />

@@ -218,12 +218,102 @@ function handleNotificationOpen(data) {
 }
 
 function routeFromData(data) {
-  // Expecting either `route` or `type` with optional params
+  if (!data) return;
+
+  const params = data.params ? safeJsonParse(data.params) : {};
+  const payload = data.payload ? safeJsonParse(data.payload) : {};
+  const meta = data.meta ? safeJsonParse(data.meta) : {};
+  const extra = data.data ? safeJsonParse(data.data) : {};
+  const sources = [data, params, payload, meta, extra].filter((src) => src && typeof src === 'object');
+
+  const pick = (...keys) => {
+    for (const src of sources) {
+      for (const key of keys) {
+        if (src[key] !== undefined && src[key] !== null && src[key] !== '') {
+          return src[key];
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const normalizeTab = (value) => {
+    if (typeof value !== 'string') return '';
+    return value.trim().toLowerCase();
+  };
+
+  const tabValue = normalizeTab(
+    pick('tab', 'targetTab', 'notificationTab', 'Tab', 'screen', 'destination', 'destinationTab')
+  );
+  const productIdValue = pick('productId', 'product_id', 'product', 'id', 'itemId', 'item_id');
+  const tournamentIdValue = pick('tournamentId', 'tournament_id', 'tournament');
+
+  const focusProductId = productIdValue != null && productIdValue !== ''
+    ? String(productIdValue)
+    : null;
+  const focusTournamentId = tournamentIdValue != null && tournamentIdValue !== ''
+    ? String(tournamentIdValue)
+    : null;
+
+  const navigateToDetails = () => {
+    if (focusProductId) {
+      navigate('Home', { screen: 'Details', params: { id: focusProductId } });
+    } else {
+      navigate('Home', { screen: 'HomeIndex' });
+    }
+  };
+
+  switch (tabValue) {
+    case 'walletscreen':
+    case 'wallet':
+    case 'wallet_home':
+    case 'wallethome':
+      navigate('Wallet', { screen: 'WalletHome' });
+      return;
+    case 'productdetails':
+    case 'product':
+    case 'details':
+      navigateToDetails();
+      return;
+    case 'leaderboard':
+    case 'acknowledgement':
+    case 'acknowledgment':
+    case 'ack':
+    case 'buyer':
+    case 'acknowledgementscreen':
+    case 'leaderboardtab':
+      navigate('Profile', {
+        screen: 'TournamentsWon',
+        params: {
+          focusProductId,
+          focusTournamentId,
+        },
+      });
+      return;
+    case 'uploadproof':
+    case 'upload-proof':
+    case 'proof':
+    case 'seller':
+    case 'addressapproved':
+    case 'address-approved':
+    case 'addressupdated':
+    case 'address-update':
+      navigate('Profile', {
+        screen: 'MyListings',
+        params: {
+          focusProductId,
+        },
+      });
+      return;
+    default:
+      break;
+  }
+
+  // Fallback to explicit route/type navigation
   const route = data.route || data.type;
   if (!route) return;
   try {
-    const params = data.params ? safeJsonParse(data.params) : {};
-    navigate(route, params);
+    navigate(route, params && typeof params === 'object' ? params : {});
   } catch (e) {
     navigate(route, {});
   }

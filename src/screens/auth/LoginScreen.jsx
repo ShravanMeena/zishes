@@ -4,7 +4,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Platform, KeyboardAvoidingView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useDispatch, useSelector } from 'react-redux';
-import { authenticateWithGoogle, login } from "../../store/auth/authSlice";
+import { authenticateWithGoogle, login, enterGuestMode } from "../../store/auth/authSlice";
+import { setOnboardingSeen } from '../../store/app/appSlice';
 import { colors } from "../../theme/colors";
 import { ChevronLeft, Eye, EyeOff, Chrome, Apple } from 'lucide-react-native';
 import Button from "../../components/ui/Button";
@@ -30,6 +31,12 @@ export default function LoginScreen({ navigation }) {
 
   const isPasswordLoading = status === 'loading' && currentAuthMethod === 'password';
   const isGoogleLoading = status === 'loading' && currentAuthMethod === 'google';
+
+  const onSkip = () => {
+    if (status === 'loading') return;
+    dispatch(setOnboardingSeen());
+    dispatch(enterGuestMode());
+  };
   
   return (
     <SafeAreaView style={styles.container} edges={['top','bottom']}>
@@ -51,7 +58,9 @@ export default function LoginScreen({ navigation }) {
           <View style={{ width: 22 }} />
         )}
         <Text style={styles.headerTitle}>Welcome Back</Text>
-        <View style={{ width: 22 }} />
+        <TouchableOpacity onPress={onSkip} style={styles.skipBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Text style={styles.skipText}>Skip for now</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Form */}
@@ -105,14 +114,14 @@ export default function LoginScreen({ navigation }) {
           loading={isGoogleLoading}
           disabled={isPasswordLoading}
         />
-        {Platform.OS === 'ios' ? (
+        {/* {Platform.OS === 'ios' ? (
           <Button
             variant="outline"
             title="Continue with Apple"
             left={<Apple size={18} color={colors.white} />}
             style={{ marginTop: 10 }}
           />
-        ) : null}
+        ) : null} */}
       </View>
       </KeyboardAwareScrollView>
 
@@ -142,6 +151,8 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4 },
   headerTitle: { color: colors.white, fontSize: 18, fontWeight: '600' },
+  skipBtn: { paddingHorizontal: 4, paddingVertical: 2 },
+  skipText: { color: colors.accent, fontWeight: '600' },
   form: { padding: 20 },
   label: { color: colors.white, marginBottom: 8, fontWeight: '600' },
   input: {

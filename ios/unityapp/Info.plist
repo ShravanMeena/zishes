@@ -89,11 +89,17 @@
 	<string>We use your photo library so you can add listing photos and upload delivery proofs.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>We use your camera so you can take photos for listings, profile, and delivery proofs.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We use your microphone to capture audio when you record videos or voice clips for your listings and in-app experiences.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).background-processing</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

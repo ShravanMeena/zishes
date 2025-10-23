@@ -170,6 +170,7 @@ export default function MyListingsScreen({ navigation, route }) {
     const showSellerAddAddress = tournamentOver && !sellerAddressPersisted && !sellerProofEvent;
     const showSellerUploadProof = tournamentOver && sellerAddressPersisted && !sellerProofEvent;
     const sellerProofSubmitted = tournamentOver && sellerProofEvent;
+    const warningComment = (item?.warningComment || item?.raw?.warningComment || '').trim();
     const onSupport = () => {
       const state = navigation.getState?.();
       const routeNames = Array.isArray(state?.routeNames) ? state.routeNames : [];
@@ -245,6 +246,12 @@ export default function MyListingsScreen({ navigation, route }) {
                   </TouchableOpacity>
                 </View>
               ) : null}
+            </View>
+          ) : null}
+          {warningComment ? (
+            <View style={[styles.approvalNotice, styles.approvalNoticeWarning]}>
+              <Text style={styles.approvalTitle}>Action needed on this listing.</Text>
+              <Text style={styles.approvalDetail}>{warningComment}</Text>
             </View>
           ) : null}
 
@@ -471,6 +478,7 @@ const styles = StyleSheet.create({
   approvalNoticePending: { borderColor: '#3A4051', backgroundColor: '#252a3b' },
   approvalNoticeApproved: { borderColor: '#275842', backgroundColor: '#1c3028' },
   approvalNoticeRejected: { borderColor: '#64323a', backgroundColor: '#3b1f24' },
+  approvalNoticeWarning: { borderColor: '#7c5c14', backgroundColor: '#362b12' },
   approvalTitle: { color: colors.white, fontWeight: '800' },
   approvalDetail: { color: colors.textSecondary, marginTop: 6 },
   noticeActions: { flexDirection: 'row', marginTop: 12 },
@@ -534,6 +542,15 @@ function deriveApprovalState(item) {
         title: 'We could not approve this listing.',
         detail: reason ? `Reason: ${reason}` : 'Please review the policies, adjust the details, and submit again.',
       },
+    };
+  }
+
+  if (status === 'WARNING') {
+    return {
+      status,
+      badgeLabel: 'Warning',
+      badgeType: 'accent',
+      notice: null,
     };
   }
 

@@ -30,6 +30,7 @@ export function mapProductToCard(p) {
     approvalStatus: p?.approvalStatus || null,
     approvalUpdatedAt: p?.approvalUpdatedAt || null,
     rejectionReason: p?.rejectionReason || null,
+    warningComment: p?.warningComment || null,
     // Keep raw for details if needed
     raw: p,
   };

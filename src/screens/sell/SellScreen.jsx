@@ -9,6 +9,7 @@ import BottomSheet from '../../components/common/BottomSheet';
 import SaveDraftModal from '../../components/modals/SaveDraftModal';
 // import CongratsModal from '../../components/modals/CongratsModal';
 import SubmissionModal from '../../components/modals/SubmissionModal';
+import LoginRequired from '../../components/auth/LoginRequired';
 import { useDispatch, useSelector } from 'react-redux';
 import { clearSubmitState, resetDraft, loadFromDraft, saveCurrentAsNewDraft, setPendingLeaveRoute, clearDraftStorage } from '../../store/listingDraft/listingDraftSlice';
 import { publishListing } from '../../store/listingDraft/listingDraftSlice';
@@ -44,6 +45,7 @@ export default function SellScreen({ navigation, route }) {
   const delivery = useSelector((s) => s.listingDraft.delivery);
   const draftOriginCountry = useSelector((s) => s.listingDraft.originCountry);
   const userCountry = useSelector((s) => s.auth?.user?.address?.country || s.app?.country || null);
+  const token = useSelector((s) => s.auth.token);
 
   const steps = useMemo(
     () => [
@@ -192,6 +194,12 @@ export default function SellScreen({ navigation, route }) {
 
   // Initialize: reset by default; prefill only if draftData is provided.
   useEffect(() => {
+    if (!token) {
+      initializedRef.current = false;
+      loadedDraftRef.current = null;
+      loadedDraftKeyRef.current = null;
+      return;
+    }
     const draftData = route?.params?.draftData;
     if (draftData) {
       const draftKey =
@@ -234,10 +242,11 @@ export default function SellScreen({ navigation, route }) {
       dispatch(resetDraft({ originCountry: userCountry }));
       initializedRef.current = true;
     }
-  }, [dispatch, route?.params?.draftData, userCountry, draftOriginCountry]);
+  }, [dispatch, route?.params?.draftData, userCountry, draftOriginCountry, token]);
 
   // Intercept Android back to prompt save if there are unsaved changes
   useEffect(() => {
+    if (!token) return;
     const onBack = () => {
       if (isDirty) {
         setLeaveAfterAction('BACK');
@@ -250,18 +259,18 @@ export default function SellScreen({ navigation, route }) {
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
-  }, [isDirty, dispatch, navigation, details?.name]);
+  }, [isDirty, dispatch, navigation, details?.name, token]);
 
   // If tab bar requested leave to a route
   useEffect(() => {
-    if (!isFocused) return;
+    if (!token || !isFocused) return;
     if (pendingLeaveToRoute) {
       setLeaveAfterAction(pendingLeaveToRoute);
       setForceAskName(!details?.name);
       setNameInput(details?.name || '');
       setSavePromptOpen(true);
     }
-  }, [pendingLeaveToRoute, details?.name, isFocused]);
+  }, [pendingLeaveToRoute, details?.name, isFocused, token]);
 
   useEffect(() => {
     if (!isFocused) {
@@ -381,6 +390,17 @@ export default function SellScreen({ navigation, route }) {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!token) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <LoginRequired
+          title="Sign in to start selling"
+          message="Log in to create listings, manage drafts, and publish your items."
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

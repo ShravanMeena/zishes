@@ -371,6 +371,7 @@ const initialState = {
   bootstrapped: false,
   needsVerification: false,
   currentAuthMethod: null,
+  guest: false,
 };
 
 const authSlice = createSlice({
@@ -380,9 +381,24 @@ const authSlice = createSlice({
     tokenUpdated: (state, action) => {
       state.token = action.payload?.token || null;
       state.refreshToken = action.payload?.refreshToken || null;
+      if (state.token) state.guest = false;
     },
     setUser: (state, action) => {
       state.user = action.payload || null;
+    },
+    enterGuestMode: (state) => {
+      state.guest = true;
+      state.status = 'idle';
+      state.error = null;
+      state.token = null;
+      state.refreshToken = null;
+      state.user = null;
+      state.provider = null;
+      state.needsVerification = false;
+      state.currentAuthMethod = null;
+    },
+    exitGuestMode: (state) => {
+      state.guest = false;
     },
   },
   extraReducers: (builder) => {
@@ -392,6 +408,7 @@ const authSlice = createSlice({
         state.status = 'loading';
         state.error = null;
         state.currentAuthMethod = null;
+        state.guest = false;
       })
       .addCase(bootstrapAuth.fulfilled, (state, action) => {
         state.status = 'idle';
@@ -399,11 +416,13 @@ const authSlice = createSlice({
         state.token = action.payload.token;
         state.refreshToken = action.payload.refreshToken;
         state.currentAuthMethod = null;
+        state.guest = false;
       })
       .addCase(bootstrapAuth.rejected, (state) => {
         state.status = 'idle';
         state.bootstrapped = true;
         state.currentAuthMethod = null;
+        state.guest = false;
       })
       // login
       .addCase(login.pending, (state) => {
@@ -419,6 +438,7 @@ const authSlice = createSlice({
         state.needsVerification = false;
         state.provider = 'password';
         state.currentAuthMethod = null;
+        state.guest = false;
       })
       .addCase(login.rejected, (state, action) => {
         state.status = 'failed';
@@ -439,6 +459,7 @@ const authSlice = createSlice({
         state.needsVerification = false;
         state.provider = 'password';
         state.currentAuthMethod = null;
+        state.guest = false;
       })
       .addCase(signup.rejected, (state, action) => {
         state.status = 'failed';
@@ -459,6 +480,7 @@ const authSlice = createSlice({
         state.needsVerification = false;
         state.provider = 'google';
         state.currentAuthMethod = null;
+        state.guest = false;
       })
       .addCase(authenticateWithGoogle.rejected, (state, action) => {
         state.status = 'failed';
@@ -475,6 +497,7 @@ const authSlice = createSlice({
         state.provider = null;
         state.currentAuthMethod = null;
         state.error = null;
+        state.guest = false;
       })
       .addCase(completeVerification.fulfilled, (state) => {
         state.needsVerification = false;
@@ -482,5 +505,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { tokenUpdated, setUser } = authSlice.actions;
+export const { tokenUpdated, setUser, enterGuestMode, exitGuestMode } = authSlice.actions;
 export default authSlice.reducer;

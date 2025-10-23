@@ -836,7 +836,7 @@ PODS:
   - nanopb/encode (3.30910.0)
   - OpenSSL-Universal (1.1.1100)
   - PromisesObjC (2.4.0)
-  - razorpay-pod (1.4.3)
+  - razorpay-pod (1.4.5)
   - RCT-Folly (2022.05.16.00):
     - boost
     - DoubleConversion
@@ -2294,7 +2294,7 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   OpenSSL-Universal: ebc357f1e6bc71fa463ccb2fe676756aff50e88c
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
-  razorpay-pod: af9d52abe715ed5cc3eed9fdf6fd74340443d0b9
+  razorpay-pod: beab9d68c43e4d1421b1cf39283d126fc082d300
   RCT-Folly: cd21f1661364f975ae76b3308167ad66b09f53f5
   RCTRequired: 415e56f7c33799a6483e41e4dce607f3daf1e69b
   RCTTypeSafety: e984a88e713281c2d8c2309a1a6d2775af0107ae
@@ -2363,6 +2363,6 @@ SPEC CHECKSUMS:
   StripeUICore: 879bbf5889265db13f52fac8aad7a176ba62481f
   Yoga: a813a6d82538ccba91c54406404e3ed80b48a692
 
-PODFILE CHECKSUM: 63652ff2ddacccf480cffbfdf094d4a0738dea87
+PODFILE CHECKSUM: 9b5e26eda617a7e15f51c7697b988ebb10120501
 
 COCOAPODS: 1.16.2

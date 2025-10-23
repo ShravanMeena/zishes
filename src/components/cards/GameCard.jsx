@@ -1,11 +1,13 @@
 import React, { memo, useCallback, useEffect } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { colors } from '../../theme/colors';
 import ProgressBar from '../common/ProgressBar';
 import useGameCard from './useGameCard';
 import LinearGradient from 'react-native-linear-gradient';
 import { Star, Share2, Zap, Info, Clock } from 'lucide-react-native';
 import { getEarlyTerminationContext, canShowEarlyTermination } from '../../utils/earlyTermination';
+
+const EARLY_TERMINATION_COPY = 'Early Termination lets a seller end a tournament before all gameplays are completed. Once ended, the sale is marked complete and no new players can join.';
 
 function GameCard({
   item,
@@ -15,9 +17,11 @@ function GameCard({
   onShare,
   onLeaderboard,
   onTutorial,
+  onEarlyInfo,
   now,
   playDisabled = false,
   playDisabledLabel = '',
+  ctaLabel = 'Play Now',
 }) {
   const { faved, toggleFav, progress, endsIn, loading, handlePlay, ended, msLeft, calcReady } = useGameCard(item, now);
   const onPlayPress = useCallback(() => handlePlay(onPlay || onPress), [handlePlay, onPlay, onPress]);
@@ -32,6 +36,13 @@ function GameCard({
   const onTutorialPress = useCallback(() => {
     onTutorial?.(item);
   }, [onTutorial, item]);
+  const handleEarlyInfoPress = useCallback(() => {
+    if (onEarlyInfo) {
+      onEarlyInfo(item);
+      return;
+    }
+    Alert.alert('Early Termination', EARLY_TERMINATION_COPY);
+  }, [onEarlyInfo, item]);
   // Treat tournament status OVER/UNFILLED as ended, regardless of countdown
   const tourStatus = item?.tournamentStatus || item?.tournament?.status || item?.raw?.tournament?.status;
   const statusEnded = tourStatus === 'OVER' || tourStatus === 'UNFILLED';
@@ -140,7 +151,7 @@ function GameCard({
               </View>
             ) : playDisabled ? (
               <View style={[styles.playGrad, styles.playDisabledBg]}>
-                <Text style={[styles.playText, styles.playDisabledText]}>Play Now</Text>
+                <Text style={[styles.playText, styles.playDisabledText]}>{ctaLabel}</Text>
               </View>
             ) : (
               <TouchableOpacity style={styles.playBtn} onPress={onPlayPress} activeOpacity={0.85} disabled={loading}>
@@ -148,7 +159,7 @@ function GameCard({
                   {loading ? (
                     <ActivityIndicator color={colors.white} />
                   ) : (
-                    <Text style={styles.playText}>Play Now</Text>
+                    <Text style={styles.playText}>{ctaLabel}</Text>
                   )}
                 </LinearGradient>
               </TouchableOpacity>
@@ -156,14 +167,22 @@ function GameCard({
           ) : (
             <View style={[styles.playGrad, styles.playDisabledBg, { opacity: 0.5 }]} />
           )}
+          
           {showEarlyTermination ? (
-            <View style={styles.earlyBadge}>
-              <Text style={styles.earlyBadgeText}>Early termination available</Text>
+            <View style={styles.earlyInfoRow}>
+              <View style={styles.earlyBadge}>
+                <Text style={styles.earlyBadgeText}>Early termination available</Text>
+              </View>
+              <TouchableOpacity style={styles.earlyInfoBtn} onPress={handleEarlyInfoPress} activeOpacity={0.8}>
+                <Info size={16} color={colors.white} />
+              </TouchableOpacity>
             </View>
           ) : null}
+
           {playDisabled && playDisabledLabel ? (
             <Text style={styles.playDisabledLabel}>{playDisabledLabel}</Text>
           ) : null}
+          
         </View>
         <View style={styles.footerMeta}>
           {!!item.gameType && (
@@ -320,9 +339,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     maxWidth: 90,
   },
-  earlyBadge: {
+  earlyInfoRow: {
     marginTop: 10,
-    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  earlyBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -332,6 +354,17 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '700',
     fontSize: 12,
+  },
+  earlyInfoBtn: {
+    marginLeft: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#3A4051',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#252836',
   },
   tutorialBtn: {
     marginTop: 0,

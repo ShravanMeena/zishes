@@ -25,7 +25,7 @@ import AppModal from "../../components/common/AppModal";
 import tournaments from "../../services/tournaments";
 import { fetchMyWallet } from "../../store/wallet/walletSlice";
 import users from '../../services/users';
-import { setUser } from '../../store/auth/authSlice';
+import { setUser, exitGuestMode } from '../../store/auth/authSlice';
 import { getCountryRestriction, buildCountryRestrictionMessage } from '../../utils/countryAccess';
 import UnityScreenOld from "../../../UnityScreenOld";
 
@@ -51,6 +51,7 @@ export default function HomeScreen({ navigation }) {
   const [joining, setJoining] = useState(false);
   const [countryWarningOpen, setCountryWarningOpen] = useState(false);
   const [countryWarningMsg, setCountryWarningMsg] = useState('');
+  const [earlyInfoOpen, setEarlyInfoOpen] = useState(false);
 
   useEffect(() => {
     const slug = savedFilters?.categorySlug;
@@ -143,15 +144,19 @@ export default function HomeScreen({ navigation }) {
       setCountryWarningOpen(true);
       return;
     }
+    if (!token) {
+      dispatch(exitGuestMode());
+      return;
+    }
     const available = Number(coins || 0);
     const required = Number(it?.coinPerPlay || 0);
-    if (!token || available < required) {
+    if (available < required) {
       setRequiredCoins(required);
       setInsufficientOpen(true);
       return;
     }
     setRulesItem(it);
-  }, [userCountry, token, coins]);
+  }, [userCountry, token, coins, dispatch]);
 
   const startTutorial = useCallback((it) => {
     if (!it?.raw?.game?.tabcode) {
@@ -185,6 +190,7 @@ export default function HomeScreen({ navigation }) {
         onCardPress={() => navigation.navigate('Details', { item })}
         onPlay={() => requestPlay(item)}
         onTutorial={() => startTutorial(item)}
+        onEarlyInfo={() => setEarlyInfoOpen(true)}
         onShare={() => setShareItem(item)}
         onLeaderboard={() => {
           if (!productId) {
@@ -195,9 +201,10 @@ export default function HomeScreen({ navigation }) {
         }}
         playDisabled={restricted}
         playDisabledLabel={restrictionLabel}
+        ctaLabel={token ? 'Play Now' : 'Login to Play'}
       />
     );
-  }, [userCountry, navigation, now, requestPlay, startTutorial]);
+  }, [userCountry, navigation, now, requestPlay, startTutorial, token]);
   const keyExtractor = useCallback((it) => it.id, []);
 
   const onRefreshAll = useCallback(async () => {
@@ -232,24 +239,34 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       {/* Search */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Search size={20} color={colors.textSecondary} style={styles.searchIcon} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search items..."
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-          />
-        </View>
-        <TouchableOpacity style={styles.filterBtn} onPress={() => setFiltersOpen(true)}>
-          <SlidersHorizontal size={20} color={colors.white} />
-        </TouchableOpacity>
-      </View>
+  <View style={styles.searchRow}>
+    <View style={styles.searchBox}>
+      <Search size={20} color={colors.textSecondary} style={styles.searchIcon} />
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search items..."
+        placeholderTextColor={colors.textSecondary}
+        style={styles.input}
+      />
+    </View>
+    <TouchableOpacity style={styles.filterBtn} onPress={() => setFiltersOpen(true)}>
+      <SlidersHorizontal size={20} color={colors.white} />
+    </TouchableOpacity>
+  </View>
 
-      {/* Categories */}
-      <CategoryChips categories={categories} selected={selected} onChange={handleCategorySelect} />
+  {!token ? (
+    <View style={styles.guestBanner}>
+      <Text style={styles.guestBannerTitle}>You&apos;re browsing as a guest</Text>
+      <Text style={styles.guestBannerText}>
+        We&apos;ll show games based on the country you selected. Log in to unlock personalized
+        tournaments, wallet access, and more features.
+      </Text>
+    </View>
+  ) : null}
+
+  {/* Categories */}
+  <CategoryChips categories={categories} selected={selected} onChange={handleCategorySelect} />
       {refreshing ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator size="small" color={colors.primary} />
@@ -394,6 +411,16 @@ export default function HomeScreen({ navigation }) {
         onCancel={() => setAlreadyOpen(false)}
       />
 
+      <AppModal
+        visible={earlyInfoOpen}
+        title="Early Termination"
+        message="Early Termination lets a seller end a tournament before all gameplays are completed. Once ended, the sale is marked complete and no new players can join."
+        confirmText="Got it"
+        cancelText="Close"
+        onConfirm={() => setEarlyInfoOpen(false)}
+        onCancel={() => setEarlyInfoOpen(false)}
+      />
+
       <BottomSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)} full maxRatio={0.9} noPadding>
         <FiltersSheet
           categories={categories}
@@ -443,6 +470,17 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 8 },
   input: { flex: 1, color: colors.white },
   filterBtn: { marginLeft: 10, width: 44, height: 44, borderRadius: 12, backgroundColor: '#2B2F39', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343B49' },
+  guestBanner: {
+    backgroundColor: '#20263C',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 4,
+    marginBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#2E3440',
+  },
+  guestBannerTitle: { color: colors.white, fontWeight: '700', fontSize: 16 },
+  guestBannerText: { color: colors.textSecondary, marginTop: 8, lineHeight: 18 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, marginBottom: 6 },
   loadingText: { color: colors.textSecondary, marginLeft: 8, fontSize: 12 },
 });

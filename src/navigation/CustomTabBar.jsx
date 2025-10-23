@@ -47,7 +47,10 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
     const descriptorNav = descriptors[route.key]?.navigation;
     const rootScreen = ROOT_SCREENS[route.name] || null;
     try {
-      descriptorNav?.dispatch?.(StackActions.popToTop());
+      const navState = descriptorNav?.getState?.();
+      if (navState?.type === 'stack') {
+        descriptorNav.dispatch(StackActions.popToTop());
+      }
     } catch (_) {}
     if (rootScreen) {
       navigation.navigate(route.name, {

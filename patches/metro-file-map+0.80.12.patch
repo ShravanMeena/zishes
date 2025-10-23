@@ -1,0 +1,48 @@
+diff --git a/node_modules/metro-file-map/src/watchers/NodeWatcher.js b/node_modules/metro-file-map/src/watchers/NodeWatcher.js
+index 1257d1a..19eb28b 100644
+--- a/node_modules/metro-file-map/src/watchers/NodeWatcher.js
++++ b/node_modules/metro-file-map/src/watchers/NodeWatcher.js
+@@ -78,6 +78,9 @@ module.exports = class NodeWatcher extends EventEmitter {
+     );
+   }
+   _checkedEmitError = (error) => {
++    if (error != null && error.code === "EMFILE") {
++      return;
++    }
+     if (!isIgnorableFileError(error)) {
+       this.emit("error", error);
+     }
+@@ -86,13 +89,26 @@ module.exports = class NodeWatcher extends EventEmitter {
+     if (this.watched[dir]) {
+       return false;
+     }
+-    const watcher = fs.watch(
+-      dir,
+-      {
+-        persistent: true,
+-      },
+-      (event, filename) => this._normalizeChange(dir, event, filename)
+-    );
++    const relativeDir = path.relative(this.root, dir);
++    if (this.doIgnore(relativeDir)) {
++      return false;
++    }
++    let watcher;
++    try {
++      watcher = fs.watch(
++        dir,
++        {
++          persistent: true,
++        },
++        (event, filename) => this._normalizeChange(dir, event, filename)
++      );
++    } catch (error) {
++      if (error != null && error.code === "EMFILE") {
++        // Swallow watcher allocation failures due to OS file watch limits.
++        return false;
++      }
++      throw error;
++    }
+     this.watched[dir] = watcher;
+     watcher.on("error", this._checkedEmitError);
+     if (this.root !== dir) {

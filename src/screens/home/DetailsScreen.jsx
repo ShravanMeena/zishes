@@ -17,7 +17,7 @@ import tournaments from '../../services/tournaments';
 import { fetchMyWallet } from '../../store/wallet/walletSlice';
 import AppModal from '../../components/common/AppModal';
 import { getCountryRestriction, buildCountryRestrictionMessage } from '../../utils/countryAccess';
-import { ChevronLeft, Bell, Star, Share2 } from 'lucide-react-native';
+import { ChevronLeft, Bell, Star, Share2, Info } from 'lucide-react-native';
 import DescriptionTab from './details/DescriptionTab';
 import ProductDetailsTab from './details/ProductDetailsTab';
 import SellerReviewTab from './details/SellerReviewTab';
@@ -26,6 +26,8 @@ import LeaderboardTab from './details/LeaderboardTab';
 import { mapProductToDetails } from '../../utils/productMapper';
 import useNow from '../../hooks/useNow';
 import DetailsSkeleton from '../../components/skeletons/DetailsSkeleton';
+import { exitGuestMode } from '../../store/auth/authSlice';
+import { getEarlyTerminationContext, canShowEarlyTermination } from '../../utils/earlyTermination';
 
 export default function DetailsScreen({ route, navigation }) {
   // Support deep link with just an id param: item or id
@@ -70,6 +72,7 @@ export default function DetailsScreen({ route, navigation }) {
   const [joining, setJoining] = useState(false);
   const [countryWarningOpen, setCountryWarningOpen] = useState(false);
   const [countryWarningMsg, setCountryWarningMsg] = useState('');
+  const [earlyInfoOpen, setEarlyInfoOpen] = useState(false);
   const { width, height: screenH } = useWindowDimensions();
   const [slide, setSlide] = useState(0);
   const sliderRef = useRef(null);
@@ -87,6 +90,8 @@ export default function DetailsScreen({ route, navigation }) {
 
   const images = useMemo(() => (item?.images && item.images.length ? item.images : [item?.image, item?.image, item?.image]).filter(Boolean), [item]);
   const progress = item?.playsTotal ? Math.min(1, (item.playsCompleted || 0) / item.playsTotal) : 0;
+  const earlyTerminationContext = useMemo(() => getEarlyTerminationContext(item), [item]);
+  const showEarlyTermination = useMemo(() => canShowEarlyTermination(earlyTerminationContext), [earlyTerminationContext]);
   const countryRestriction = useMemo(() => getCountryRestriction(item, userCountry), [item, userCountry]);
   const isCountryRestricted = !!countryRestriction?.restricted;
   const countryRestrictionMessage = isCountryRestricted ? buildCountryRestrictionMessage(countryRestriction.productCountry) : '';
@@ -97,10 +102,15 @@ export default function DetailsScreen({ route, navigation }) {
       setCountryWarningOpen(true);
       return;
     }
-    const available = token ? Number(storeCoins || 0) : 0;
+    if (!token) {
+      setRulesOpen(false);
+      dispatch(exitGuestMode());
+      return;
+    }
+    const available = Number(storeCoins || 0);
     setAvailableCoins(available);
     const required = Number(item?.coinPerPlay || 0);
-    if (!token || available < required) {
+    if (available < required) {
       setInsufficientOpen(true);
       return;
     }
@@ -109,7 +119,11 @@ export default function DetailsScreen({ route, navigation }) {
   const confirmPlay = async () => {
     try {
       setJoining(true);
-      if (!token) { setSoldOutMsg('Login required'); setSoldOutOpen(true); return; }
+      if (!token) {
+        setRulesOpen(false);
+        dispatch(exitGuestMode());
+        return;
+      }
       const data = await getProductById(item?.id || item?._id, token);
       const latestRestriction = getCountryRestriction(data, userCountry);
       if (latestRestriction.restricted) {
@@ -423,6 +437,14 @@ export default function DetailsScreen({ route, navigation }) {
           ) : showEndedUI ? (
             <Text style={styles.endedMsg}>Game has ended</Text>
           ) : null}
+          {showEarlyTermination ? (
+            <View style={styles.earlyInfoRow}>
+              <Text style={styles.earlyInfoText}>Early termination available</Text>
+              <TouchableOpacity style={styles.earlyInfoBtn} onPress={() => setEarlyInfoOpen(true)} activeOpacity={0.8}>
+                <Info size={16} color={colors.white} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
 
         <View style={{ paddingHorizontal: 16, marginTop: 12, marginBottom: 12 }}>
@@ -438,7 +460,7 @@ export default function DetailsScreen({ route, navigation }) {
           </View>
           {calcReady ? (
             <Button
-              title={showEndedUI ? 'Game End' : 'Play Now'}
+              title={showEndedUI ? 'Game End' : (token ? 'Play Now' : 'Login to Play')}
               onPress={playNow}
               disabled={showEndedUI || !isApproved || isCountryRestricted}
             />
@@ -492,6 +514,15 @@ export default function DetailsScreen({ route, navigation }) {
         onConfirm={() => setCountryWarningOpen(false)}
         onCancel={() => setCountryWarningOpen(false)}
       />
+      <AppModal
+        visible={earlyInfoOpen}
+        title="Early Termination"
+        message="Early Termination lets a seller end a tournament before all gameplays are completed. Once ended, the sale is marked complete and no new players can join."
+        confirmText="Got it"
+        cancelText="Close"
+        onConfirm={() => setEarlyInfoOpen(false)}
+        onCancel={() => setEarlyInfoOpen(false)}
+      />
       <InsufficientCoinsModal
         visible={insufficientOpen}
         available={availableCoins}
@@ -541,6 +572,9 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusTitle: { color: colors.white, fontWeight: '700' },
   statusPct: { color: colors.white, fontWeight: '700' },
+  earlyInfoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+  earlyInfoText: { color: colors.accent, fontWeight: '700' },
+  earlyInfoBtn: { marginLeft: 10, width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#3A4051', alignItems: 'center', justifyContent: 'center', backgroundColor: '#252836' },
   actionsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   leaderboardBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#343B49', marginRight: 12 },
   leaderboardBtnText: { color: colors.accent, fontWeight: '700', fontSize: 14, letterSpacing: 0.2 },

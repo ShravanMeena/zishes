@@ -145,7 +145,7 @@ export function parseDeepLink(url) {
     };
   }
 
-  if (['upload-proof', 'uploadproof', 'seller-proof', 'proof'].includes(first)) {
+  if (['upload-proof', 'uploadproof', 'seller-proof', 'proof', 'addressapproved', 'address-approved', 'addressupdate', 'address-updated', 'selleraddress', 'seller-address'].includes(first)) {
     if (!secondRaw) return null;
     return {
       type: 'uploadProof',

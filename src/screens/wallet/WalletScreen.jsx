@@ -36,6 +36,7 @@ import AppModal from '../../components/common/AppModal';
 import ProcessingPaymentModal from '../../components/modals/ProcessingPaymentModal';
 import {fetchMyWallet} from '../../store/wallet/walletSlice';
 import {useStripe} from '@stripe/stripe-react-native';
+import LoginRequired from '../../components/auth/LoginRequired';
 
 const planSortAsc = (a, b) => {
   const coinsA = Number(a?.coins ?? 0);
@@ -621,6 +622,17 @@ export default function WalletScreen({navigation}) {
       user?.name,
     ],
   );
+
+  if (!token) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <LoginRequired
+          title="Sign in to access your wallet"
+          message="Log in to view your balances, purchase coins, and manage withdrawals."
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

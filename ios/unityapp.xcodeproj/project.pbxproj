@@ -12,7 +12,8 @@
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
-		74B485BF2E6B2F730087A847 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 74B485BE2E6B2F730087A847 /* GoogleService-Info.plist */; };
+		74FD4A002EA7820800FC4456 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 74FD49FF2EA7820800FC4456 /* GoogleService-Info.plist */; };
+		74FD4A012EA7820800FC4456 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 74FD49FF2EA7820800FC4456 /* GoogleService-Info.plist */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B40C268A53A0EC08ABFE3AD1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 562C3C81C4B58BB33709746F /* PrivacyInfo.xcprivacy */; };
 		E2E183CF16649EA981EAE483 /* libPods-unityapp-unityappTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 97C85C88AD3C6ECB554D71BA /* libPods-unityapp-unityappTests.a */; };
@@ -42,8 +43,8 @@
 		27C38CE50A5E2ED2EDC8390C /* Pods-unityapp-unityappTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-unityapp-unityappTests.release.xcconfig"; path = "Target Support Files/Pods-unityapp-unityappTests/Pods-unityapp-unityappTests.release.xcconfig"; sourceTree = "<group>"; };
 		2E62A312FD1743A6B263EFD6 /* Pods-unityapp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-unityapp.release.xcconfig"; path = "Target Support Files/Pods-unityapp/Pods-unityapp.release.xcconfig"; sourceTree = "<group>"; };
 		562C3C81C4B58BB33709746F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = unityapp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		74B485BE2E6B2F730087A847 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		74B485C02E6B38E20087A847 /* unityapp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = unityapp.entitlements; path = unityapp/unityapp.entitlements; sourceTree = "<group>"; };
+		74FD49FF2EA7820800FC4456 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		789CD108A2B227D66A38E581 /* libPods-unityapp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-unityapp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = unityapp/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C85C88AD3C6ECB554D71BA /* libPods-unityapp-unityappTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-unityapp-unityappTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -92,8 +93,8 @@
 			isa = PBXGroup;
 			children = (
 				74B485C02E6B38E20087A847 /* unityapp.entitlements */,
-				74B485BE2E6B2F730087A847 /* GoogleService-Info.plist */,
 				13B07FAF1A68108700A75B9A /* AppDelegate.h */,
+				74FD49FF2EA7820800FC4456 /* GoogleService-Info.plist */,
 				13B07FB01A68108700A75B9A /* AppDelegate.mm */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -243,6 +244,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				74FD4A012EA7820800FC4456 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,7 +253,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
-				74B485BF2E6B2F730087A847 /* GoogleService-Info.plist in Resources */,
+				74FD4A002EA7820800FC4456 /* GoogleService-Info.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				B40C268A53A0EC08ABFE3AD1 /* PrivacyInfo.xcprivacy in Resources */,
 			);
@@ -490,7 +492,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = unityapp/unityapp.entitlements;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = F3X3ND4466;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -502,12 +504,13 @@
 					"$(PROJECT_DIR)/../unity/builds/ios/UnityFramework.framework/Headers",
 				);
 				INFOPLIST_FILE = unityapp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Zishes;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 3.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -528,7 +531,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = unityapp/unityapp.entitlements;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = F3X3ND4466;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -539,12 +542,13 @@
 					"$(PROJECT_DIR)/../unity/builds/ios/UnityFramework.framework/Headers",
 				);
 				INFOPLIST_FILE = unityapp/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Zishes;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 3.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
